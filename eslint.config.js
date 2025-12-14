@@ -42,8 +42,6 @@ export default tseslint.config(
 		ignores: [
 			'dist/**',
 			'node_modules/**',
-			'web',
-			'web/**',
 			'data/**',
 			'logs/**',
 			'migrations/**',
