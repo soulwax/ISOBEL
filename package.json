@@ -142,7 +142,7 @@
     "dotenv": "^16.6.1",
     "execa": "^6.1.0",
     "fluent-ffmpeg": "^2.1.3",
-    "fs-capacitor": "^7.0.1",
+    "fs-capacitor": "^8.0.0",
     "get-youtube-id": "^1.0.1",
     "got": "^14.6.5",
     "hasha": "^7.0.0",
