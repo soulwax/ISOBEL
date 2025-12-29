@@ -9,7 +9,8 @@
   "types": "dts/types",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.0.0",
+    "version": "0.3.1"
   },
   "files": [
     "src"
