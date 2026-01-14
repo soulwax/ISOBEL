@@ -16,6 +16,7 @@ export default class HealthServer {
   private readonly client: Client;
   private readonly config: Config;
   private server: http.Server | null = null;
+  private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly rateLimitMap = new Map<string, RateLimitEntry>();
   private readonly rateLimitPoints = 10; // 10 requests
   private readonly rateLimitWindow = 60_000; // per 60 seconds
@@ -60,8 +61,13 @@ export default class HealthServer {
   public start(): void {
     const port = process.env.HEALTH_PORT ? parseInt(process.env.HEALTH_PORT, 10) : 3002;
 
+    // Clear any existing interval before creating a new one
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+
     // Clean up old rate limit entries periodically
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [key, entry] of this.rateLimitMap.entries()) {
         if (now > entry.resetTime) {
@@ -127,6 +133,11 @@ export default class HealthServer {
   }
 
   public stop(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
     if (this.server) {
       this.server.close();
       this.server = null;

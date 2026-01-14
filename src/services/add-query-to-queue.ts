@@ -63,11 +63,10 @@ export default class AddQueryToQueue {
     const player = this.playerManager.get(guildId);
     const wasPlayingSong = player.getCurrent() !== null;
 
-    const voiceChannels = getMemberVoiceChannel(interaction.member as GuildMember) 
-      ?? getMostPopularVoiceChannel(interaction.guild);
-    if (!voiceChannels || voiceChannels.length === 0) {
-      throw new Error('No voice channel available');
-    }
+    const memberChannel = getMemberVoiceChannel(interaction.member as GuildMember);
+    const voiceChannels = memberChannel ?? getMostPopularVoiceChannel(interaction.guild);
+    // voiceChannels is always a tuple [VoiceChannel, number] after nullish coalescing
+    // getMostPopularVoiceChannel always returns a tuple (or throws if no channels exist)
     const targetVoiceChannel = voiceChannels[0];
 
     const settings = await getGuildSettings(guildId);
