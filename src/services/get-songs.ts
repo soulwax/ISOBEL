@@ -23,17 +23,39 @@ export default class {
     try {
       const url = new URL(query);
 
-      // Check if it's an HLS stream
-      if (url.protocol === 'http:' || url.protocol === 'https:') {
-        const song = await this.httpLiveStream(query);
-
-        if (song) {
-          newSongs.push(song);
-          return [newSongs, extraMsg];
-        }
+      // Validate protocol
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('Invalid protocol');
       }
-    } catch {
-      // Not a URL, continue to search
+
+      // Security: Block localhost/internal IPs to prevent SSRF attacks
+      const hostname = url.hostname.toLowerCase();
+      if (hostname === 'localhost' 
+          || hostname === '127.0.0.1' 
+          || hostname.startsWith('127.')
+          || hostname.startsWith('192.168.')
+          || hostname.startsWith('10.')
+          || hostname.startsWith('172.16.')
+          || hostname === '::1'
+          || hostname === '[::1]') {
+        throw new Error('Local URLs are not allowed');
+      }
+
+      // Check if it's an HLS stream
+      const song = await this.httpLiveStream(query);
+
+      if (song) {
+        newSongs.push(song);
+        return [newSongs, extraMsg];
+      }
+    } catch (error) {
+      // If it's a TypeError, it's not a URL - continue to search
+      if (error instanceof TypeError) {
+        // Not a URL, continue to search
+      } else {
+        // Other errors (validation failures) should be thrown
+        throw error;
+      }
     }
 
     // Search using Starchild API

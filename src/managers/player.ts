@@ -29,4 +29,16 @@ export default class {
 
     return player;
   }
+
+  /**
+   * Removes and disconnects a player for a guild
+   * Should be called when the bot leaves a guild to prevent memory leaks
+   */
+  remove(guildId: string): void {
+    const player = this.guildPlayers.get(guildId);
+    if (player) {
+      player.disconnect();
+      this.guildPlayers.delete(guildId);
+    }
+  }
 }

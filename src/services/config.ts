@@ -24,7 +24,7 @@ const CONFIG_MAP = {
   BOT_ACTIVITY_URL: process.env.BOT_ACTIVITY_URL ?? '',
   BOT_ACTIVITY: process.env.BOT_ACTIVITY ?? 'music',
   ENABLE_SPONSORBLOCK: process.env.ENABLE_SPONSORBLOCK === 'true',
-  SPONSORBLOCK_TIMEOUT: process.env.ENABLE_SPONSORBLOCK ?? 5,
+  SPONSORBLOCK_TIMEOUT: parseInt(process.env.SPONSORBLOCK_TIMEOUT ?? '5', 10),
 } as const;
 
 const BOT_ACTIVITY_TYPE_MAP = {
