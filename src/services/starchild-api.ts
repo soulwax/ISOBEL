@@ -48,6 +48,9 @@ export default class {
 
     this.httpClient = got.extend({
       prefixUrl: this.baseUrl,
+      headers: {
+        'X-API-Key': this.apiKey,
+      },
       timeout: {
         request: 30000,
       },
@@ -87,7 +90,6 @@ export default class {
 
   getStreamUrl(trackId: string, options?: { kbps?: number; offset?: number }): string {
     const params = new URLSearchParams({
-      key: this.apiKey,
       id: trackId,
     });
 
@@ -100,5 +102,18 @@ export default class {
     }
 
     return `${this.baseUrl}/music/stream?${params.toString()}`;
+  }
+
+  /**
+   * Returns a stream with proper authentication headers
+   * Use this instead of getStreamUrl when you need to stream the audio
+   */
+  getStream(trackId: string, options?: { kbps?: number; offset?: number }): ReturnType<typeof got.stream> {
+    const url = this.getStreamUrl(trackId, options);
+    return got.stream(url, {
+      headers: {
+        'X-API-Key': this.apiKey,
+      },
+    });
   }
 }

@@ -20,11 +20,21 @@ export default class FileCacheProvider {
   }
 
   /**
+   * Validates hash format to prevent path traversal attacks
+   */
+  private validateHash(hash: string): void {
+    if (!/^[a-f0-9]+$/i.test(hash) || hash.length < 32) {
+      throw new Error(`Invalid hash format: ${hash}`);
+    }
+  }
+
+  /**
    * Returns path to cached file if it exists, otherwise returns null.
    * Updates the `accessedAt` property of the cached file.
    * @param hash lookup key
    */
   async getPathFor(hash: string): Promise<string | null> {
+    this.validateHash(hash);
     const model = await prisma.fileCache.findUnique({
       where: {
         hash,
@@ -68,6 +78,7 @@ export default class FileCacheProvider {
    * @param hash lookup key
    */
   createWriteStream(hash: string) {
+    this.validateHash(hash);
     const tmpPath = path.join(this.config.CACHE_DIR, 'tmp', hash);
     const finalPath = path.join(this.config.CACHE_DIR, hash);
 
@@ -127,18 +138,21 @@ export default class FileCacheProvider {
 
       });
 
-      if (oldest) {
-        await prisma.fileCache.delete({
-          where: {
-            hash: oldest.hash,
-          },
-        });
-        await fs.unlink(path.join(this.config.CACHE_DIR, oldest.hash));
-        debug(`${oldest.hash} has been evicted`);
-        numOfEvictedFiles++;
+      if (!oldest) {
+        break;
       }
 
-      totalSizeBytes = await this.getDiskUsageInBytes();
+      // Subtract before deleting to avoid recalculating total size
+      totalSizeBytes -= oldest.bytes;
+
+      await prisma.fileCache.delete({
+        where: {
+          hash: oldest.hash,
+        },
+      });
+      await fs.unlink(path.join(this.config.CACHE_DIR, oldest.hash));
+      debug(`${oldest.hash} has been evicted`);
+      numOfEvictedFiles++;
     }
 
     if (numOfEvictedFiles > 0) {
@@ -150,19 +164,29 @@ export default class FileCacheProvider {
 
   private async removeOrphans() {
     // Check filesystem direction (do files exist on the disk but not in the database?)
+    // Batch database queries to avoid N+1 problem
+    const allFiles = new Set<string>();
     for await (const dirent of await fs.opendir(this.config.CACHE_DIR)) {
-      if (dirent.isFile()) {
-        const model = await prisma.fileCache.findUnique({
-          where: {
-            hash: dirent.name,
-          },
-        });
-
-        if (!model) {
-          debug(`${dirent.name} was present on disk but was not in the database. Removing from disk.`);
-          await fs.unlink(path.join(this.config.CACHE_DIR, dirent.name));
-        }
+      if (dirent.isFile() && dirent.name !== 'tmp') {
+        allFiles.add(dirent.name);
       }
+    }
+
+    if (allFiles.size === 0) {
+      return;
+    }
+
+    const allHashes = await prisma.fileCache.findMany({
+      select: {hash: true},
+    });
+    const dbHashes = new Set(allHashes.map(m => m.hash));
+
+    const orphans = [...allFiles].filter(f => !dbHashes.has(f));
+    if (orphans.length > 0) {
+      await Promise.all(orphans.map(hash => {
+        debug(`${hash} was present on disk but was not in the database. Removing from disk.`);
+        return fs.unlink(path.join(this.config.CACHE_DIR, hash));
+      }));
     }
 
     // Check database direction (do entries exist in the database but not on the disk?)
@@ -241,8 +265,7 @@ export default class FileCacheProvider {
             }
 
             if (models.length === 0) {
-              // Must return value here for types to be inferred correctly
-              return {done: true, value: null as unknown as FileCache};
+              return {done: true, value: undefined} as IteratorResult<FileCache>;
             }
 
             return {value: models.shift()!, done: false};

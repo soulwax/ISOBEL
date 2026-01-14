@@ -10,6 +10,7 @@ import Command from './commands/index.js';
 import handleGuildCreate from './events/guild-create.js';
 import handleVoiceStateUpdate from './events/voice-state-update.js';
 import container from './inversify.config.js';
+import PlayerManager from './managers/player.js';
 import Config from './services/config.js';
 import HealthServer from './services/health-server.js';
 import { TYPES } from './types.js';
@@ -128,6 +129,11 @@ export default class {
     this.client.on('debug', debug);
 
     this.client.on('guildCreate', handleGuildCreate);
+    this.client.on('guildDelete', guild => {
+      // Clean up player instance when bot leaves a guild to prevent memory leaks
+      const playerManager = container.get<PlayerManager>(TYPES.Managers.Player);
+      playerManager.remove(guild.id);
+    });
     this.client.on('voiceStateUpdate', handleVoiceStateUpdate);
     await this.client.login();
   }

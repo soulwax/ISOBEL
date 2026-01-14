@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-01-14
+
+### Security
+- **API Key Security**: Moved Starchild API key from URL query parameters to HTTP headers (`X-API-Key`) to prevent exposure in logs and referrer headers
+- **SSRF Protection**: Added validation to block localhost and internal IP addresses in HLS stream URLs to prevent Server-Side Request Forgery attacks
+- **Path Traversal Protection**: Added hash validation in file cache to prevent path traversal attacks
+- **CORS Security**: Made health server CORS configurable via `HEALTH_CORS_ORIGINS` environment variable (defaults to allow all for backward compatibility)
+- **Rate Limiting**: Implemented rate limiting on health server endpoint (10 requests per 60 seconds per IP)
+
+### Fixed
+- Fixed `SPONSORBLOCK_TIMEOUT` configuration bug - now correctly reads from `SPONSORBLOCK_TIMEOUT` environment variable instead of `ENABLE_SPONSORBLOCK`
+- Fixed JSON parsing error handling in key-value cache - corrupted cache entries are now automatically deleted and recomputed
+- Fixed memory leak where player instances were never cleaned up when bot left a guild
+- Fixed N+1 database query problem in file cache orphan removal - now batches queries for better performance
+- Fixed eviction loop inefficiency - now tracks total cache size incrementally instead of recalculating after each eviction
+- Fixed unsafe type assertions in file cache iterator
+- Fixed missing null checks and validation in `addToQueue` method
+- Fixed config display bug - now correctly shows `queueAddResponseEphemeral` setting instead of wrong field
+- Fixed `shouldSplitChapters` parameter being declared but not destructured in `addToQueue` method (feature not yet implemented)
+
+### Changed
+- Improved error handling for async void functions in player service with new `safeAsync()` helper method
+- Enhanced URL validation in `get-songs.ts` with protocol validation and SSRF protection
+- Added Prisma connection management with graceful shutdown handlers and development logging
+- Optimized file cache cleanup to use batch operations instead of per-file database queries
+
+### Performance
+- Optimized file cache eviction to avoid recalculating total size after each file deletion
+- Reduced database queries in orphan file cleanup from O(n) to O(1)
+- Added automatic cleanup of player instances on guild leave to prevent memory leaks
+
 ## [2.15.0] - 2025-12-02
 
 ### Added

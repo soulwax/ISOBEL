@@ -534,13 +534,12 @@ export default class {
 
     // Download MP3 file
     debug(`Downloading MP3 for ${song.title} at ${AUDIO_BITRATE_KBPS}kbps...`);
-    const streamUrl = this.starchildAPI.getStreamUrl(song.url, {
-      kbps: AUDIO_BITRATE_KBPS as number,
-    });
 
     try {
       const writeStream = this.fileCache.createWriteStream(hash);
-      const downloadStream = got.stream(streamUrl);
+      const downloadStream = this.starchildAPI.getStream(song.url, {
+        kbps: AUDIO_BITRATE_KBPS as number,
+      });
 
       // Wait for pipeline to complete
       await pipeline(downloadStream, writeStream);
@@ -670,6 +669,15 @@ export default class {
   }
 
   /**
+   * Safely executes an async operation, logging errors without throwing
+   */
+  private safeAsync<T>(promise: Promise<T>): void {
+    promise.catch(error => {
+      debug(`Unhandled error in async operation: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
+
+  /**
    * Starts periodically updating the now-playing embed
    */
   private startEmbedUpdates(): void {
@@ -677,8 +685,8 @@ export default class {
 
     this.embedUpdateInterval = setInterval(() => {
       if (this.status === STATUS.PLAYING && this.nowPlayingMessage && this.getCurrent()) {
-        // Use void to explicitly discard the promise - we handle errors internally
-        void (async () => {
+        // Use safeAsync to handle errors without throwing
+        this.safeAsync((async () => {
           try {
             await this.nowPlayingMessage!.edit({
               embeds: [buildPlayingMessageEmbed(this)],
@@ -693,7 +701,7 @@ export default class {
               this.stopEmbedUpdates();
             }
           }
-        })();
+        })());
       }
     }, NOW_PLAYING_UPDATE_INTERVAL_MS);
   }

@@ -6,11 +6,19 @@ import { Client } from 'discord.js';
 import { TYPES } from '../types.js';
 import Config from './config.js';
 
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
 @injectable()
 export default class HealthServer {
   private readonly client: Client;
   private readonly config: Config;
   private server: http.Server | null = null;
+  private readonly rateLimitMap = new Map<string, RateLimitEntry>();
+  private readonly rateLimitPoints = 10; // 10 requests
+  private readonly rateLimitWindow = 60_000; // per 60 seconds
 
   constructor(
     @inject(TYPES.Client) client: Client,
@@ -20,12 +28,58 @@ export default class HealthServer {
     this.config = config;
   }
 
+  private getClientIdentifier(req: http.IncomingMessage): string {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = typeof forwarded === 'string' 
+      ? forwarded.split(',')[0].trim() 
+      : req.socket.remoteAddress || 'unknown';
+    return ip;
+  }
+
+  private checkRateLimit(identifier: string): boolean {
+    const now = Date.now();
+    const entry = this.rateLimitMap.get(identifier);
+
+    if (!entry || now > entry.resetTime) {
+      // Create new entry or reset expired entry
+      this.rateLimitMap.set(identifier, {
+        count: 1,
+        resetTime: now + this.rateLimitWindow,
+      });
+      return true;
+    }
+
+    if (entry.count >= this.rateLimitPoints) {
+      return false;
+    }
+
+    entry.count++;
+    return true;
+  }
+
   public start(): void {
     const port = process.env.HEALTH_PORT ? parseInt(process.env.HEALTH_PORT, 10) : 3002;
 
+    // Clean up old rate limit entries periodically
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.rateLimitMap.entries()) {
+        if (now > entry.resetTime) {
+          this.rateLimitMap.delete(key);
+        }
+      }
+    }, this.rateLimitWindow);
+
     this.server = http.createServer((req, res) => {
-      // Set CORS headers
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // Set CORS headers - restrict to specific origins if configured
+      const allowedOrigins = process.env.HEALTH_CORS_ORIGINS?.split(',') || [];
+      const origin = req.headers.origin;
+      if (allowedOrigins.length > 0 && origin && allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else if (allowedOrigins.length === 0) {
+        // Default: allow all (for backward compatibility)
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -33,6 +87,16 @@ export default class HealthServer {
         res.writeHead(200);
         res.end();
         return;
+      }
+
+      // Rate limiting
+      if (req.url === '/health' && req.method === 'GET') {
+        const identifier = this.getClientIdentifier(req);
+        if (!this.checkRateLimit(identifier)) {
+          res.writeHead(429, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Too many requests' }));
+          return;
+        }
       }
 
       if (req.url === '/health' && req.method === 'GET') {

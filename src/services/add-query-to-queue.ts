@@ -37,6 +37,7 @@ export default class AddQueryToQueue {
     query,
     addToFrontOfQueue,
     shuffleAdditions,
+    shouldSplitChapters,
     skipCurrentTrack,
     interaction,
   }: {
@@ -47,11 +48,27 @@ export default class AddQueryToQueue {
     skipCurrentTrack: boolean;
     interaction: ChatInputCommandInteraction;
   }): Promise<void> {
-    const guildId = interaction.guild!.id;
+    // Note: shouldSplitChapters is currently not implemented
+    // This parameter is accepted for API compatibility but has no effect
+    void shouldSplitChapters;
+    if (!interaction.guild) {
+      throw new Error('Command must be used in a guild');
+    }
+
+    if (!interaction.member) {
+      throw new Error('Member information not available');
+    }
+
+    const guildId = interaction.guild.id;
     const player = this.playerManager.get(guildId);
     const wasPlayingSong = player.getCurrent() !== null;
 
-    const [targetVoiceChannel] = getMemberVoiceChannel(interaction.member as GuildMember) ?? getMostPopularVoiceChannel(interaction.guild!);
+    const voiceChannels = getMemberVoiceChannel(interaction.member as GuildMember) 
+      ?? getMostPopularVoiceChannel(interaction.guild);
+    if (!voiceChannels || voiceChannels.length === 0) {
+      throw new Error('No voice channel available');
+    }
+    const targetVoiceChannel = voiceChannels[0];
 
     const settings = await getGuildSettings(guildId);
 
@@ -74,11 +91,15 @@ export default class AddQueryToQueue {
       newSongs = await Promise.all(newSongs.map(this.skipNonMusicSegments.bind(this)));
     }
 
+    if (!interaction.channel) {
+      throw new Error('Channel information not available');
+    }
+
     newSongs.forEach(song => {
       player.add({
         ...song,
         addedInChannelId: interaction.channel!.id,
-        requestedBy: interaction.member!.user.id,
+        requestedBy: (interaction.member as GuildMember).user.id,
       }, {immediate: addToFrontOfQueue ?? false});
     });
 
