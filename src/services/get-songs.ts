@@ -4,6 +4,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { inject, injectable } from 'inversify';
 import { URL } from 'node:url';
 import { TYPES } from '../types.js';
+import debug from '../utils/debug.js';
 import { MediaSource, SongMetadata } from './player.js';
 import StarchildAPI from './starchild-api.js';
 
@@ -20,41 +21,56 @@ export default class {
     const extraMsg = '';
 
     // Test if it's a complete URL (for HLS streams)
+    // Only catch TypeError from URL parsing - this indicates the query is not a valid URL
     try {
       const url = new URL(query);
 
-      // Validate protocol
+      // Validate protocol - invalid protocol means it's not a stream URL, treat as search query
       if (!['http:', 'https:'].includes(url.protocol)) {
-        throw new Error('Invalid protocol');
-      }
+        // Invalid protocol - treat as search query, not a stream URL
+        // Fall through to API search
+      } else {
+        // Security: Block localhost/internal IPs to prevent SSRF attacks
+        // Blocked URLs are treated as search queries, not stream URLs
+        const hostname = url.hostname.toLowerCase();
+        if (hostname === 'localhost' 
+            || hostname === '127.0.0.1' 
+            || hostname.startsWith('127.')
+            || hostname.startsWith('192.168.')
+            || hostname.startsWith('10.')
+            || hostname.startsWith('172.16.')
+            || hostname === '::1'
+            || hostname === '[::1]') {
+          // Blocked URL - treat as search query, not a stream URL
+          // Fall through to API search
+        } else {
+          // URL is valid and passes security checks - try to use it as HLS stream
+          try {
+            const song = await this.httpLiveStream(query);
 
-      // Security: Block localhost/internal IPs to prevent SSRF attacks
-      const hostname = url.hostname.toLowerCase();
-      if (hostname === 'localhost' 
-          || hostname === '127.0.0.1' 
-          || hostname.startsWith('127.')
-          || hostname.startsWith('192.168.')
-          || hostname.startsWith('10.')
-          || hostname.startsWith('172.16.')
-          || hostname === '::1'
-          || hostname === '[::1]') {
-        throw new Error('Local URLs are not allowed');
-      }
-
-      // Check if it's an HLS stream
-      const song = await this.httpLiveStream(query);
-
-      if (song) {
-        newSongs.push(song);
-        return [newSongs, extraMsg];
+            if (song) {
+              newSongs.push(song);
+              return [newSongs, extraMsg];
+            }
+            // If httpLiveStream returns null, fall through to API search
+          } catch (error) {
+            // Unexpected error from httpLiveStream - log it but don't crash
+            // Treat as failed stream attempt and fall through to API search
+            debug(`Error checking HLS stream for ${query}: ${error instanceof Error ? error.message : String(error)}`);
+            // Fall through to API search
+          }
+        }
       }
     } catch (error) {
-      // If it's a TypeError, it's not a URL - continue to search
+      // TypeError from URL constructor means the query is not a valid URL
+      // This is expected and normal - treat as search query
       if (error instanceof TypeError) {
-        // Not a URL, continue to search
+        // Not a valid URL - continue to API search
       } else {
-        // Other errors (validation failures) should be thrown
-        throw error;
+        // Unexpected error during URL parsing - log it but still try API search
+        // This should rarely happen, but we don't want to crash on edge cases
+        debug(`Unexpected error parsing URL ${query}: ${error instanceof Error ? error.message : String(error)}`);
+        // Fall through to API search
       }
     }
 
