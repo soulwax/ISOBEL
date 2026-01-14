@@ -77,15 +77,8 @@ export default class HealthServer {
     }, this.rateLimitWindow);
 
     this.server = http.createServer((req, res) => {
-      // Set CORS headers - restrict to specific origins if configured
-      const allowedOrigins = process.env.HEALTH_CORS_ORIGINS?.split(',') || [];
-      const origin = req.headers.origin;
-      if (allowedOrigins.length > 0 && origin && allowedOrigins.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-      } else if (allowedOrigins.length === 0) {
-        // Default: allow all (for backward compatibility)
-        res.setHeader('Access-Control-Allow-Origin', '*');
-      }
+      // Set CORS headers - always allow access from anywhere
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
