@@ -25,10 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed missing null checks and validation in `addToQueue` method
 - Fixed config display bug - now correctly shows `queueAddResponseEphemeral` setting instead of wrong field
 - Fixed `shouldSplitChapters` parameter being declared but not destructured in `addToQueue` method (feature not yet implemented)
+- Fixed error handling in `get-songs.ts` - validation failures (invalid protocol, SSRF-blocked URLs) now properly fall through to API search instead of crashing the function
+- Fixed memory leak in health server - cleanup interval is now properly stored and cleared when server stops or restarts
+- Fixed TypeScript build error - removed impossible length check on voice channels tuple (always length 2)
 
 ### Changed
 - Improved error handling for async void functions in player service with new `safeAsync()` helper method
-- Enhanced URL validation in `get-songs.ts` with protocol validation and SSRF protection
+- Enhanced URL validation in `get-songs.ts` with protocol validation and SSRF protection - invalid URLs now gracefully fall back to search instead of throwing errors
+- Added proper error logging for unexpected errors during URL parsing and HLS stream checking
 - Added Prisma connection management with graceful shutdown handlers and development logging
 - Optimized file cache cleanup to use batch operations instead of per-file database queries
 
@@ -36,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized file cache eviction to avoid recalculating total size after each file deletion
 - Reduced database queries in orphan file cleanup from O(n) to O(1)
 - Added automatic cleanup of player instances on guild leave to prevent memory leaks
+- Fixed memory leak in health server rate limit cleanup interval
 
 ## [2.15.0] - 2025-12-02
 
