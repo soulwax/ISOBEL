@@ -8,6 +8,9 @@ FROM node:24-bookworm-slim AS base
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
     ffmpeg \
+    yt-dlp \
+    python3 \
+    python-is-python3 \
     tini \
     openssl \
     ca-certificates \
