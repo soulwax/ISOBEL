@@ -157,7 +157,7 @@
     "p-event": "^7.0.2",
     "p-limit": "^7.2.0",
     "p-queue": "^9.1.0",
-    "p-retry": "6.2.0",
+    "p-retry": "7.1.1",
     "pagination.djs": "^4.0.18",
     "parse-duration": "^2.1.5",
     "patch-package": "^8.0.1",
