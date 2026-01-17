@@ -1,0 +1,54 @@
+web
+├───.env.example
+├───.gitignore
+├───CHANGELOG.md
+├───drizzle.config.ts
+├───ecosystem.config.cjs
+├───eslint.config.js
+├───index.html
+├───package-lock.json
+├───package.json
+├───README.md
+├───SETUP.md
+├───tsconfig.app.json
+├───tsconfig.json
+├───tsconfig.node.json
+├───vite.config.js
+├───vite.config.ts
+├───data/
+│   └───db.sqlite
+├───drizzle/
+│   ├───0000_clever_gideon.sql
+│   └───meta/
+│       ├───0000_snapshot.json
+│       └───_journal.json
+├───public/
+│   ├───songbird.png
+│   └───vite.svg
+├───scripts/
+│   └───migrate.ts
+└───src/
+    ├───App.css
+    ├───App.js
+    ├───App.tsx
+    ├───index.css
+    ├───main.tsx
+    ├───auth/
+    │   ├───config.ts
+    │   └───index.ts
+    ├───components/
+    │   ├───HealthIndicator.css
+    │   └───HealthIndicator.tsx
+    ├───db/
+    │   ├───index.ts
+    │   └───schema.ts
+    ├───hooks/
+    │   └───useAuth.ts
+    ├───lib/
+    │   └───auth-client.ts
+    └───server/
+        ├───index.ts
+        └───api/
+            └───auth/
+                └───[...nextauth]/
+                    └───route.ts

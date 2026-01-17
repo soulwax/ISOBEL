@@ -6,6 +6,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-01-17
+
+### Changed - Repository Unification
+
+**ISOBEL is now a single unified repository** - the web interface has been integrated as a first-class directory instead of a git submodule.
+
+#### Repository Structure
+- **Removed git submodule**: Deinitialized and removed the ECHO-Web git submodule that was previously at `./web`
+- **Integrated web interface**: Moved the standalone ISOBEL-REACT project into `./web/` as a regular directory
+- **Single repository**: The web interface is now tracked as part of the main ISOBEL repository (no separate repos to manage)
+- **Updated .gitmodules**: Removed all submodule references (file is now empty)
+- **Updated .gitignore**: Removed `web` directory exclusions to properly track the web interface
+- **Renamed from ECHO to ISOBEL**: Updated all references in web interface from "ECHO" to "ISOBEL" for consistent branding
+
+#### Build & Deployment Integration
+- **Unified build process**: `npm run build` now builds both bot and web interface, then automatically starts both services via PM2
+- **Separated build commands**:
+  - `npm run build` - Builds both projects and starts them (production workflow)
+  - `npm run build:bot` - Build only the bot
+  - `npm run build:all` - Build both without starting services
+- **Automatic startup**: Added `postbuild` hook that runs `start:all:prod` to launch both services
+- **Coordinated PM2 management**: Bot and web interface now start/stop/restart together via unified commands
+
+#### Development Workflow
+- **Unified development mode**: Added `npm run dev:all` to run both bot and web interface simultaneously using `concurrently`
+  - Bot runs on its standard ports with `tsx watch`
+  - Web interface runs Vite dev server (port 3001) + auth server (port 3003)
+  - Colored console output (blue for bot, cyan for web) for easy distinction
+- **Individual development modes**:
+  - `npm run dev` - Bot only (development mode)
+  - `npm run web:dev` - Web Vite server only
+  - `npm run web:dev:all` - Web Vite + auth server
+  - `npm run dev:all` - Both together (recommended for full-stack development)
+
+#### Package Management
+- **Added concurrently**: Installed `concurrently@^9.2.1` as dev dependency for running parallel development processes
+- **Streamlined postinstall**: Updated `postinstall` script to install web dependencies without submodule initialization
+- **Removed submodule scripts**: Cleaned up `submodule:init`, `submodule:update`, and `submodule:status` scripts (no longer needed)
+- **Updated error messages**: Replaced all "Web submodule not found" messages with "Web directory not found"
+
+#### Web Interface Features (Integrated)
+The web interface now includes all features from the previous standalone ISOBEL-REACT project:
+
+**Architecture & Technologies**:
+- React 19 with TypeScript
+- Vite 7.3 for fast builds and development
+- PostgreSQL database (via Drizzle ORM) replacing SQLite
+- Discord OAuth authentication (NextAuth v5)
+- Express.js backend with security middleware (helmet, rate-limiting)
+- Winston logging for production debugging
+- PM2 process management for production deployments
+
+**Security & Production Features**:
+- Helmet.js security headers
+- Express rate limiting (protects against abuse)
+- Environment-based configuration with Zod validation
+- Separate development and production modes
+- Comprehensive error handling and logging
+- CORS configuration support
+
+**UI Components**:
+- Modern landing page with Discord-inspired design
+- Discord guild (server) sidebar for easy navigation
+- Per-guild settings management interface
+- Health indicator showing bot and API status
+- Discord login/logout functionality
+- Fully responsive mobile-first design
+
+**Deployment Options**:
+- Vercel deployment configuration included
+- PM2 ecosystem configuration for self-hosting
+- Environment-specific startup scripts
+- Database migration scripts
+
+#### Documentation Updates
+- **README.md**:
+  - Removed all git submodule instructions
+  - Updated development section with new unified workflow
+  - Added "Building and Deploying" section documenting new build process
+  - Updated web interface scripts documentation
+  - Removed `--recursive` flag from clone instructions (no longer needed)
+- **Web branding**: Updated all web interface files to use "ISOBEL" instead of "ECHO"
+  - `web/package.json` - Updated description
+  - `web/README.md` - Updated title and description
+  - `web/index.html` - Updated page title
+  - `web/src/App.tsx` - Updated GitHub link
+  - `web/CLAUDE.md` - Updated project description
+  - `web/CHANGELOG.md` - Updated project name
+
+#### Migration Impact
+- **No breaking changes for users**: The bot functionality remains unchanged
+- **Simplified development**: Contributors no longer need to manage git submodules
+- **Cleaner repository**: Everything in one place, easier to clone and develop
+- **Better integration**: Bot and web interface can be developed, built, and deployed together
+- **Improved startup**: Running `npm run build` now handles everything automatically
+
+### Added
+
+- Added `dev:all` script for unified development of bot and web interface
+- Added `web:dev:all` script wrapper for web interface development (Vite + auth server)
+- Added `build:bot` script to build only the bot
+- Added `build:all` script to build both projects without starting services
+- Added `concurrently` dependency for parallel process management
+
+### Removed
+
+- Removed git submodule configuration and references
+- Removed submodule management scripts (`submodule:init`, `submodule:update`, `submodule:status`)
+- Removed ISOBEL-REACT as separate standalone project
+
 ## [2.16.0] - 2026-01-14
 
 ### Security
