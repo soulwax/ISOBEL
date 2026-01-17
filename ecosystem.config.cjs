@@ -1,13 +1,11 @@
-/* File: ecosystem.config.cjs */
-/* * */
-
+/**
  * PM2 Ecosystem Configuration
- * 
+ *
  * Usage:
  *   - Production: pm2 start ecosystem.config.cjs --env production
  *   - Staging: pm2 start ecosystem.config.cjs --env staging
  *   - Development: pm2 start ecosystem.config.cjs --env development
- * 
+ *
  * Or use npm scripts:
  *   - npm run pm2:start:prod
  *   - npm run pm2:start:staging
