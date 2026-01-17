@@ -64,6 +64,7 @@ export default class {
           searchParams: {
             q,
             offset: 0,
+            key: this.apiKey,
           },
         }).json<DeezerSearchResponse>();
 
@@ -91,6 +92,7 @@ export default class {
   getStreamUrl(trackId: string, options?: { kbps?: number; offset?: number }): string {
     const params = new URLSearchParams({
       id: trackId,
+      key: this.apiKey,
     });
 
     if (options?.kbps) {
