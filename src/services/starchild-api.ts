@@ -42,8 +42,8 @@ export default class {
   private readonly cache: KeyValueCacheProvider;
 
   constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
-    this.apiKey = config.STARCHILD_API_KEY;
-    this.baseUrl = config.STARCHILD_BASE_URL ?? 'https://api.starchildmusic.com';
+    this.apiKey = config.SONGBIRD_API_KEY;
+    this.baseUrl = config.SONGBIRD_BASE_URL ?? 'https://api.starchildmusic.com';
     this.cache = cache;
 
     this.httpClient = got.extend({

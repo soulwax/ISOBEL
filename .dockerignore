@@ -1,8 +1,63 @@
 # File: .dockerignore
 
+# Dependencies (will be reinstalled)
 node_modules
-data
+web/node_modules
+
+# Build artifacts (will be regenerated)
 dist
 dts
+web/dist
+web/build
+
+# Data and logs (should be mounted as volumes)
+data
+logs
+web/logs
+
+# Environment files (should be passed as env vars or mounted)
 .env
+.env.local
+.env.production
+.env.development
+web/.env
+web/.env.local
+
+# Git and development files
+.git
+.github
+.gitignore
+.gitmodules
+.gitattributes
+
+# Docker files (not needed in image)
 Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE and editor files
+.vscode
+.idea
+.cursor
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (optional - comment out if you want docs in image)
+# README.md
+# CLAUDE.md
+# *.md
+
+# Test files
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+
+# PM2 runtime files
+.pm2
+ecosystem.config.cjs
