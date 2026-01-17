@@ -109,3 +109,8 @@ dist
 
 # TernJS port file
 .tern-port
+
+.cursor
+.claude
+CLAUDE.md
+RELEASING.md
