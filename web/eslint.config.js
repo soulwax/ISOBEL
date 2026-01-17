@@ -1,4 +1,4 @@
-// File: eslint.config.js
+// File: web/eslint.config.js
 
 import js from '@eslint/js'
 import globals from 'globals'

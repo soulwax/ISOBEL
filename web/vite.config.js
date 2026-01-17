@@ -1,4 +1,5 @@
-// File: vite.config.ts
+// File: web/vite.config.js
+
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 // https://vite.dev/config/

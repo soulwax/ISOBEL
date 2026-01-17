@@ -21,20 +21,31 @@ ISOBEL is a self-hosted Discord music bot that streams music from the Starchild 
 ### Essential Commands
 ```bash
 # Development mode (with hot reload)
-npm run dev
+npm run dev               # Bot only
+npm run dev:all           # Both bot and web (recommended for full-stack development)
+npm run debug             # Kill PM2 process and start fresh dev mode
 
 # Build TypeScript
-npm run build
+npm run build             # Build both bot and web, then start with PM2
+npm run build:bot         # Build only the bot
+npm run build:all         # Build both without starting services
 
 # Start production (runs migrations then starts)
-npm start
+npm start                 # Start bot only (runs migrations first)
+npm run start:all:prod    # Start both bot and web with PM2 (production)
+npm run start:all:dev     # Start both bot and web with PM2 (development)
 
 # Linting and type checking
 npm run lint              # Lint bot code
 npm run lint:all          # Lint both bot and web
+npm run lint:fix          # Auto-fix bot linting issues
+npm run lint:fix:all      # Auto-fix linting issues in both projects
 npm run typecheck         # Type check bot code
 npm run typecheck:all     # Type check both bot and web
 npm test                  # Runs lint (used by pre-commit hook)
+
+# Cache management
+npm run cache:clear-key-value  # Clear the key-value cache
 ```
 
 ### Database Migrations
@@ -67,16 +78,33 @@ npm run web:lint            # Lint web code
 ### PM2 Process Management
 ```bash
 # Bot process management
-npm run pm2:start           # Start with default env
+npm run pm2:start           # Start with production env (default)
 npm run pm2:start:prod      # Start with production env
+npm run pm2:start:staging   # Start with staging env
+npm run pm2:start:dev       # Start with development env
 npm run pm2:restart         # Restart bot
-npm run pm2:logs            # View logs
+npm run pm2:restart:prod    # Restart with production env
 npm run pm2:stop            # Stop bot
+npm run pm2:delete          # Delete bot process from PM2
+npm run pm2:logs            # View logs (all)
+npm run pm2:logs:error      # View error logs only
+npm run pm2:logs:out        # View output logs only
+npm run pm2:status          # Show PM2 status
+npm run pm2:info            # Describe bot process
+npm run pm2:monit           # Interactive monitoring
 
 # Combined bot + web management
 npm run start:all:prod      # Start both bot and web in production
+npm run start:all:dev       # Start both bot and web in development
 npm run stop:all            # Stop both
-npm run logs:all            # View all logs
+npm run restart:all         # Restart both
+npm run logs:all            # View all logs (both bot and web)
+
+# PM2 system management
+npm run pm2:save            # Save current process list
+npm run pm2:resurrect       # Restore saved process list
+npm run pm2:startup         # Configure PM2 to start on system boot
+npm run pm2:reset           # Delete all processes and kill PM2 daemon
 ```
 
 ## Architecture
@@ -138,10 +166,29 @@ All services, managers, and commands are registered in `src/inversify.config.ts`
 
 Located in `schema.prisma` at project root:
 
-- **FileCache**: Stores cached MP3 files (hash-based, size tracking)
+- **FileCache**: Stores cached MP3 files
+  - `hash` (PK): SHA-256 hash of the source URL
+  - `bytes`: File size for cache eviction logic
+  - `accessedAt`: LRU tracking for cache cleanup
+
 - **KeyValueCache**: Generic cache with expiration
-- **Setting**: Per-guild configuration (volume, queue settings, auto-announce, etc.)
+  - `key` (PK): Cache key
+  - `value`: JSON-serialized data
+  - `expiresAt`: Automatic expiration timestamp
+
+- **Setting**: Per-guild configuration
+  - `guildId` (PK): Discord guild ID
+  - `defaultVolume`: Initial volume (0-100, default: 100)
+  - `playlistLimit`: Max songs from playlist (default: 50)
+  - `secondsToWaitAfterQueueEmpties`: Disconnect delay (default: 30)
+  - `leaveIfNoListeners`: Auto-disconnect when alone (default: true)
+  - `autoAnnounceNextSong`: Announce next track (default: false)
+  - `turnDownVolumeWhenPeopleSpeak`: Auto-ducking (default: false)
+  - `turnDownVolumeWhenPeopleSpeakTarget`: Target volume % (default: 20)
+
 - **FavoriteQuery**: User-saved shortcuts for play commands
+  - `name` + `guildId` unique constraint
+  - Allows custom aliases like `/play favorite:packers`
 
 Database file location: `${DATA_DIR}/database.sqlite` (defaults to `./data/database.sqlite`)
 
@@ -163,13 +210,28 @@ Required variables (set in `.env` or via Docker):
 Optional variables:
 - `DATA_DIR`: Data directory (default: `./data`)
 - `CACHE_LIMIT`: Cache size limit (default: `2GB`, examples: `512MB`, `10GB`)
+- `ENV_FILE`: Path to environment file for Docker (default: `/config`)
 - `BOT_STATUS`: `online`, `idle`, `dnd` (default: `online`)
 - `BOT_ACTIVITY_TYPE`: `PLAYING`, `LISTENING`, `WATCHING`, `STREAMING`
 - `BOT_ACTIVITY`: Activity text
+- `BOT_ACTIVITY_URL`: Required for `STREAMING` activity type (Twitch or YouTube URL)
 - `ENABLE_SPONSORBLOCK`: Enable SponsorBlock integration (default: `false`)
+- `SPONSORBLOCK_TIMEOUT`: Retry delay in minutes when SponsorBlock is unreachable (default: `5`)
 - `REGISTER_COMMANDS_ON_BOT`: Register commands globally vs per-guild
 
 ## Key Implementation Patterns
+
+### Starchild API Authentication
+
+**CRITICAL**: The Starchild Music API requires the API key to be passed as a **query parameter**, not just in headers:
+
+- **Correct**: `https://api.example.com/music/stream?id=123&kbps=320&key=your-api-key`
+- **Incorrect**: Using only `X-API-Key` header without query parameter
+
+The `StarchildAPI` service (`services/starchild-api.ts`) handles this by:
+- `getStreamUrl()`: Constructs URLs with `key=` query parameter
+- `search()`: Includes API key in search params
+- `getStream()`: Uses the URL from `getStreamUrl()` which already includes the key
 
 ### Audio Playback Flow
 
@@ -196,6 +258,16 @@ Optional variables:
 - Loop modes: single song (`/loop`) or entire queue (`/loop-queue`)
 - Skip only works when queue has more songs (prevents errors at end)
 - Favorites system allows shortcuts (e.g., `/play favorite:packers`)
+- No vote-to-skip: "This is anarchy, not a democracy"
+
+### Automatic Volume Management
+
+ISOBEL can automatically adjust volume when people speak in the voice channel:
+
+- `/config set-reduce-vol-when-voice true/false`: Enable/disable auto volume reduction
+- `/config set-reduce-vol-when-voice-target <volume>`: Set target volume % when people speak (0-100, default: 20)
+- Implemented in `Player` class using Discord voice state updates
+- Normalizes volume across tracks for consistent listening experience
 
 ## Docker Deployment
 
@@ -214,10 +286,26 @@ Key runtime details:
 ## Web Interface
 
 Separate git submodule at `./web`:
-- Independent React-based frontend
+- Independent React-based frontend for guild settings and management
 - Automatically initialized during `npm install` (postinstall hook)
 - Uses separate PM2 processes for auth and web servers
 - Managed via `npm run web:*` commands
+
+Development workflow:
+- `npm run dev:all`: Run both bot and web in development mode (recommended)
+- `npm run web:dev`: Web dev server only (Vite)
+- `npm run web:dev:all`: Web dev server + auth server
+- `npm run web:pm2:logs:web`: View web server logs
+- `npm run web:pm2:logs:auth`: View auth server logs
+
+If web submodule is missing: `npm run submodule:init` or `git submodule update --init --recursive`
+
+## Versioning and Deployment Strategy
+
+- **`master` branch**: Bleeding edge / development - **not guaranteed to be stable**
+- **Production**: Use [tagged releases](https://github.com/soulwax/ISOBEL/releases/) for stability
+- **Version tags**: `:latest`, `:2`, `:2.12`, `:2.12.2` (Docker)
+- When deploying production instances, always checkout a tagged release: `git checkout v[version]`
 
 ## Important Notes
 
@@ -237,7 +325,10 @@ Separate git submodule at `./web`:
 
 ## Troubleshooting
 
+- **401 Unauthorized from Starchild API**: Ensure `STARCHILD_API_KEY` is set correctly. The API key must be passed as a query parameter (`key=`), which is handled automatically by the `StarchildAPI` service. If you see this error, check that `getStreamUrl()` in `services/starchild-api.ts` includes the API key in the URL params.
 - **ffmpeg not found**: Install system package (`apt-get install ffmpeg` on Debian/Ubuntu)
 - **Voice connection issues**: Check bot has Connect + Speak permissions (BOT_REQUIRED_PERMISSIONS = 36700160)
 - **Database locked**: SQLite issue - ensure only one bot instance per database file
 - **Submodule not found**: Run `npm run submodule:init` or `git submodule update --init --recursive`
+- **Build errors after git pull**: Run `npm run prisma:generate` to regenerate Prisma client
+- **PM2 process conflicts**: Use `npm run pm2:reset` to clear all processes and start fresh

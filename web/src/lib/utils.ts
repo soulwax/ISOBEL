@@ -1,4 +1,4 @@
-// File: src/lib/utils.ts
+// File: web/src/lib/utils.ts
 
 /**
  * Utility functions for security, validation, and common operations

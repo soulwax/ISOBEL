@@ -1,4 +1,4 @@
-// File: scripts/start-web.js
+// File: web/scripts/start-web.js
 // Wrapper script to start web server in dev or production mode
 
 import { spawn } from 'child_process';

@@ -1,7 +1,5 @@
-// File: src/server/app.ts
-// Express app factory - can be used for both PM2 and Vercel
+// File: web/src/server/app.ts
 
-// IMPORTANT: Load environment variables FIRST, before any other imports
 import { config } from 'dotenv';
 config();
 

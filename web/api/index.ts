@@ -1,5 +1,4 @@
-// File: api/index.ts
-// Vercel serverless function - main API handler
+// File: web/api/index.ts
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createApp } from '../src/server/app.js';

@@ -1,4 +1,4 @@
-// File: src/server/api/auth/[...nextauth]/route.ts
+// File: web/src/server/api/auth/[...nextauth]/route.ts
 
 import { handlers } from '../../../../auth';
 

@@ -1,6 +1,6 @@
 /* File: ecosystem.config.cjs */
+/* * */
 
-/**
  * PM2 Ecosystem Configuration
  * 
  * Usage:

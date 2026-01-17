@@ -1,3 +1,5 @@
+-- File: web/drizzle/0000_bored_swarm.sql
+
 CREATE TABLE "account" (
 	"userId" text NOT NULL,
 	"type" text NOT NULL,

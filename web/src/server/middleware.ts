@@ -1,4 +1,4 @@
-// File: src/server/middleware.ts
+// File: web/src/server/middleware.ts
 
 import express from 'express';
 import { handlers } from '../auth/index.js';

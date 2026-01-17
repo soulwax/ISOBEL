@@ -1,4 +1,4 @@
-// File: src/lib/logger.ts
+// File: web/src/lib/logger.ts
 
 import winston from 'winston';
 

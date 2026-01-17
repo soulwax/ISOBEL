@@ -1,4 +1,4 @@
-// File: src/components/GuildSettings.tsx
+// File: web/src/components/GuildSettings.tsx
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
@@ -377,5 +377,4 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
     </div>
   );
 }
-
 

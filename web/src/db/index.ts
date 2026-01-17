@@ -1,6 +1,5 @@
-// File: src/db/index.ts
+// File: web/src/db/index.ts
 
-// Load environment variables if not already loaded (safeguard for ES module loading order)
 import { config } from 'dotenv';
 config();
 

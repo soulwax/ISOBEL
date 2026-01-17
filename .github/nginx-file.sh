@@ -1,3 +1,5 @@
+# File: .github/nginx-file.sh
+
 sudo tee /etc/nginx/sites-available/isobel.battlecry.tech.conf > /dev/null << 'EOF'
 server {
     server_name isobel.battlecry.tech;
