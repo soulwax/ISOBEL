@@ -93,6 +93,14 @@ export default class {
   private embedUpdateInterval: NodeJS.Timeout | undefined;
 
   private readonly channelToSpeakingUsers = new Map<string, Set<string>>();
+  private readonly mp3CacheInFlight = new Map<string, Promise<string>>();
+  private audioPlayerIdleHandler?: (oldState: AudioPlayerState, newState: AudioPlayerState) => void;
+  private audioPlayerErrorHandler?: (error: Error) => void;
+  private readonly preloadedStreamPaths = new Map<string, string>();
+  private playbackErrorAttempts = 0;
+  private reconnectAttempts = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private allowReconnect = false;
 
   constructor(fileCache: FileCacheProvider, guildId: string, @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI) {
     this.fileCache = fileCache;
@@ -112,6 +120,10 @@ export default class {
       selfDeaf: false,
       adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
     });
+
+    this.allowReconnect = true;
+    this.reconnectAttempts = 0;
+    this.clearReconnectTimer();
 
     const guildSettings = await getGuildSettings(this.guildId);
 
@@ -134,12 +146,16 @@ export default class {
 
       this.currentChannel = channel;
       if (newState.status === VoiceConnectionStatus.Ready) {
+        this.reconnectAttempts = 0;
         this.registerVoiceActivityListener(guildSettings);
       }
     });
   }
 
   disconnect(): void {
+    this.allowReconnect = false;
+    this.clearReconnectTimer();
+    this.reconnectAttempts = 0;
     if (this.voiceConnection) {
       if (this.status === STATUS.PLAYING) {
         this.pause();
@@ -181,13 +197,8 @@ export default class {
     }
 
     const stream = await this.getStream(currentSong, {seek: realPositionSeconds, to});
-    this.audioPlayer = createAudioPlayer({
-      behaviors: {
-        // Needs to be somewhat high for livestreams
-        maxMissedFrames: AUDIO_PLAYER_MAX_MISSED_FRAMES,
-      },
-    });
-    this.voiceConnection.subscribe(this.audioPlayer);
+    const audioPlayer = this.getOrCreateAudioPlayer();
+    this.voiceConnection.subscribe(audioPlayer);
     this.playAudioPlayerResource(this.createAudioStream(stream));
     this.attachListeners();
     this.startTrackingPosition(positionSeconds);
@@ -244,19 +255,15 @@ export default class {
       }
 
       const stream = await this.getStream(currentSong, {seek: positionSeconds, to});
-      this.audioPlayer = createAudioPlayer({
-        behaviors: {
-          // Needs to be somewhat high for livestreams
-          maxMissedFrames: AUDIO_PLAYER_MAX_MISSED_FRAMES,
-        },
-      });
-      this.voiceConnection.subscribe(this.audioPlayer);
+      const audioPlayer = this.getOrCreateAudioPlayer();
+      this.voiceConnection.subscribe(audioPlayer);
       this.playAudioPlayerResource(this.createAudioStream(stream));
 
       this.attachListeners();
 
       this.status = STATUS.PLAYING;
       this.nowPlaying = currentSong;
+      this.playbackErrorAttempts = 0;
 
       // Always reset position when starting a new song
       // If it's the same URL, we're seeking/resuming, so preserve position
@@ -272,6 +279,7 @@ export default class {
 
       // Start updating the embed periodically
       this.startEmbedUpdates();
+      this.prefetchNextSong();
     } catch (error: unknown) {
       await this.forward(1);
 
@@ -525,6 +533,11 @@ export default class {
     const cacheKey = `mp3:${song.url}:${AUDIO_BITRATE_KBPS}`;
     const hash = this.getHashForCache(cacheKey);
 
+    const inFlight = this.mp3CacheInFlight.get(hash);
+    if (inFlight) {
+      return inFlight;
+    }
+
     // Check if already cached
     const cachedPath = await this.fileCache.getPathFor(hash);
     if (cachedPath) {
@@ -532,70 +545,79 @@ export default class {
       return cachedPath;
     }
 
-    // Download MP3 file
-    debug(`Downloading MP3 for ${song.title} at ${AUDIO_BITRATE_KBPS}kbps...`);
+    const downloadPromise = (async () => {
+      // Download MP3 file
+      debug(`Downloading MP3 for ${song.title} at ${AUDIO_BITRATE_KBPS}kbps...`);
 
-    try {
-      const writeStream = this.fileCache.createWriteStream(hash);
-      const downloadStream = this.starchildAPI.getStream(song.url, {
-        kbps: AUDIO_BITRATE_KBPS as number,
-      });
+      try {
+        const writeStream = this.fileCache.createWriteStream(hash);
+        const downloadStream = this.starchildAPI.getStream(song.url, {
+          kbps: AUDIO_BITRATE_KBPS as number,
+        });
 
-      // Wait for pipeline to complete
-      await pipeline(downloadStream, writeStream);
+        // Wait for pipeline to complete
+        await pipeline(downloadStream, writeStream);
 
-      // In production, the async close handler might take longer
-      // Wait for the file cache write stream's async close handler to complete
-      await new Promise<void>((resolve, reject) => {
-        const checkCache = async () => {
-          try {
-            let finalPath = await this.fileCache.getPathFor(hash);
-            let retries = 10; // Increased retries for production
-            while (!finalPath && retries > 0) {
-              debug(`Waiting for MP3 cache to complete for ${song.title}... (${retries} retries left)`);
-              await new Promise(r => setTimeout(r, 500)); // Increased delay
-              finalPath = await this.fileCache.getPathFor(hash);
-              retries--;
+        // In production, the async close handler might take longer
+        // Wait for the file cache write stream's async close handler to complete
+        await new Promise<void>((resolve, reject) => {
+          const checkCache = async () => {
+            try {
+              let finalPath = await this.fileCache.getPathFor(hash);
+              let retries = 10; // Increased retries for production
+              while (!finalPath && retries > 0) {
+                debug(`Waiting for MP3 cache to complete for ${song.title}... (${retries} retries left)`);
+                await new Promise(r => setTimeout(r, 500)); // Increased delay
+                finalPath = await this.fileCache.getPathFor(hash);
+                retries--;
+              }
+              if (finalPath) {
+                debug(`MP3 cache completed for ${song.title}`);
+                resolve();
+              } else {
+                debug(`MP3 cache failed for ${song.title} - no path found after retries`);
+                reject(new Error(`Failed to cache MP3 file - file may not have been written correctly for ${song.title}`));
+              }
+            } catch (error: unknown) {
+              debug(`Error checking MP3 cache for ${song.title}: ${String(error)}`);
+              reject(error instanceof Error ? error : new Error(String(error)));
             }
-            if (finalPath) {
-              debug(`MP3 cache completed for ${song.title}`);
-              resolve();
-            } else {
-              debug(`MP3 cache failed for ${song.title} - no path found after retries`);
-              reject(new Error(`Failed to cache MP3 file - file may not have been written correctly for ${song.title}`));
-            }
-          } catch (error: unknown) {
-            debug(`Error checking MP3 cache for ${song.title}: ${String(error)}`);
-            reject(error instanceof Error ? error : new Error(String(error)));
-          }
-        };
+          };
 
-        if (writeStream.closed) {
-          // Stream already closed, wait for async handler
-          debug(`Write stream already closed for ${String(song.title)}, checking cache...`);
-          void checkCache();
-        } else {
-          writeStream.once('close', () => {
-            debug(`Write stream closed for ${String(song.title)}, checking cache...`);
+          if (writeStream.closed) {
+            // Stream already closed, wait for async handler
+            debug(`Write stream already closed for ${String(song.title)}, checking cache...`);
             void checkCache();
-          });
-          writeStream.once('error', (error) => {
-            debug(`Write stream error for ${song.title}: ${error}`);
-            reject(error);
-          });
+          } else {
+            writeStream.once('close', () => {
+              debug(`Write stream closed for ${String(song.title)}, checking cache...`);
+              void checkCache();
+            });
+            writeStream.once('error', (error) => {
+              debug(`Write stream error for ${song.title}: ${error}`);
+              reject(error);
+            });
+          }
+        });
+
+        const finalPath = await this.fileCache.getPathFor(hash);
+        if (!finalPath) {
+          throw new Error(`Failed to cache MP3 file - final path not found for ${song.title}`);
         }
-      });
 
-      const finalPath = await this.fileCache.getPathFor(hash);
-      if (!finalPath) {
-        throw new Error(`Failed to cache MP3 file - final path not found for ${song.title}`);
+        debug(`Cached MP3 for ${song.title}`);
+        return finalPath;
+      } catch (error) {
+        debug(`Error downloading/caching MP3 for ${String(song.title)}: ${String(error)}`);
+        throw error;
       }
+    })();
 
-      debug(`Cached MP3 for ${song.title}`);
-      return finalPath;
-    } catch (error) {
-      debug(`Error downloading/caching MP3 for ${String(song.title)}: ${String(error)}`);
-      throw error;
+    this.mp3CacheInFlight.set(hash, downloadPromise);
+    try {
+      return await downloadPromise;
+    } finally {
+      this.mp3CacheInFlight.delete(hash);
     }
   }
 
@@ -607,28 +629,62 @@ export default class {
     }
 
     if (song.source === MediaSource.HLS) {
-      return this.createReadStream({url: song.url, cacheKey: song.url});
+      return this.createReadStreamWithRetry({url: song.url, cacheKey: song.url});
     }
 
-    // Download and cache MP3 file for higher fidelity
-    const mp3Path = await this.downloadAndCacheMP3(song);
+    // If we need to seek, we must have a local file first.
+    if (options.seek || options.to) {
+      const mp3Path = await this.downloadAndCacheMP3(song);
 
-    const ffmpegInputOptions: string[] = [];
+      const ffmpegInputOptions: string[] = [];
 
-    if (options.seek) {
-      ffmpegInputOptions.push('-ss', options.seek.toString());
+      if (options.seek) {
+        ffmpegInputOptions.push('-ss', options.seek.toString());
+      }
+
+      if (options.to) {
+        ffmpegInputOptions.push('-to', options.to.toString());
+      }
+
+      // Use cached MP3 file as input
+      return this.createReadStream({
+        url: mp3Path,
+        cacheKey: song.url,
+        ffmpegInputOptions,
+        cache: false, // Already cached as MP3
+      });
     }
 
-    if (options.to) {
-      ffmpegInputOptions.push('-to', options.to.toString());
+    const preloadedPath = this.preloadedStreamPaths.get(song.url);
+    if (preloadedPath) {
+      this.preloadedStreamPaths.delete(song.url);
+      return this.createReadStream({
+        url: preloadedPath,
+        cacheKey: song.url,
+        cache: false,
+      });
     }
 
-    // Use cached MP3 file as input
-    return this.createReadStream({
-      url: mp3Path,
+    // If cached, use it immediately.
+    const cacheKey = `mp3:${song.url}:${AUDIO_BITRATE_KBPS}`;
+    const cachedPath = await this.fileCache.getPathFor(this.getHashForCache(cacheKey));
+    if (cachedPath) {
+      return this.createReadStream({
+        url: cachedPath,
+        cacheKey: song.url,
+        cache: false,
+      });
+    }
+
+    // Start caching in the background and stream directly for faster start.
+    this.safeAsync(this.downloadAndCacheMP3(song));
+    const streamUrl = this.starchildAPI.getStreamUrl(song.url, {
+      kbps: AUDIO_BITRATE_KBPS as number,
+    });
+    return this.createReadStreamWithRetry({
+      url: streamUrl,
       cacheKey: song.url,
-      ffmpegInputOptions,
-      cache: false, // Already cached as MP3
+      cache: false,
     });
   }
 
@@ -731,15 +787,47 @@ export default class {
 
     // Remove any existing listeners before adding new ones to prevent duplicates
     // Wrap async handler to avoid Promise return type error - event listeners expect void
-    const idleHandler = (_oldState: AudioPlayerState, newState: AudioPlayerState) => {
-      void this.onAudioPlayerIdle(_oldState, newState);
-    };
+    if (!this.audioPlayerIdleHandler) {
+      this.audioPlayerIdleHandler = (_oldState: AudioPlayerState, newState: AudioPlayerState) => {
+        void this.onAudioPlayerIdle(_oldState, newState);
+      };
+    }
+
+    const idleHandler = this.audioPlayerIdleHandler;
     this.audioPlayer.removeListener(AudioPlayerStatus.Idle, idleHandler);
     this.audioPlayer.on(AudioPlayerStatus.Idle, idleHandler);
+
+    if (!this.audioPlayerErrorHandler) {
+      this.audioPlayerErrorHandler = (error: Error) => {
+        void this.onAudioPlayerError(error);
+      };
+    }
+
+    const errorHandler = this.audioPlayerErrorHandler;
+    this.audioPlayer.removeListener('error', errorHandler);
+    this.audioPlayer.on('error', errorHandler);
   }
 
   private onVoiceConnectionDisconnect(): void {
-    this.disconnect();
+    if (!this.allowReconnect || !this.currentChannel) {
+      this.disconnect();
+      return;
+    }
+
+    this.scheduleReconnect();
+  }
+
+  private getOrCreateAudioPlayer(): AudioPlayer {
+    if (!this.audioPlayer) {
+      this.audioPlayer = createAudioPlayer({
+        behaviors: {
+          // Needs to be somewhat high for livestreams
+          maxMissedFrames: AUDIO_PLAYER_MAX_MISSED_FRAMES,
+        },
+      });
+    }
+
+    return this.audioPlayer;
   }
 
   private async onAudioPlayerIdle(_oldState: AudioPlayerState, newState: AudioPlayerState): Promise<void> {
@@ -784,6 +872,7 @@ export default class {
 
       const returnedStream = capacitor.createReadStream();
       let hasReturnedStreamClosed = false;
+      let hasResolved = false;
 
       // Determine if input is a file path or URL
       const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
@@ -797,13 +886,30 @@ export default class {
         .audioBitrate(OPUS_OUTPUT_BITRATE_KBPS as number)
         .addOutputOption(['-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`])
         .on('error', error => {
-          if (!hasReturnedStreamClosed) {
+          if (!hasReturnedStreamClosed && !hasResolved) {
+            hasResolved = true;
+            clearTimeout(startTimeout);
             reject(error);
+          } else {
+            debug(`ffmpeg stream error after start: ${error}`);
           }
         })
         .on('start', command => {
           debug(`Spawned ffmpeg with ${command}`);
+          if (!hasResolved) {
+            hasResolved = true;
+            clearTimeout(startTimeout);
+            resolve(returnedStream);
+          }
         });
+
+      const startTimeout = setTimeout(() => {
+        if (!hasResolved) {
+          hasResolved = true;
+          stream.kill('SIGKILL');
+          reject(new Error('ffmpeg start timeout'));
+        }
+      }, 5000);
 
       stream.pipe(capacitor);
 
@@ -813,9 +919,8 @@ export default class {
         }
 
         hasReturnedStreamClosed = true;
+        clearTimeout(startTimeout);
       });
-
-      resolve(returnedStream);
     });
   }
 
@@ -848,5 +953,123 @@ export default class {
    */
   private isHttpError(error: unknown, statusCode: number): error is {statusCode: number} {
     return typeof error === 'object' && error !== null && 'statusCode' in error && (error as {statusCode: number}).statusCode === statusCode;
+  }
+
+  private prefetchNextSong(): void {
+    const nextSong = this.queue[this.queuePosition + 1];
+    if (!nextSong || nextSong.isLive || nextSong.source === MediaSource.HLS) {
+      return;
+    }
+
+    this.safeAsync((async () => {
+      const path = await this.downloadAndCacheMP3(nextSong);
+      this.preloadedStreamPaths.set(nextSong.url, path);
+    })());
+  }
+
+  private async onAudioPlayerError(error: Error): Promise<void> {
+    debug(`Audio player error: ${error.message}`);
+    if (this.status !== STATUS.PLAYING) {
+      return;
+    }
+
+    const currentSong = this.getCurrent();
+    if (!currentSong) {
+      return;
+    }
+
+    if (this.playbackErrorAttempts >= 2) {
+      debug('Audio player error retries exhausted, skipping track.');
+      await this.forward(1);
+      return;
+    }
+
+    const delayMs = 300 * 2 ** this.playbackErrorAttempts;
+    this.playbackErrorAttempts++;
+    await this.delay(delayMs);
+
+    if (currentSong.isLive) {
+      await this.play();
+    } else {
+      await this.seek(this.positionInSeconds);
+    }
+  }
+
+  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+    const maxRetries = 2;
+    let attempt = 0;
+    let lastError: unknown;
+
+    while (attempt <= maxRetries) {
+      try {
+        return await this.createReadStream(options);
+      } catch (error) {
+        lastError = error;
+        if (attempt === maxRetries) {
+          break;
+        }
+        const delayMs = 250 * 2 ** attempt;
+        await this.delay(delayMs);
+        attempt++;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || !this.currentChannel) {
+      return;
+    }
+
+    if (this.reconnectAttempts >= 5) {
+      debug('Reconnect attempts exhausted, disconnecting.');
+      this.disconnect();
+      return;
+    }
+
+    const delayMs = Math.min(1000 * 2 ** this.reconnectAttempts, 30000);
+    this.reconnectAttempts++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.safeAsync(this.attemptReconnect());
+    }, delayMs);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (!this.currentChannel) {
+      return;
+    }
+
+    try {
+      this.voiceConnection?.destroy();
+      this.voiceConnection = null;
+      await this.connect(this.currentChannel);
+
+      if (this.status === STATUS.PLAYING) {
+        const currentSong = this.getCurrent();
+        if (currentSong) {
+          if (currentSong.isLive) {
+            await this.play();
+          } else {
+            await this.seek(this.positionInSeconds);
+          }
+        }
+      }
+    } catch (error) {
+      debug(`Reconnect attempt failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.scheduleReconnect();
+    }
   }
 }

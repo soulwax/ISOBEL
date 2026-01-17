@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.16.1] - 2026-01-18
+
+### Changed
+- Docker now builds the bot without the web interface by default
+- Added a separate `docker-compose.web.yml` for the web/auth services
+- Updated health beacon port configuration and documentation
+- Build process no longer starts services or installs web dependencies by default
+- Updated Docker runtime to include `package.json` for banner/logging
+- Improved search responsiveness by probing HLS streams with a short timeout and running API search in parallel
+- Added search retries with backoff for transient Starchild API failures
+- Added MP3 cache prefetching and shared in-flight downloads to reduce playback gaps
+- Reused audio players across plays to reduce setup overhead
+- Streamed directly from Starchild while caching in the background when no seek is needed
+- Prevented duplicate idle listeners on the audio player
+- Added voice reconnect attempts with backoff after disconnects
+- Added ffmpeg start retries for transient stream failures
+- Increased audio player missed-frame tolerance to reduce dropouts
+- Added audio player error retries with backoff before skipping
+- Preloaded next-track stream paths after caching completes
+
 ## [2.17.0] - 2026-01-17
 
 ### Changed - Repository Unification
