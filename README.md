@@ -6,7 +6,19 @@
 
 
 
-ISOBEL is a **highly-opinionated midwestern German self-hosted** Discord music bot **that doesn't suck**. It's made for small to medium-sized Discord servers/guilds (think about a group the size of you, your friends, and your friend's friends).
+ISOBEL is a **highly-opinionated midwestern, now German claimed (same thing really), self-hosted** Discord music bot **that doesn't suck**. It's made for small to medium-sized Discord servers/guilds (think about a group the size of you, your friends, and your friend's friends).
+
+The original author of the bot is [codetheweb](https://github.com/codetheweb) with the original code for [muse found here](https://github.com/museofficial/muse) and *I cannot thank him enough for the inspiration and foundation he laid.*
+
+Thus I claim the same: This discord bot is one that doesn't suck.
+
+There are a lot of changes made since Max Isom's original version.
+First of all, this bot does not depend on YouTube or Spotify for music streaming. Instead, it uses its own music api, we just call it the *ominous music* **Songbird API**. 
+
+Yes, it is more of a black box experience now than before, but with spotify and youtube being so unreliable for music streaming, this was the only way to go. Sorry Max. 
+The second big change is that this bot is coming with its own web interface for configuration and settings management but this is work in progress. See [./web/README.md](./web/README.md).
+
+**OTHERWISE**, ISOBEL works like before, you /play songs, /skip them, /pause, /resume, /seek, etc.
 
 ## Features
 
@@ -265,45 +277,202 @@ You'll need to set up your own Music API instance.
 
 ## 🔧 Development
 
-If you want to contribute or develop ISOBEL:
+### Understanding the Two Parts of ISOBEL
 
-1. Clone the repository: `git clone https://github.com/soulwax/ISOBEL.git`
-2. Install dependencies: `npm install`
-   - This automatically installs dependencies for both the bot and web interface via the `postinstall` script
-3. Set up your `.env` file with required variables
-4. Run in development mode:
-   - Bot only: `npm run dev`
-   - Web interface only: `npm run web:dev:all`
-   - Both together: `npm run dev:all` (recommended for full-stack development)
-5. Run linting: `npm run lint` (or `npm run lint:all` for both bot and web)
-6. Run type checking: `npm run typecheck` (or `npm run typecheck:all` for both bot and web)
+ISOBEL is made up of **two separate projects** that work together:
 
-### Building and Deploying
+1. **🤖 The Bot** (main project) - The Discord bot that plays music in voice channels
+   - Located in the root directory (`/`)
+   - Required to play music in Discord
+   - Can work completely on its own without the web interface
 
-- `npm run build` - Builds both bot and web interface, then starts both services via PM2
-- `npm run build:bot` - Build only the bot
-- `npm run build:all` - Build both without starting services
+2. **🌐 The Web Interface** (optional) - A website for managing bot settings
+   - Located in the `./web` folder (git submodule)
+   - **Optional** - the bot works fine without it
+   - Provides a nice UI for changing settings instead of using Discord commands
+   - Lets you manage favorites, volume settings, etc. through a web browser
 
-### Unified Scripts
+**Think of it like this**: The bot is like a remote-controlled car. It works perfectly on its own. The web interface is like getting a smartphone app to control the car instead of using the physical remote. Nice to have, but not required!
 
-The project includes unified scripts that work across both the bot and web interface:
+### 🚀 Quick Start for Development
 
-- `npm run lint:all` - Lint both bot and web projects
-- `npm run lint:fix:all` - Auto-fix linting issues in both projects
-- `npm run typecheck:all` - Type check both projects
-- `npm run build:all` - Build both projects
+#### First-Time Setup (Both Projects)
 
-### Web Interface Scripts
+```bash
+# 1. Clone the repository with the web submodule
+git clone --recursive https://github.com/soulwax/ISOBEL.git
+cd ISOBEL
 
-Access web interface commands from the root:
+# 2. Install dependencies for BOTH projects
+npm install
+# This installs dependencies for the bot AND automatically installs the web dependencies
 
-- `npm run web:dev` - Start web development server (Vite only)
-- `npm run web:dev:all` - Start both Vite dev server and auth server
-- `npm run web:build` - Build web interface for production
-- `npm run web:lint` - Lint web interface
-- `npm run web:preview` - Preview production build
-- `npm run web:pm2:start:prod` - Start web interface with PM2 (production)
-- `npm run web:pm2:start:dev` - Start web interface with PM2 (development)
+# 3. Set up your environment variables
+cp .env.example .env
+# Edit .env with your DISCORD_TOKEN, STARCHILD_BASE_URL, and STARCHILD_API_KEY
+```
+
+#### Development Mode - Choose Your Scenario
+
+**Scenario A: I only want to work on the Discord bot** 🤖
+```bash
+npm run dev
+```
+- Starts only the bot with hot reload
+- Perfect when you're adding new Discord commands, fixing playback issues, etc.
+- The web interface won't be running (and that's okay!)
+
+**Scenario B: I only want to work on the web interface** 🌐
+```bash
+npm run web:dev:all
+```
+- Starts only the web interface (both the Vite dev server and auth server)
+- Good when you're designing new UI features, fixing web bugs
+- The bot won't be running (you won't be able to test music playback)
+
+**Scenario C: I want to work on BOTH at the same time** 🤖🌐
+```bash
+npm run dev:all
+```
+- Starts the bot AND the web interface together
+- Recommended for full-stack development
+- You can test how web changes affect the bot and vice versa
+- Uses `concurrently` to run both processes in one terminal
+
+### 📦 Building for Production
+
+#### Build Scenarios
+
+**Just build the bot:**
+```bash
+npm run build:bot
+```
+- Compiles TypeScript to JavaScript in the `dist/` folder
+- Doesn't start anything - just builds
+
+**Build everything (bot + web):**
+```bash
+npm run build:all
+```
+- Builds both the bot and web interface
+- Doesn't start anything - just builds
+
+**Build and start everything with PM2:**
+```bash
+npm run build
+```
+- Builds both projects
+- Starts both with PM2 process manager (production mode)
+- Use this when deploying to a server
+
+### 🎯 Starting Services in Production
+
+**Start only the bot:**
+```bash
+npm start
+# OR
+npm run pm2:start:prod
+```
+
+**Start only the web interface:**
+```bash
+npm run web:pm2:start:prod
+```
+
+**Start BOTH bot and web together:**
+```bash
+npm run start:all:prod
+```
+- This is what you want for a full production deployment
+
+### 🛑 Stopping Services
+
+**Stop only the bot:**
+```bash
+npm run pm2:stop
+```
+
+**Stop only the web:**
+```bash
+npm run web:pm2:stop
+```
+
+**Stop BOTH:**
+```bash
+npm run stop:all
+```
+
+### 🔄 Restarting Services
+
+**Restart only the bot:**
+```bash
+npm run pm2:restart
+```
+
+**Restart BOTH:**
+```bash
+npm run restart:all
+```
+
+### 📊 Viewing Logs
+
+**View bot logs:**
+```bash
+npm run pm2:logs
+```
+
+**View web logs:**
+```bash
+npm run web:pm2:logs:web      # Web server logs
+npm run web:pm2:logs:auth     # Auth server logs
+```
+
+**View ALL logs (bot + web):**
+```bash
+npm run logs:all
+```
+
+### ✅ Quality Checks
+
+**Lint (check code style):**
+```bash
+npm run lint              # Bot only
+npm run lint:all          # Bot + Web
+npm run lint:fix:all      # Auto-fix issues in both
+```
+
+**Type check (check TypeScript types):**
+```bash
+npm run typecheck         # Bot only
+npm run typecheck:all     # Bot + Web
+```
+
+### 🆘 Common Issues
+
+**"Web directory not found"**
+- You forgot to clone with `--recursive` or the submodule isn't initialized
+- Fix: `npm run submodule:init` or `git submodule update --init --recursive`
+
+**PM2 processes won't start/stop**
+- Processes might be stuck
+- Fix: `npm run pm2:reset` (nukes everything and starts fresh)
+
+**Changes not showing up**
+- Make sure you're running in dev mode (`npm run dev` or `npm run dev:all`)
+- Production builds need to be rebuilt after changes
+
+### 📝 Summary Table
+
+| What I want to do | Command to use |
+|------------------|----------------|
+| Work on bot only | `npm run dev` |
+| Work on web only | `npm run web:dev:all` |
+| Work on both | `npm run dev:all` |
+| Deploy everything to production | `npm run build` then `npm run start:all:prod` |
+| Deploy bot only | `npm run build:bot` then `npm start` |
+| Stop everything | `npm run stop:all` |
+| View all logs | `npm run logs:all` |
+| Fix code style issues | `npm run lint:fix:all` |
 
 ## 📝 License
 
