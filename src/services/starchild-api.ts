@@ -2,8 +2,10 @@
 
 import got, { Got } from 'got';
 import { inject, injectable } from 'inversify';
+import pRetry from 'p-retry';
 import { TYPES } from '../types.js';
 import { ONE_HOUR_IN_SECONDS } from '../utils/constants.js';
+import debug from '../utils/debug.js';
 import Config from './config.js';
 import KeyValueCacheProvider from './key-value-cache.js';
 import { MediaSource, SongMetadata } from './player.js';
@@ -60,13 +62,26 @@ export default class {
   async search(query: string, limit = 10): Promise<SongMetadata[]> {
     return this.cache.wrap<(...args: [string, number]) => Promise<SongMetadata[]>, SongMetadata[]>(
       async (q: string, lim: number) => {
-        const response = await this.httpClient.get<DeezerSearchResponse>('music/search', {
-          searchParams: {
-            q,
-            offset: 0,
-            key: this.apiKey,
-          },
-        }).json<DeezerSearchResponse>();
+        const response = await pRetry(
+          () => this.httpClient.get<DeezerSearchResponse>('music/search', {
+            searchParams: {
+              q,
+              offset: 0,
+              key: this.apiKey,
+            },
+            timeout: {
+              request: 10000,
+            },
+          }).json<DeezerSearchResponse>(),
+          {
+            retries: 2,
+            minTimeout: 250,
+            maxTimeout: 1500,
+            onFailedAttempt: error => {
+              debug(`Search retry ${error.attemptNumber} failed: ${error.message}`);
+            },
+          }
+        );
 
         return response.data.slice(0, lim).map((track) => ({
           title: track.title,

@@ -44,7 +44,7 @@ export const PROGRESS_BAR_SEGMENTS = 10;
 /**
  * Audio player max missed frames (for livestreams)
  */
-export const AUDIO_PLAYER_MAX_MISSED_FRAMES = 50;
+export const AUDIO_PLAYER_MAX_MISSED_FRAMES = 80;
 
 /**
  * HTTP status code for gone/unavailable content

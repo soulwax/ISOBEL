@@ -45,20 +45,30 @@ export default class {
           // Fall through to API search
         } else {
           // URL is valid and passes security checks - try to use it as HLS stream
-          try {
-            const song = await this.httpLiveStream(query);
+          // Start API search in parallel so a slow probe doesn't block results
+          const searchPromise = this.starchildAPI.search(query, playlistLimit);
+          const hlsProbe = this.withTimeout(this.httpLiveStream(query), 1500);
 
+          try {
+            const song = await hlsProbe;
             if (song) {
               newSongs.push(song);
               return [newSongs, extraMsg];
             }
-            // If httpLiveStream returns null, fall through to API search
+            // If httpLiveStream returns null or times out, fall through to API search
           } catch (error) {
             // Unexpected error from httpLiveStream - log it but don't crash
             // Treat as failed stream attempt and fall through to API search
             debug(`Error checking HLS stream for ${query}: ${error instanceof Error ? error.message : String(error)}`);
-            // Fall through to API search
           }
+
+          const songs = await searchPromise;
+          if (songs.length === 0) {
+            throw new Error('that doesn\'t exist');
+          }
+
+          newSongs.push(...songs);
+          return [newSongs, extraMsg];
         }
       }
     } catch (error) {
@@ -107,5 +117,12 @@ export default class {
         });
       });
     });
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+    const timeout = new Promise<null>(resolve => {
+      setTimeout(() => resolve(null), timeoutMs);
+    });
+    return Promise.race([promise, timeout]);
   }
 }

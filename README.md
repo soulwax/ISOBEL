@@ -76,6 +76,7 @@ SONGBIRD_API_KEY=your-api's-key
 ```env
 DATA_DIR=./data
 CACHE_LIMIT=2GB
+HEALTH_PORT=3002
 
 # SponsorBlock integration (optional)
 # ENABLE_SPONSORBLOCK=true
@@ -90,6 +91,7 @@ BOT_STATUS=online
 
 - `DATA_DIR` - Directory for storing data files (defaults to `./data`)
 - `CACHE_LIMIT` - Cache size limit (defaults to `2GB`, examples: `512MB`, `10GB`)
+- `HEALTH_PORT` - Port for the health beacon HTTP server (defaults to `3002`)
 - `ENABLE_SPONSORBLOCK` - Set to `true` to enable SponsorBlock integration (defaults to `false`)
 - `SPONSORBLOCK_TIMEOUT` - Delay (in minutes) before retrying when SponsorBlock servers are unreachable (defaults to `5`)
 - `BOT_STATUS` - Bot presence status: `online`, `idle`, or `dnd` (defaults to `online`)
@@ -110,6 +112,7 @@ SONGBIRD_API_KEY=your-api's-key
 ############
 
 CACHE_LIMIT=2GB
+HEALTH_PORT=3002
 
 # ENABLE_SPONSORBLOCK=true
 # SPONSORBLOCK_TIMEOUT=5    # Delay (in minutes) before retrying when SponsorBlock servers are unreachable
@@ -164,13 +167,13 @@ docker run -d \
 Create a `docker-compose.yml`:
 
 ```yaml
-version: '3.8'
-
 services:
   bot:
     image: ghcr.io/soulwax/ISOBEL:latest
     container_name: isobel-bot
     restart: unless-stopped
+    ports:
+      - "3002:3002" # health beacon
     volumes:
       - ./data:/data
     environment:
@@ -184,12 +187,13 @@ services:
       - BOT_STATUS=online
       - BOT_ACTIVITY_TYPE=LISTENING
       - BOT_ACTIVITY=music
+      - HEALTH_PORT=3002
 ```
 
 Then run:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 #### Option 2: Bot + Web Interface (Full Stack)
@@ -210,7 +214,7 @@ docker-compose up -d
 
 **Using Docker Compose (Bot + Web):**
 
-Use the included `docker-compose.yml` from the repository:
+Use the included `docker-compose.yml` and the web override file:
 
 ```bash
 # 1. Clone the repository
@@ -222,10 +226,10 @@ cp .env.example .env
 # Edit .env with your values (see below)
 
 # 3. Start ONLY the bot
-docker-compose up -d
+docker compose up -d
 
 # 4. Start bot AND web interface
-docker-compose --profile with-web up -d
+docker compose -f docker-compose.yml -f docker-compose.web.yml up -d
 ```
 
 **Environment Variables for Bot + Web:**
@@ -253,8 +257,8 @@ AUTH_PORT=3003
 **Services Included:**
 
 - **bot** - Discord music bot (always runs)
-- **web** - Web interface on port 3001 (with-web profile)
-- **auth** - Authentication server on port 3003 (with-web profile)
+- **web** - Web interface on port 3001 (only with `docker-compose.web.yml`)
+- **auth** - Authentication server on port 3003 (only with `docker-compose.web.yml`)
 
 #### Building from Source
 
@@ -264,14 +268,14 @@ AUTH_PORT=3003
 docker build -t isobel-bot .
 ```
 
-**Build with docker-compose:**
+**Build with docker compose:**
 
 ```bash
 # Bot only
-docker-compose build
+docker compose build
 
 # Bot + Web
-docker-compose --profile with-web build
+docker compose -f docker-compose.yml -f docker-compose.web.yml build
 ```
 
 #### Using Environment Files
@@ -283,8 +287,8 @@ For better security, use an environment file instead of inline environment varia
 cp .env.example .env
 chmod 600 .env  # Restrict permissions
 
-# Docker will automatically load .env when using docker-compose
-docker-compose up -d
+# Docker will automatically load .env when using docker compose
+docker compose up -d
 ```
 
 #### Data Persistence
@@ -363,8 +367,9 @@ docker-compose up -d bot
    ```
 
 3. I recommend checking out a tagged release with `git checkout v[latest release]`
-4. Install dependencies: `npm install`
-   - This will automatically initialize the web submodule and install its dependencies via the `postinstall` script
+4. Install bot dependencies: `npm install`
+   - This installs only the bot dependencies
+   - If you want the web interface, run `cd web && npm install`
 5. `npm run start`
 
 **Note**: if you're on Windows, you may need to manually set the ffmpeg path. See [#345](https://github.com/soulwax/ISOBEL/issues/345) for details.
@@ -480,9 +485,10 @@ ISOBEL is made up of **two separate projects** that work together:
 git clone --recursive https://github.com/soulwax/ISOBEL.git
 cd ISOBEL
 
-# 2. Install dependencies for BOTH projects
+# 2. Install dependencies for the bot
 npm install
-# This installs dependencies for the bot AND automatically installs the web dependencies
+# If you want the web interface, also install its dependencies:
+# (cd web && npm install)
 
 # 3. Set up your environment variables
 cp .env.example .env
@@ -544,15 +550,14 @@ npm run build:all
 - Builds both the bot and web interface
 - Doesn't start anything - just builds
 
-**Build and start everything with PM2:**
+**Build bot only (default):**
 
 ```bash
 npm run build
 ```
 
-- Builds both projects
-- Starts both with PM2 process manager (production mode)
-- Use this when deploying to a server
+- Builds only the bot
+- Does not start any services
 
 ### 🎯 Starting Services in Production
 
@@ -655,7 +660,7 @@ npm run typecheck:all     # Bot + Web
 **"Web directory not found"**
 
 - You forgot to clone with `--recursive` or the submodule isn't initialized
-- Fix: `npm run submodule:init` or `git submodule update --init --recursive`
+- Fix: `git submodule update --init --recursive`
 
 **PM2 processes won't start/stop**
 
@@ -674,7 +679,7 @@ npm run typecheck:all     # Bot + Web
 | Work on bot only | `npm run dev` |
 | Work on web only | `npm run web:dev:all` |
 | Work on both | `npm run dev:all` |
-| Deploy everything to production | `npm run build` then `npm run start:all:prod` |
+| Deploy everything to production | `npm run build:all` then `npm run start:all:prod` |
 | Deploy bot only | `npm run build:bot` then `npm start` |
 | Stop everything | `npm run stop:all` |
 | View all logs | `npm run logs:all` |
