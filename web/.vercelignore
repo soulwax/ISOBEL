@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build artifacts (generated during deployment)
+build/
+dist/
+.vercel/
+
+# Development files
+*.log
+*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+coverage/
+*.test.ts
+*.spec.ts
+
+# Documentation
+*.md
+!README.md
+
+# PM2
+ecosystem.config.cjs
+logs/
+
+# Drizzle migrations (handled separately)
+drizzle/
+
+# Scripts not needed for Vercel
+scripts/
+
+# Type checking artifacts
+*.tsbuildinfo
