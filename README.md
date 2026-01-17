@@ -2,8 +2,23 @@
 
 <div align="center">
   <img src=".github/songbird.png" width="600" alt="ISOBEL - A Discord Music Bot">
+  <br><br>
+  <i>My name Isobel</i><br>
+  <i>Married to myself</i><br>
+  <i>My love Isobel</i><br>
+  <i>Living by herself</i><br>
+  <br>
+  <i>In a heart full of dust</i><br>
+  <i>Lives a creature called lust</i><br>
+  <i>It surprises and scares</i><br>
+  <i>Like me, like me</i><br>
+  <br>
+  <i>My name Isobel</i><br>
+  <i>Married to myself</i><br>
+  <i>My love Isobel</i><br>
+  <i>Living by herself</i>
+  <br><br>
 </div>
-
 
 
 ISOBEL is a **highly-opinionated midwestern, now German claimed (same thing really), self-hosted** Discord music bot **that doesn't suck**. It's made for small to medium-sized Discord servers/guilds (think about a group the size of you, your friends, and your friend's friends).
@@ -15,7 +30,7 @@ Thus I claim the same: This discord bot is one that doesn't suck.
 There are a lot of changes made since Max Isom's original version.
 First of all, this bot does not depend on YouTube or Spotify for music streaming. Instead, it uses its own music api, we just call it the *ominous music* **Songbird API**. (Formerly starchild music api that's why you might find references in code or docs)
 
-Yes, it is more of a black box experience now than before, but with spotify and youtube being so unreliable for music streaming, this was the only way to go. Sorry Max. 
+Yes, it is more of a black box experience now than before, but with spotify and youtube being so unreliable for music streaming, this was the only way to go. Sorry Max.
 The second big change is that this bot is coming with its own web interface for configuration and settings management but this is work in progress. See [./web/README.md](./web/README.md).
 
 **OTHERWISE**, ISOBEL works like before, you /play songs, /skip them, /pause, /resume, /seek, etc.
@@ -118,6 +133,7 @@ When running a production instance, I recommend that you use the [latest release
 ### 🐳 Docker
 
 ISOBEL can be deployed with Docker in two ways:
+
 1. **Bot Only** - Just the Discord music bot (recommended for most users)
 2. **Bot + Web** - Discord bot with optional web interface for settings management
 
@@ -171,6 +187,7 @@ services:
 ```
 
 Then run:
+
 ```bash
 docker-compose up -d
 ```
@@ -178,6 +195,7 @@ docker-compose up -d
 #### Option 2: Bot + Web Interface (Full Stack)
 
 **Prerequisites:**
+
 1. Discord OAuth Application (for web login)
    - Go to [Discord Developer Portal](https://discord.com/developers/applications)
    - Create an OAuth2 application
@@ -185,6 +203,7 @@ docker-compose up -d
    - Copy Client ID and Client Secret
 
 2. Generate NextAuth secret:
+
    ```bash
    openssl rand -base64 32
    ```
@@ -232,6 +251,7 @@ AUTH_PORT=3003
 ```
 
 **Services Included:**
+
 - **bot** - Discord music bot (always runs)
 - **web** - Web interface on port 3001 (with-web profile)
 - **auth** - Authentication server on port 3003 (with-web profile)
@@ -239,11 +259,13 @@ AUTH_PORT=3003
 #### Building from Source
 
 **Build bot only:**
+
 ```bash
 docker build -t isobel-bot .
 ```
 
 **Build with docker-compose:**
+
 ```bash
 # Bot only
 docker-compose build
@@ -326,17 +348,20 @@ docker-compose up -d bot
 ### Node.js
 
 **Prerequisites**:
-* Node.js (20.0.0 or later is required, latest 20.x.x LTS recommended)
-* ffmpeg (4.1 or later)
-* npm (comes with Node.js)
+
+- Node.js (20.0.0 or later is required, latest 20.x.x LTS recommended)
+- ffmpeg (4.1 or later)
+- npm (comes with Node.js)
 
 1. `git clone --recursive https://github.com/soulwax/ISOBEL.git && cd ISOBEL`
    - The `--recursive` flag is required to pull the web interface submodule located at `./web`
 2. Copy `.env.example` to `.env` and populate with values:
+
    ```bash
    cp .env.example .env
    # Edit .env with your credentials
    ```
+
 3. I recommend checking out a tagged release with `git checkout v[latest release]`
 4. Install dependencies: `npm install`
    - This will automatically initialize the web submodule and install its dependencies via the `postinstall` script
@@ -374,6 +399,7 @@ In the default state, ISOBEL has the status "Online" and the text "Listening to 
 #### Examples
 
 **ISOBEL is watching a movie and is DND**:
+
 ```env
 BOT_STATUS=dnd
 BOT_ACTIVITY_TYPE=WATCHING
@@ -381,6 +407,7 @@ BOT_ACTIVITY=a movie
 ```
 
 **ISOBEL is streaming Monstercat**:
+
 ```env
 BOT_STATUS=online
 BOT_ACTIVITY_TYPE=STREAMING
@@ -389,6 +416,7 @@ BOT_ACTIVITY=Monstercat
 ```
 
 **ISOBEL is in debugging mode**:
+
 ```env
 BOT_STATUS=DEBUGGING
 ```
@@ -423,23 +451,6 @@ ISOBEL uses the Starchild Music API for all music streaming and searching. This 
 - ✅ **Fast and reliable search**
 
 You'll need to set up your own Music API instance.
-
-*My name Isobel*
-
-*Married to myself*  
-*My love Isobel*  
-*Living by herself*
-
-*In a heart full of dust*
-
-*Lives a creature called lust*  
-*It surprises and scares*  
-*Like me, like me*
-
-*My name Isobel*  
-*Married to myself*  
-*My love Isobel*  
-*Living by herself*
 
 ## 🔧 Development
 
@@ -481,25 +492,31 @@ cp .env.example .env
 #### Development Mode - Choose Your Scenario
 
 **Scenario A: I only want to work on the Discord bot** 🤖
+
 ```bash
 npm run dev
 ```
+
 - Starts only the bot with hot reload
 - Perfect when you're adding new Discord commands, fixing playback issues, etc.
 - The web interface won't be running (and that's okay!)
 
 **Scenario B: I only want to work on the web interface** 🌐
+
 ```bash
 npm run web:dev:all
 ```
+
 - Starts only the web interface (both the Vite dev server and auth server)
 - Good when you're designing new UI features, fixing web bugs
 - The bot won't be running (you won't be able to test music playback)
 
 **Scenario C: I want to work on BOTH at the same time** 🤖🌐
+
 ```bash
 npm run dev:all
 ```
+
 - Starts the bot AND the web interface together
 - Recommended for full-stack development
 - You can test how web changes affect the bot and vice versa
@@ -510,23 +527,29 @@ npm run dev:all
 #### Build Scenarios
 
 **Just build the bot:**
+
 ```bash
 npm run build:bot
 ```
+
 - Compiles TypeScript to JavaScript in the `dist/` folder
 - Doesn't start anything - just builds
 
 **Build everything (bot + web):**
+
 ```bash
 npm run build:all
 ```
+
 - Builds both the bot and web interface
 - Doesn't start anything - just builds
 
 **Build and start everything with PM2:**
+
 ```bash
 npm run build
 ```
+
 - Builds both projects
 - Starts both with PM2 process manager (production mode)
 - Use this when deploying to a server
@@ -534,6 +557,7 @@ npm run build
 ### 🎯 Starting Services in Production
 
 **Start only the bot:**
+
 ```bash
 npm start
 # OR
@@ -541,29 +565,35 @@ npm run pm2:start:prod
 ```
 
 **Start only the web interface:**
+
 ```bash
 npm run web:pm2:start:prod
 ```
 
 **Start BOTH bot and web together:**
+
 ```bash
 npm run start:all:prod
 ```
+
 - This is what you want for a full production deployment
 
 ### 🛑 Stopping Services
 
 **Stop only the bot:**
+
 ```bash
 npm run pm2:stop
 ```
 
 **Stop only the web:**
+
 ```bash
 npm run web:pm2:stop
 ```
 
 **Stop BOTH:**
+
 ```bash
 npm run stop:all
 ```
@@ -571,11 +601,13 @@ npm run stop:all
 ### 🔄 Restarting Services
 
 **Restart only the bot:**
+
 ```bash
 npm run pm2:restart
 ```
 
 **Restart BOTH:**
+
 ```bash
 npm run restart:all
 ```
@@ -583,17 +615,20 @@ npm run restart:all
 ### 📊 Viewing Logs
 
 **View bot logs:**
+
 ```bash
 npm run pm2:logs
 ```
 
 **View web logs:**
+
 ```bash
 npm run web:pm2:logs:web      # Web server logs
 npm run web:pm2:logs:auth     # Auth server logs
 ```
 
 **View ALL logs (bot + web):**
+
 ```bash
 npm run logs:all
 ```
@@ -601,6 +636,7 @@ npm run logs:all
 ### ✅ Quality Checks
 
 **Lint (check code style):**
+
 ```bash
 npm run lint              # Bot only
 npm run lint:all          # Bot + Web
@@ -608,6 +644,7 @@ npm run lint:fix:all      # Auto-fix issues in both
 ```
 
 **Type check (check TypeScript types):**
+
 ```bash
 npm run typecheck         # Bot only
 npm run typecheck:all     # Bot + Web
@@ -616,14 +653,17 @@ npm run typecheck:all     # Bot + Web
 ### 🆘 Common Issues
 
 **"Web directory not found"**
+
 - You forgot to clone with `--recursive` or the submodule isn't initialized
 - Fix: `npm run submodule:init` or `git submodule update --init --recursive`
 
 **PM2 processes won't start/stop**
+
 - Processes might be stuck
 - Fix: `npm run pm2:reset` (nukes everything and starts fresh)
 
 **Changes not showing up**
+
 - Make sure you're running in dev mode (`npm run dev` or `npm run dev:all`)
 - Production builds need to be rebuilt after changes
 
@@ -642,4 +682,4 @@ npm run typecheck:all     # Bot + Web
 
 ## 📝 License
 
-GPLv3 - see LICENSE file for details.
+GPLv3 - see [LICENSE](LICENSE.md) file for details.

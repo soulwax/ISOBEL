@@ -13,6 +13,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:auth\" --names \"vite,auth\" --prefix-colors \"cyan,yellow\"",
     "build": "tsc -b && vite build",
     "build:prod": "npm run build",
+    "vercel-build": "npm run build",
     "preview": "vite preview",
     "start": "node scripts/start-web.js",
     "lint": "eslint .",
