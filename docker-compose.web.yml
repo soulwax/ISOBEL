@@ -1,0 +1,66 @@
+# Optional web interface services. Use with:
+# docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
+
+services:
+  # Web Interface Service (Optional - only needed if you want the web UI)
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: isobel-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    volumes:
+      - ./data:/data:ro  # Read-only access to bot data
+    environment:
+      # Web server configuration
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=file:/data/database.sqlite
+
+      # Discord OAuth (required for web interface)
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
+
+      # Optional: Point to the bot's database
+      - DATA_DIR=/data
+    networks:
+      - isobel-network
+    depends_on:
+      - bot
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Auth Server Service (Optional - required by web interface)
+  auth:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.auth
+    container_name: isobel-auth
+    restart: unless-stopped
+    ports:
+      - "${AUTH_PORT:-3003}:3003"
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3003}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+    networks:
+      - isobel-network
+    depends_on:
+      - bot
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
