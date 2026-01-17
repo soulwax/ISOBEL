@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Increased audio player missed-frame tolerance to reduce dropouts
 - Added audio player error retries with backoff before skipping
 - Preloaded next-track stream paths after caching completes
+- Added YouTube link parsing with oEmbed title lookup to search Starchild
+- Added yt-dlp fallback for YouTube links when Starchild has no match
 
 ## [2.17.0] - 2026-01-17
 

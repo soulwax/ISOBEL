@@ -1,7 +1,10 @@
 // File: src/services/get-songs.ts
 
 import ffmpeg from 'fluent-ffmpeg';
+import got from 'got';
 import { inject, injectable } from 'inversify';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { URL } from 'node:url';
 import { TYPES } from '../types.js';
 import debug from '../utils/debug.js';
@@ -11,6 +14,7 @@ import StarchildAPI from './starchild-api.js';
 @injectable()
 export default class {
   private readonly starchildAPI: StarchildAPI;
+  private readonly execFileAsync = promisify(execFile);
 
   constructor(@inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI) {
     this.starchildAPI = starchildAPI;
@@ -19,17 +23,27 @@ export default class {
   async getSongs(query: string, playlistLimit: number): Promise<[SongMetadata[], string]> {
     const newSongs: SongMetadata[] = [];
     const extraMsg = '';
+    let searchQuery = query;
+    let isYouTubeLink = false;
 
     // Test if it's a complete URL (for HLS streams)
     // Only catch TypeError from URL parsing - this indicates the query is not a valid URL
     try {
       const url = new URL(query);
 
+      if (this.isYouTubeUrl(url)) {
+        isYouTubeLink = true;
+        const title = await this.fetchYouTubeTitle(query);
+        if (title) {
+          searchQuery = title;
+        }
+      }
+
       // Validate protocol - invalid protocol means it's not a stream URL, treat as search query
       if (!['http:', 'https:'].includes(url.protocol)) {
         // Invalid protocol - treat as search query, not a stream URL
         // Fall through to API search
-      } else {
+      } else if (!isYouTubeLink) {
         // Security: Block localhost/internal IPs to prevent SSRF attacks
         // Blocked URLs are treated as search queries, not stream URLs
         const hostname = url.hostname.toLowerCase();
@@ -46,7 +60,7 @@ export default class {
         } else {
           // URL is valid and passes security checks - try to use it as HLS stream
           // Start API search in parallel so a slow probe doesn't block results
-          const searchPromise = this.starchildAPI.search(query, playlistLimit);
+          const searchPromise = this.starchildAPI.search(searchQuery, playlistLimit);
           const hlsProbe = this.withTimeout(this.httpLiveStream(query), 1500);
 
           try {
@@ -85,9 +99,17 @@ export default class {
     }
 
     // Search using Starchild API
-    const songs = await this.starchildAPI.search(query, playlistLimit);
+    const songs = await this.starchildAPI.search(searchQuery, playlistLimit);
 
     if (songs.length === 0) {
+      if (isYouTubeLink) {
+        const youtubeSong = await this.fetchYouTubeSong(query);
+        if (youtubeSong) {
+          newSongs.push(youtubeSong);
+          return [newSongs, extraMsg];
+        }
+        throw new Error('sorry, no matching song found for that YouTube link');
+      }
       throw new Error('that doesn\'t exist');
     }
 
@@ -124,5 +146,82 @@ export default class {
       setTimeout(() => resolve(null), timeoutMs);
     });
     return Promise.race([promise, timeout]);
+  }
+
+  private isYouTubeUrl(url: URL): boolean {
+    const host = url.hostname.toLowerCase();
+    return host === 'youtu.be'
+      || host === 'youtube.com'
+      || host.endsWith('.youtube.com')
+      || host === 'music.youtube.com';
+  }
+
+  private async fetchYouTubeTitle(url: string): Promise<string | null> {
+    try {
+      const response = await got.get('https://www.youtube.com/oembed', {
+        searchParams: {
+          url,
+          format: 'json',
+        },
+        timeout: {
+          request: 3000,
+        },
+      }).json<{title?: string}>();
+      const title = response?.title?.trim();
+      return title && title.length > 0 ? title : null;
+    } catch (error) {
+      debug(`YouTube oEmbed lookup failed for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  private async fetchYouTubeSong(url: string): Promise<SongMetadata | null> {
+    try {
+      const {stdout} = await this.execFileAsync('yt-dlp', [
+        '--no-playlist',
+        '-f',
+        'bestaudio/best',
+        '--print-json',
+        url,
+      ], {
+        timeout: 15000,
+        maxBuffer: 1024 * 1024,
+      });
+
+      const lines = stdout.trim().split('\n').filter(Boolean);
+      const payload = lines[lines.length - 1];
+      if (!payload) {
+        return null;
+      }
+
+      const data = JSON.parse(payload) as {
+        title?: string;
+        uploader?: string;
+        channel?: string;
+        duration?: number;
+        url?: string;
+        thumbnail?: string;
+        is_live?: boolean;
+      };
+
+      if (!data.url || !data.title) {
+        return null;
+      }
+
+      return {
+        url: data.url,
+        source: MediaSource.YouTube,
+        isLive: data.is_live ?? false,
+        title: data.title,
+        artist: data.uploader ?? data.channel ?? 'YouTube',
+        length: data.duration ?? 0,
+        offset: 0,
+        playlist: null,
+        thumbnailUrl: data.thumbnail ?? null,
+      };
+    } catch (error) {
+      debug(`yt-dlp failed for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 }

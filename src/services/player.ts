@@ -32,6 +32,7 @@ import StarchildAPI from './starchild-api.js';
 export enum MediaSource {
   Starchild,
   HLS,
+  YouTube,
 }
 
 export interface QueuedPlaylist {
@@ -631,6 +632,21 @@ export default class {
     if (song.source === MediaSource.HLS) {
       return this.createReadStreamWithRetry({url: song.url, cacheKey: song.url});
     }
+    if (song.source === MediaSource.YouTube) {
+      const ffmpegInputOptions: string[] = [];
+      if (options.seek) {
+        ffmpegInputOptions.push('-ss', options.seek.toString());
+      }
+      if (options.to) {
+        ffmpegInputOptions.push('-to', options.to.toString());
+      }
+      return this.createReadStreamWithRetry({
+        url: song.url,
+        cacheKey: song.url,
+        ffmpegInputOptions,
+        cache: false,
+      });
+    }
 
     // If we need to seek, we must have a local file first.
     if (options.seek || options.to) {
@@ -957,7 +973,7 @@ export default class {
 
   private prefetchNextSong(): void {
     const nextSong = this.queue[this.queuePosition + 1];
-    if (!nextSong || nextSong.isLive || nextSong.source === MediaSource.HLS) {
+    if (!nextSong || nextSong.isLive || nextSong.source !== MediaSource.Starchild) {
       return;
     }
 
