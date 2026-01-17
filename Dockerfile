@@ -1,6 +1,6 @@
 # File: Dockerfile
 
-FROM node:20-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
@@ -23,6 +23,8 @@ WORKDIR /usr/app
 # Add Python and build tools to compile native modules
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
+    ffmpeg \
+    yt-dlp \
     python3 \
     python-is-python3 \
     build-essential \
@@ -30,20 +32,23 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json ./
+COPY package.json yarn.lock ./
 
-RUN npm ci --omit=dev
+# Install full (dev + prod) deps for build stage
+RUN yarn install --frozen-lockfile
+
+# Create a production-only node_modules tree for runtime
+FROM dependencies AS prod-deps
+RUN yarn install --production --frozen-lockfile
 RUN cp -R node_modules /usr/app/prod_node_modules
-
-RUN npm ci
 
 FROM dependencies AS builder
 
 COPY . .
 
 # Run tsc build
-RUN npm run prisma:generate
-RUN npm run build
+RUN yarn prisma:generate
+RUN yarn build:bot
 
 # Only keep what's necessary to run
 FROM base AS runner
@@ -53,7 +58,7 @@ WORKDIR /usr/app
 # Copy built application
 COPY --from=builder /usr/app/dist ./dist
 # Copy production dependencies
-COPY --from=dependencies /usr/app/prod_node_modules ./node_modules
+COPY --from=prod-deps /usr/app/prod_node_modules ./node_modules
 # Copy Prisma client (needed at runtime)
 COPY --from=builder /usr/app/node_modules/.prisma/client ./node_modules/.prisma/client
 # Copy Prisma CLI (needed for migrations at runtime)
@@ -61,6 +66,7 @@ COPY --from=builder /usr/app/node_modules/prisma ./node_modules/prisma
 # Copy Prisma schema and migrations (needed for migrate deploy)
 COPY --from=builder /usr/app/schema.prisma ./schema.prisma
 COPY --from=builder /usr/app/migrations ./migrations
+COPY --from=builder /usr/app/package.json ./package.json
 
 # Create data directory
 RUN mkdir -p /data

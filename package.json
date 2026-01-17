@@ -9,8 +9,7 @@
   "types": "dts/types",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0",
-    "version": "0.3.1"
+    "node": ">=24.0.0"
   },
   "files": [
     "src"
@@ -31,9 +30,8 @@
     "prisma:generate": "prisma generate",
     "env:set-database-url": "tsx src/scripts/run-with-database-url.ts",
     "release": "release-it",
-    "build": "tsc && npm run web:build",
+    "build": "tsc",
     "build:bot": "tsc",
-    "postbuild": "npm run start:all:prod",
     "pm2:start": "pm2 start ecosystem.config.cjs --env production",
     "pm2:start:prod": "pm2 start ecosystem.config.cjs --env production",
     "pm2:start:staging": "pm2 start ecosystem.config.cjs --env staging",
@@ -64,7 +62,7 @@
     "pm2:update": "pm2 update",
     "pm2:kill": "pm2 kill",
     "pm2:version": "pm2 --version",
-    "postinstall": "patch-package && npm run install:web",
+    "postinstall": "patch-package",
     "install:all": "npm install",
     "install:web": "test -d web && cd web && (command -v pnpm >/dev/null 2>&1 && pnpm install || npm install) || echo 'Web directory not found'",
     "web:dev": "test -d web && cd web && npm run dev || echo 'Web directory not found'",
