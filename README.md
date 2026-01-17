@@ -267,15 +267,22 @@ You'll need to set up your own Music API instance.
 
 If you want to contribute or develop ISOBEL:
 
-1. Clone the repository with `git clone --recursive https://github.com/soulwax/ISOBEL.git`
-   - The `--recursive` flag is required to pull the web interface submodule located at `./web`
-   - If you forgot `--recursive`, you can initialize submodules later with `npm run submodule:init`
+1. Clone the repository: `git clone https://github.com/soulwax/ISOBEL.git`
 2. Install dependencies: `npm install`
-   - This automatically initializes the web submodule and installs its dependencies via the `postinstall` script
+   - This automatically installs dependencies for both the bot and web interface via the `postinstall` script
 3. Set up your `.env` file with required variables
-4. Run in development mode: `npm run dev`
+4. Run in development mode:
+   - Bot only: `npm run dev`
+   - Web interface only: `npm run web:dev:all`
+   - Both together: `npm run dev:all` (recommended for full-stack development)
 5. Run linting: `npm run lint` (or `npm run lint:all` for both bot and web)
 6. Run type checking: `npm run typecheck` (or `npm run typecheck:all` for both bot and web)
+
+### Building and Deploying
+
+- `npm run build` - Builds both bot and web interface, then starts both services via PM2
+- `npm run build:bot` - Build only the bot
+- `npm run build:all` - Build both without starting services
 
 ### Unified Scripts
 
@@ -290,16 +297,13 @@ The project includes unified scripts that work across both the bot and web inter
 
 Access web interface commands from the root:
 
-- `npm run web:dev` - Start web development server
+- `npm run web:dev` - Start web development server (Vite only)
+- `npm run web:dev:all` - Start both Vite dev server and auth server
 - `npm run web:build` - Build web interface for production
 - `npm run web:lint` - Lint web interface
 - `npm run web:preview` - Preview production build
-
-### Submodule Management
-
-- `npm run submodule:init` - Initialize and update submodules
-- `npm run submodule:update` - Update submodules to latest remote commits
-- `npm run submodule:status` - Check submodule status
+- `npm run web:pm2:start:prod` - Start web interface with PM2 (production)
+- `npm run web:pm2:start:dev` - Start web interface with PM2 (development)
 
 ## 📝 License
 

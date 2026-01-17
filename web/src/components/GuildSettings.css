@@ -1,0 +1,270 @@
+/* File: src/components/GuildSettings.css */
+
+.guild-settings {
+  margin-left: 240px; /* Account for sidebar */
+  min-height: 100vh;
+  background-color: var(--discord-dark);
+  color: var(--text-primary);
+  padding: 2rem;
+}
+
+.settings-loading,
+.settings-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.settings-error {
+  color: #f04747;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.back-button {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.back-button:hover {
+  background-color: var(--card-bg);
+  border-color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.back-button:focus {
+  outline: 2px solid var(--discord-blurple);
+  outline-offset: 2px;
+}
+
+.guild-header-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.guild-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.guild-header-icon-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.guild-header-name {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-content {
+  max-width: 800px;
+}
+
+.settings-message {
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.settings-message.error {
+  background-color: rgba(240, 71, 71, 0.1);
+  border: 1px solid #f04747;
+  color: #f04747;
+}
+
+.settings-message.success {
+  background-color: rgba(67, 181, 129, 0.1);
+  border: 1px solid #43b581;
+  color: #43b581;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.settings-section {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s;
+}
+
+.settings-section:hover {
+  border-color: var(--discord-blurple);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.1);
+}
+
+.section-title {
+  margin: 0 0 1.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.setting-field {
+  margin-bottom: 1.5rem;
+}
+
+.setting-field:last-child {
+  margin-bottom: 0;
+}
+
+.setting-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.setting-field label input[type="checkbox"] {
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+.setting-field label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.setting-field label:has(input[type="checkbox"]) .field-description {
+  margin-left: 1.5rem;
+}
+
+.field-description {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin-top: 0.25rem;
+  line-height: 1.5;
+}
+
+.setting-field input[type="number"],
+.setting-field input[type="text"] {
+  padding: 0.625rem;
+  background-color: var(--discord-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  width: 100%;
+  max-width: 200px;
+  transition: all 0.2s;
+}
+
+.setting-field input[type="number"]:hover,
+.setting-field input[type="text"]:hover {
+  border-color: var(--text-muted);
+}
+
+.setting-field input[type="number"]:focus,
+.setting-field input[type="text"]:focus {
+  outline: none;
+  border-color: var(--discord-blurple);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.1);
+}
+
+.setting-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--discord-blurple);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  margin-top: 1rem;
+}
+
+.save-button {
+  padding: 0.75rem 2rem;
+  background-color: var(--discord-blurple);
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.save-button:hover:not(:disabled) {
+  background-color: var(--discord-blurple-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.4);
+}
+
+.save-button:focus:not(:disabled) {
+  outline: 2px solid var(--discord-blurple);
+  outline-offset: 2px;
+}
+
+.save-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 768px) {
+  .guild-settings {
+    margin-left: 0;
+    padding: 1rem;
+  }
+
+  .settings-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .guild-header-info {
+    width: 100%;
+  }
+}
+
+
