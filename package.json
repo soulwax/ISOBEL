@@ -99,7 +99,7 @@
     "@types/bluebird": "^3.5.42",
     "@types/debug": "^4.1.12",
     "@types/fluent-ffmpeg": "^2.1.28",
-    "@types/fs-capacitor": "^2.0.0",
+    "@types/fs-capacitor": "^8.0.2",
     "@types/ms": "2.1.0",
     "@types/node": "^20.19.25",
     "@types/node-emoji": "^2.1.0",
