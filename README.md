@@ -13,7 +13,7 @@ The original author of the bot is [codetheweb](https://github.com/codetheweb) wi
 Thus I claim the same: This discord bot is one that doesn't suck.
 
 There are a lot of changes made since Max Isom's original version.
-First of all, this bot does not depend on YouTube or Spotify for music streaming. Instead, it uses its own music api, we just call it the *ominous music* **Songbird API**. 
+First of all, this bot does not depend on YouTube or Spotify for music streaming. Instead, it uses its own music api, we just call it the *ominous music* **Songbird API**. (Formerly starchild music api that's why you might find references in code or docs)
 
 Yes, it is more of a black box experience now than before, but with spotify and youtube being so unreliable for music streaming, this was the only way to go. Sorry Max. 
 The second big change is that this bot is coming with its own web interface for configuration and settings management but this is work in progress. See [./web/README.md](./web/README.md).
@@ -28,7 +28,7 @@ The second big change is that this bot is coming with its own web interface for 
 - ⏩ **Seeking**: Seek to any position within a song
 - 💾 **Advanced Caching**: Local MP3 caching for instant playback and better performance
 - 📋 **No Vote-to-Skip**: This is anarchy, not a democracy
-- 🎶 **Starchild Music API**: Streams directly from the Starchild Music API (no YouTube or Spotify required)
+- 🎶 **Songbird API**: Streams directly from the Songbird Music API (no YouTube or Spotify required)
 - ↗️ **Custom Shortcuts**: Users can add custom shortcuts (aliases) for quick access
 - 1️⃣ **One Song Per Command**: Predictable queue management - one song per `/play` command
 - 🔄 **Smart Skipping**: Skip only works when more songs are queued - no errors at end of queue
@@ -48,13 +48,13 @@ Create a `.env` file in the project root with the following variables:
 
 ```env
 DISCORD_TOKEN=your-discord-bot-token
-STARCHILD_BASE_URL=https://your-api-url
-STARCHILD_API_KEY=your-api's-key
+SONGBIRD_BASE_URL=https://your-api-url
+SONGBIRD_API_KEY=your-api's-key
 ```
 
 - `DISCORD_TOKEN` - Your Discord bot token. Can be acquired [here](https://discordapp.com/developers/applications) by creating a 'New Application', then going to 'Bot'.
-- `STARCHILD_BASE_URL` - The base URL for your Starchild Music API instance
-- `STARCHILD_API_KEY` - Your Starchild Music API key. This unlocks streaming on the Starchild Music API. Create this key in your Starchild dashboard.
+- `SONGBIRD_BASE_URL` - The base URL for your Songbird Music API instance
+- `SONGBIRD_API_KEY` - Your Songbird Music API key. This unlocks streaming on the Songbird Music API. Create this key in your Songbird dashboard.
 
 #### Optional Variables
 
@@ -87,8 +87,8 @@ BOT_STATUS=online
 ```env
 DISCORD_TOKEN=your-discord-bot-token-here
 DATA_DIR=./data
-STARCHILD_BASE_URL=https://your-api-url
-STARCHILD_API_KEY=your-api's-key
+SONGBIRD_BASE_URL=https://your-api-url
+SONGBIRD_API_KEY=your-api's-key
 
 ############
 # Optional #
@@ -117,44 +117,210 @@ When running a production instance, I recommend that you use the [latest release
 
 ### 🐳 Docker
 
-There are a variety of image tags available:
-- `:2`: versions >= 2.0.0
-- `:2.12`: versions >= 2.12.0 and < 2.13.0
-- `:2.12.2`: an exact version specifier
-- `:latest`: whatever the latest version is
+ISOBEL can be deployed with Docker in two ways:
+1. **Bot Only** - Just the Discord music bot (recommended for most users)
+2. **Bot + Web** - Discord bot with optional web interface for settings management
 
-**Basic Docker Run**:
+#### Available Image Tags
+
+- `:latest` - Latest release
+- `:2` - Version 2.x.x
+- `:2.12` - Version 2.12.x
+- `:2.12.2` - Exact version
+
+#### Option 1: Bot Only (Recommended)
+
+**Quick Start with Docker Run:**
 
 ```bash
-docker run -it \
+docker run -d \
+  --name isobel-bot \
   -v "$(pwd)/data":/data \
   -e DISCORD_TOKEN='your-discord-token' \
-  -e STARCHILD_API_KEY='your-starchild-api-key' \
-  -e STARCHILD_BASE_URL='https://your-api-url' \
+  -e SONGBIRD_API_KEY='your-songbird-api-key' \
+  -e SONGBIRD_BASE_URL='https://your-api-url' \
+  --restart unless-stopped \
   ghcr.io/soulwax/ISOBEL:latest
 ```
 
-This starts ISOBEL and creates a data directory in your current directory.
+**Using Docker Compose (Bot Only):**
 
-You can also store your tokens in an environment file and make it available to your container. By default, the container will look for a `/config` environment file. You can customize this path with the `ENV_FILE` environment variable to use with, for example, [docker secrets](https://docs.docker.com/engine/swarm/secrets/).
-
-**Docker Compose**:
+Create a `docker-compose.yml`:
 
 ```yaml
+version: '3.8'
+
 services:
-  isobel:
+  bot:
     image: ghcr.io/soulwax/ISOBEL:latest
-    restart: always
+    container_name: isobel-bot
+    restart: unless-stopped
     volumes:
       - ./data:/data
     environment:
+      # Required
       - DISCORD_TOKEN=your-discord-token
-      - STARCHILD_API_KEY=your-api-key
-      - STARCHILD_BASE_URL=your-api-url
-      # Optional: Custom cache limit
-      - CACHE_LIMIT=5GB
-      # Optional: Bot status
+      - SONGBIRD_API_KEY=your-api-key
+      - SONGBIRD_BASE_URL=https://your-api-url
+
+      # Optional
+      - CACHE_LIMIT=2GB
       - BOT_STATUS=online
+      - BOT_ACTIVITY_TYPE=LISTENING
+      - BOT_ACTIVITY=music
+```
+
+Then run:
+```bash
+docker-compose up -d
+```
+
+#### Option 2: Bot + Web Interface (Full Stack)
+
+**Prerequisites:**
+1. Discord OAuth Application (for web login)
+   - Go to [Discord Developer Portal](https://discord.com/developers/applications)
+   - Create an OAuth2 application
+   - Add redirect URL: `http://your-domain:3001/api/auth/callback/discord`
+   - Copy Client ID and Client Secret
+
+2. Generate NextAuth secret:
+   ```bash
+   openssl rand -base64 32
+   ```
+
+**Using Docker Compose (Bot + Web):**
+
+Use the included `docker-compose.yml` from the repository:
+
+```bash
+# 1. Clone the repository
+git clone --recursive https://github.com/soulwax/ISOBEL.git
+cd ISOBEL
+
+# 2. Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your values (see below)
+
+# 3. Start ONLY the bot
+docker-compose up -d
+
+# 4. Start bot AND web interface
+docker-compose --profile with-web up -d
+```
+
+**Environment Variables for Bot + Web:**
+
+Add these to your `.env` file:
+
+```env
+# Bot (Required)
+DISCORD_TOKEN=your-discord-bot-token
+SONGBIRD_BASE_URL=https://your-api-url
+SONGBIRD_API_KEY=your-api-key
+
+# Web Interface (Required for web UI)
+DISCORD_CLIENT_ID=your-oauth-client-id
+DISCORD_CLIENT_SECRET=your-oauth-client-secret
+NEXTAUTH_SECRET=your-random-secret
+NEXTAUTH_URL=http://localhost:3001
+
+# Optional
+CACHE_LIMIT=2GB
+WEB_PORT=3001
+AUTH_PORT=3003
+```
+
+**Services Included:**
+- **bot** - Discord music bot (always runs)
+- **web** - Web interface on port 3001 (with-web profile)
+- **auth** - Authentication server on port 3003 (with-web profile)
+
+#### Building from Source
+
+**Build bot only:**
+```bash
+docker build -t isobel-bot .
+```
+
+**Build with docker-compose:**
+```bash
+# Bot only
+docker-compose build
+
+# Bot + Web
+docker-compose --profile with-web build
+```
+
+#### Using Environment Files
+
+For better security, use an environment file instead of inline environment variables:
+
+```bash
+# Create a secure .env file
+cp .env.example .env
+chmod 600 .env  # Restrict permissions
+
+# Docker will automatically load .env when using docker-compose
+docker-compose up -d
+```
+
+#### Data Persistence
+
+All bot data (cache, database, logs) is stored in the `/data` volume:
+
+```bash
+# Volume location on host
+./data/
+├── database.sqlite    # Guild settings, favorites
+├── file-cache/        # Cached MP3 files
+└── logs/              # Application logs
+```
+
+**Important:** Always mount `/data` to persist your bot's data across container restarts!
+
+#### Health Checks
+
+Both bot and web services include health checks:
+
+```bash
+# Check container health
+docker ps
+
+# View logs
+docker-compose logs -f bot
+docker-compose logs -f web
+docker-compose logs -f auth
+
+# Restart unhealthy services
+docker-compose restart
+```
+
+#### Stopping Services
+
+```bash
+# Stop bot only
+docker-compose stop bot
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (CAUTION: deletes data!)
+docker-compose down -v
+```
+
+#### Updating
+
+```bash
+# Pull latest image
+docker-compose pull
+
+# Restart with new image
+docker-compose up -d
+
+# Or for specific service
+docker-compose pull bot
+docker-compose up -d bot
 ```
 
 ### Node.js
@@ -309,7 +475,7 @@ npm install
 
 # 3. Set up your environment variables
 cp .env.example .env
-# Edit .env with your DISCORD_TOKEN, STARCHILD_BASE_URL, and STARCHILD_API_KEY
+# Edit .env with your DISCORD_TOKEN, SONGBIRD_BASE_URL, and SONGBIRD_API_KEY
 ```
 
 #### Development Mode - Choose Your Scenario
