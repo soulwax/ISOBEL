@@ -1,7 +1,5 @@
-// File: src/server/index.ts
-// PM2 server entry point - starts Express server
+// File: web/src/server/index.ts
 
-// IMPORTANT: Load environment variables FIRST, before any other imports
 import { config } from 'dotenv';
 config();
 

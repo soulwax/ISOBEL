@@ -1,6 +1,6 @@
-# File: .gitignore
-
+# File: web/.gitignore
 # Logs
+
 logs
 *.log
 npm-debug.log*

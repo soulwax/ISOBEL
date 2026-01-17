@@ -1,4 +1,4 @@
-/* File: src/components/DiscordLogin.css */
+/* File: web/src/components/DiscordLogin.css */
 
 .discord-login {
   display: flex;
@@ -93,4 +93,3 @@
     gap: 0.5rem;
   }
 }
-

@@ -1,4 +1,4 @@
-// File: src/lib/env.ts
+// File: web/src/lib/env.ts
 
 /**
  * Environment variable validation and access

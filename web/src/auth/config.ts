@@ -1,4 +1,4 @@
-// File: src/auth/config.ts
+// File: web/src/auth/config.ts
 
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import Discord from 'next-auth/providers/discord';

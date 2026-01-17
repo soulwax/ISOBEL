@@ -1,3 +1,5 @@
+# File: .eslintignore
+
 # Dependencies
 node_modules/
 
@@ -26,4 +28,3 @@ migrations/
 *.d.ts
 coverage/
 .cache/
-

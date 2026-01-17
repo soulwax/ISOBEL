@@ -1,4 +1,4 @@
-// File: src/components/DiscordLogin.tsx
+// File: web/src/components/DiscordLogin.tsx
 
 import { useAuth } from '../hooks/useAuth';
 import './DiscordLogin.css';
@@ -40,4 +40,3 @@ export default function DiscordLogin() {
     </button>
   );
 }
-

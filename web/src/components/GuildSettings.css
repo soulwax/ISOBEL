@@ -1,4 +1,4 @@
-/* File: src/components/GuildSettings.css */
+/* File: web/src/components/GuildSettings.css */
 
 .guild-settings {
   margin-left: 240px; /* Account for sidebar */
@@ -266,5 +266,4 @@
     width: 100%;
   }
 }
-
 

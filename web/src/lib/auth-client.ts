@@ -1,4 +1,4 @@
-// File: src/lib/auth-client.ts
+// File: web/src/lib/auth-client.ts
 
 /**
  * Client-side authentication utilities

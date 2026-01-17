@@ -1,4 +1,4 @@
-// File: drizzle.config.ts
+// File: web/drizzle.config.ts
 
 import { defineConfig } from 'drizzle-kit';
 

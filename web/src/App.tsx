@@ -1,4 +1,4 @@
-// File: src/App.tsx
+// File: web/src/App.tsx
 
 import {
   HiOutlineCode,

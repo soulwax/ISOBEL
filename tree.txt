@@ -1,9 +1,12 @@
-muse
+ISOBEL
+├───.annot8_backup.json
 ├───.dockerignore
-├───.env.example
+├───.env.sample
+├───.eslintignore
 ├───.gitignore
 ├───.release-it.json
 ├───CHANGELOG.md
+├───CLAUDE.md
 ├───Dockerfile
 ├───ecosystem.config.cjs
 ├───eslint.config.js
@@ -16,9 +19,26 @@ muse
 ├───schema.prisma
 ├───tree.txt
 ├───tsconfig.json
+├───yarn.lock
+├───.claude/
+│   └───settings.local.json
+├───.cursor/
+│   ├───mcp.json
+│   └───commands/
+│       ├───api-contract.md
+│       ├───commit-message.md
+│       ├───db-schema.md
+│       ├───docker-audit.md
+│       ├───docs.md
+│       ├───init.md
+│       ├───perf-check.md
+│       ├───refactor.md
+│       ├───review.md
+│       ├───security-scan.md
+│       └───test-setup.md
 ├───.github/
 │   ├───dependabot.yml
-│   ├───FUNDING.yml
+│   ├───nginx-file.sh
 │   ├───pull_request_template.md
 │   ├───songbird.png
 │   ├───ISSUE_TEMPLATE/
@@ -33,19 +53,11 @@ muse
 ├───data/
 │   ├───db.sqlite
 │   └───cache/
-│       ├───2ab6b551ed1903c6399b69d9d1f61ebe35f04943a04b9fea2bdbc1b726097eef4021194587f83e3d8f2f303ec8ea5b8cf72fbf300824f3c868c94dd09027fcc9
-│       ├───33aea3d1e05f5e6f74dcc7119c05c9e68f2e157b45800e491f04c48c36378c78dc9c372255105e4ab115201f5b48afc4f17d4f742bfd84a0c4fddda8fef3b624
-│       ├───4ab1af3e7e9d21b05b580d1cc7ddd97fbd261719e43dd23726c6b29e465754ae4f0dddbf4c4481915bc6b413f54cc05ad1db5202c0766ef156d14d82fb3c5e90
-│       ├───4af01376962c24db42a0e88b5a838db3e231839763244378409d8f3021b0e83e241098013831b1de809a2beb1fe7c7da4de0d6d4851494210340f7430d03c501
-│       ├───55c157d1f3bc25e0feec0d800f890e60df302b90227eb89e6e515f82e6430f1b40d0ad66a04ba16b46a89c0728a23c5995e8b40df5f04d917afee35ec896a14a
-│       ├───664aca5634c1dea723f51b97f728ea96c45489b59e28107331aa4dfd9d6c8bb70af3bc3ed8c4f18cf2e3a1a1d6019b09ce0a081c0d43ad4b67fbfee11e575042
-│       ├───7479654d3809b1e6f2a087a9fe5a6a31509f2bdd956d42a10695653350e2addb7c833fcf806ffd3af7178817508c755d69b4238d85e2dce25a5fbb63d29e2ad1
-│       ├───8c5eba18cb655f12c42f05be017362909170fde72d554c047beabe2b01f26458f5a85808f96a7369b102efd63d620b655e8f1817250593ed051dd046cc5435b8
-│       ├───9227bde5088eb24034b126c2f08bbc9707f10e79d4d5522cba31be1bcdc2b359be8b411bbcffc21096c6bde22d5692effac622cd28023b074028a34a1dc44342
-│       ├───a23a7c59f85e0353b4a311ec7f21df582ae56e860abc27a6e9f997b8b8a1675e647bbb8434b526c6453010ddaad3f7dc23a384d05284e339d59df9cd6b91aa0f
-│       ├───d58c0364cd2ccb47c202712aa7d4ee0fff5d39a43da4810126461b7c7ced6d5ee46c34e48000db4e20c14fd83deb9386a6e7703794b247c84209f2b473db3ce1
-│       ├───f86c4f30de45dadef9a936cf685d30d739cd99dcb34767e3d2380ca1ed09123d124937929097f4a08f4e1ea4946584aeefaa7984cdfee03cffaff39d5002c410
+│       ├───36fa05b874b700eb4533d4eed946dcfcd7d42a11ccf306eb66b40c674dd3c267954e5a8f39b66872a8b2a5e16dac17f202e009cd4164acbbe40e033eae8da72f
+│       ├───e2c5ad4f7f236eaf96e52ae2b3f0284e5c08b88cd51fdda671e796304f6838fa1cf7aab7f22119fa73f9b2398bd87de086bb5a63069bd96de01dccffe76fd258
+│       ├───ee64343d2cc4cf31290e2740c4dac7fa488fc9068ba0ab81841026e23082754ed418caa01accfe61c88ef08b668fd8814442fa26644152a1ed99f5f05358d1bc
 │       └───tmp/
+│           └───da4f00ab151696f7d62b583828b9c989176e51ff8d8d5e0284ebbf12d247102436059d2d399dc3af824e71ff010410576d32c3ae175ac0c7a16ffb83d4f349c6
 ├───logs/
 │   ├───pm2-combined.log
 │   ├───pm2-error.log
@@ -90,68 +102,156 @@ muse
 │   │   └───migration.sql
 │   └───20241031084730_add_turn_down_volume_when_people_speak/
 │       └───migration.sql
-└───src/
-    ├───bot.ts
-    ├───index.ts
-    ├───inversify.config.ts
-    ├───types.ts
-    ├───commands/
-    │   ├───clear.ts
-    │   ├───config.ts
-    │   ├───disconnect.ts
-    │   ├───favorites.ts
-    │   ├───fseek.ts
+├───src/
+│   ├───bot.ts
+│   ├───index.ts
+│   ├───inversify.config.ts
+│   ├───types.ts
+│   ├───commands/
+│   │   ├───clear.ts
+│   │   ├───config.ts
+│   │   ├───disconnect.ts
+│   │   ├───favorites.ts
+│   │   ├───fseek.ts
+│   │   ├───index.ts
+│   │   ├───loop-queue.ts
+│   │   ├───loop.ts
+│   │   ├───move.ts
+│   │   ├───next.ts
+│   │   ├───now-playing.ts
+│   │   ├───pause.ts
+│   │   ├───play.ts
+│   │   ├───queue.ts
+│   │   ├───remove.ts
+│   │   ├───replay.ts
+│   │   ├───resume.ts
+│   │   ├───seek.ts
+│   │   ├───shuffle.ts
+│   │   ├───skip.ts
+│   │   ├───stop.ts
+│   │   ├───unskip.ts
+│   │   └───volume.ts
+│   ├───events/
+│   │   ├───guild-create.ts
+│   │   └───voice-state-update.ts
+│   ├───managers/
+│   │   └───player.ts
+│   ├───scripts/
+│   │   ├───cache-clear-key-value.ts
+│   │   ├───migrate-and-start.ts
+│   │   ├───run-with-database-url.ts
+│   │   └───start.ts
+│   ├───services/
+│   │   ├───add-query-to-queue.ts
+│   │   ├───config.ts
+│   │   ├───file-cache.ts
+│   │   ├───get-songs.ts
+│   │   ├───health-server.ts
+│   │   ├───key-value-cache.ts
+│   │   ├───player.ts
+│   │   └───starchild-api.ts
+│   └───utils/
+│       ├───arrays.ts
+│       ├───build-embed.ts
+│       ├───channels.ts
+│       ├───constants.ts
+│       ├───create-database-url.ts
+│       ├───db.ts
+│       ├───debug.ts
+│       ├───duration-string-to-seconds.ts
+│       ├───error-msg.ts
+│       ├───get-guild-settings.ts
+│       ├───get-progress-bar.ts
+│       ├───get-starchild-suggestions-for.ts
+│       ├───log-banner.ts
+│       ├───register-commands-on-guild.ts
+│       ├───string.ts
+│       ├───time.ts
+│       └───url.ts
+└───web/
+    ├───.env.example
+    ├───.gitignore
+    ├───BUILD.md
+    ├───CHANGELOG.md
+    ├───CLAUDE.md
+    ├───CODE_REVIEW.md
+    ├───DEBUG_PORT.md
+    ├───drizzle.config.ts
+    ├───ecosystem.config.cjs
+    ├───env.d.ts
+    ├───eslint.config.js
+    ├───FIXES_APPLIED.md
+    ├───index.html
+    ├───MIGRATION_TO_POSTGRES.md
+    ├───package-lock.json
+    ├───package.json
+    ├───README.md
+    ├───SETUP.md
+    ├───tree.txt
+    ├───tsconfig.app.json
+    ├───tsconfig.json
+    ├───tsconfig.node.json
+    ├───vercel.json
+    ├───VERCEL_DEPLOYMENT.md
+    ├───vite.config.js
+    ├───vite.config.ts
+    ├───api/
     │   ├───index.ts
-    │   ├───loop-queue.ts
-    │   ├───loop.ts
-    │   ├───move.ts
-    │   ├───next.ts
-    │   ├───now-playing.ts
-    │   ├───pause.ts
-    │   ├───play.ts
-    │   ├───queue.ts
-    │   ├───remove.ts
-    │   ├───replay.ts
-    │   ├───resume.ts
-    │   ├───seek.ts
-    │   ├───shuffle.ts
-    │   ├───skip.ts
-    │   ├───stop.ts
-    │   ├───unskip.ts
-    │   └───volume.ts
-    ├───events/
-    │   ├───guild-create.ts
-    │   └───voice-state-update.ts
-    ├───managers/
-    │   └───player.ts
+    │   └───auth/
+    ├───data/
+    │   └───db.sqlite
+    ├───drizzle/
+    │   ├───0000_bored_swarm.sql
+    │   └───meta/
+    │       ├───0000_snapshot.json
+    │       └───_journal.json
+    ├───logs/
+    │   ├───auth-error.log
+    │   ├───auth-out.log
+    │   ├───combined.log
+    │   ├───error.log
+    │   ├───web-error.log
+    │   └───web-out.log
+    ├───public/
+    │   ├───songbird.png
+    │   └───vite.svg
     ├───scripts/
-    │   ├───cache-clear-key-value.ts
-    │   ├───migrate-and-start.ts
-    │   ├───run-with-database-url.ts
-    │   └───start.ts
-    ├───services/
-    │   ├───add-query-to-queue.ts
-    │   ├───config.ts
-    │   ├───file-cache.ts
-    │   ├───get-songs.ts
-    │   ├───key-value-cache.ts
-    │   ├───player.ts
-    │   └───starchild-api.ts
-    └───utils/
-        ├───arrays.ts
-        ├───build-embed.ts
-        ├───channels.ts
-        ├───constants.ts
-        ├───create-database-url.ts
-        ├───db.ts
-        ├───debug.ts
-        ├───duration-string-to-seconds.ts
-        ├───error-msg.ts
-        ├───get-guild-settings.ts
-        ├───get-progress-bar.ts
-        ├───get-starchild-suggestions-for.ts
-        ├───log-banner.ts
-        ├───register-commands-on-guild.ts
-        ├───string.ts
-        ├───time.ts
-        └───url.ts
+    │   ├───migrate.ts
+    │   └───start-web.js
+    └───src/
+        ├───App.css
+        ├───App.tsx
+        ├───index.css
+        ├───main.tsx
+        ├───auth/
+        │   ├───config.ts
+        │   └───index.ts
+        ├───components/
+        │   ├───DiscordGuildsSidebar.css
+        │   ├───DiscordGuildsSidebar.tsx
+        │   ├───DiscordLogin.css
+        │   ├───DiscordLogin.tsx
+        │   ├───GuildSettings.css
+        │   ├───GuildSettings.tsx
+        │   ├───HealthIndicator.css
+        │   └───HealthIndicator.tsx
+        ├───db/
+        │   ├───index.ts
+        │   └───schema.ts
+        ├───hooks/
+        │   └───useAuth.ts
+        ├───lib/
+        │   ├───auth-client.ts
+        │   ├───env.ts
+        │   ├───errors.ts
+        │   ├───logger.ts
+        │   ├───utils.ts
+        │   └───validation.ts
+        └───server/
+            ├───app.ts
+            ├───index.ts
+            ├───middleware.ts
+            └───api/
+                └───auth/
+                    └───[...nextauth]/
+                        └───route.ts

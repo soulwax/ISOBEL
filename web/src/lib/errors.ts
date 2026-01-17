@@ -1,4 +1,4 @@
-// File: src/lib/errors.ts
+// File: web/src/lib/errors.ts
 
 /**
  * Custom error classes for better error handling

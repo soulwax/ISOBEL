@@ -1,4 +1,4 @@
-// File: src/components/DiscordGuildsSidebar.tsx
+// File: web/src/components/DiscordGuildsSidebar.tsx
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
@@ -139,4 +139,3 @@ export default function DiscordGuildsSidebar({ onGuildSelect, selectedGuildId }:
     </div>
   );
 }
-
