@@ -1,7 +1,7 @@
 // File: src/services/add-query-to-queue.ts
 
 import shuffle from 'array-shuffle';
-import { ChatInputCommandInteraction, GuildMember, MessageFlags } from 'discord.js';
+import { Attachment, ChatInputCommandInteraction, GuildMember, MessageFlags } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { SponsorBlock } from 'sponsorblock-api';
 import PlayerManager from '../managers/player.js';
@@ -35,13 +35,15 @@ export default class AddQueryToQueue {
 
   public async addToQueue({
     query,
+    attachment,
     addToFrontOfQueue,
     shuffleAdditions,
     shouldSplitChapters,
     skipCurrentTrack,
     interaction,
   }: {
-    query: string;
+    query?: string | null;
+    attachment?: Attachment | null;
     addToFrontOfQueue: boolean;
     shuffleAdditions: boolean;
     shouldSplitChapters: boolean;
@@ -76,17 +78,46 @@ export default class AddQueryToQueue {
     await interaction.deferReply({flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined});
 
     // For play command, only add one song regardless of playlist limit
-    let [newSongs, extraMsg] = await this.getSongs.getSongs(query, 1);
+    let newSongs: SongMetadata[] = [];
+    let extraMsg = '';
+
+    if (attachment) {
+      const attachmentName = attachment.name ?? 'attachment.mp3';
+      const isMp3 = attachment.contentType?.toLowerCase().includes('audio/mpeg')
+        || attachmentName.toLowerCase().endsWith('.mp3');
+
+      if (!isMp3) {
+        throw new Error('only mp3 attachments are supported');
+      }
+
+      newSongs = [{
+        url: attachment.url,
+        source: MediaSource.DiscordAttachment,
+        isLive: false,
+        title: attachmentName,
+        artist: 'Discord attachment',
+        length: 0,
+        offset: 0,
+        playlist: null,
+        thumbnailUrl: null,
+      }];
+      extraMsg = 'from attachment';
+    } else {
+      if (!query) {
+        throw new Error('provide a search query or attach an mp3');
+      }
+      [newSongs, extraMsg] = await this.getSongs.getSongs(query, 1);
+    }
 
     if (newSongs.length === 0) {
       throw new Error('no songs found');
     }
 
-    if (shuffleAdditions) {
+    if (shuffleAdditions && newSongs.length > 1) {
       newSongs = shuffle(newSongs);
     }
 
-    if (this.config.ENABLE_SPONSORBLOCK) {
+    if (this.config.ENABLE_SPONSORBLOCK && !attachment) {
       newSongs = await Promise.all(newSongs.map(this.skipNonMusicSegments.bind(this)));
     }
 

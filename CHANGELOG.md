@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.16.1] - 2026-01-18
+## [2.17.1] - 2026-01-18
 
 ### Changed
 - Docker now builds the bot without the web interface by default
@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated health beacon port configuration and documentation
 - Build process no longer starts services or installs web dependencies by default
 - Updated Docker runtime to include `package.json` for banner/logging
+- Docker image now starts the bot with `pm2-runtime` for automatic restarts
+- Added yt-dlp and Python to the runtime image for YouTube fallback playback
 - Improved search responsiveness by probing HLS streams with a short timeout and running API search in parallel
 - Added search retries with backoff for transient Starchild API failures
 - Added MP3 cache prefetching and shared in-flight downloads to reduce playback gaps
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preloaded next-track stream paths after caching completes
 - Added YouTube link parsing with oEmbed title lookup to search Starchild
 - Added yt-dlp fallback for YouTube links when Starchild has no match
+- Added support for playing mp3 attachments uploaded to Discord
 
 ## [2.17.0] - 2026-01-17
 
