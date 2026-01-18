@@ -36,7 +36,10 @@ export default class implements Command {
         .setName('query')
         .setDescription('search query or HLS stream URL')
         .setAutocomplete(true)
-        .setRequired(true))
+        .setRequired(false))
+      .addAttachmentOption(option => option
+        .setName('file')
+        .setDescription('attach an mp3 to play directly'))
       .addBooleanOption(option => option
         .setName('immediate')
         .setDescription('add track to the front of the queue'))
@@ -52,11 +55,17 @@ export default class implements Command {
   }
 
   public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const query = interaction.options.getString('query')!;
+    const attachment = interaction.options.getAttachment('file');
+    const query = interaction.options.getString('query')?.trim();
+
+    if (!attachment && (!query || query.length === 0)) {
+      throw new Error('provide a search query or attach an mp3');
+    }
 
     await this.addQueryToQueue.addToQueue({
       interaction,
-      query: query.trim(),
+      query,
+      attachment,
       addToFrontOfQueue: interaction.options.getBoolean('immediate') ?? false,
       shuffleAdditions: interaction.options.getBoolean('shuffle') ?? false,
       shouldSplitChapters: interaction.options.getBoolean('split') ?? false,

@@ -33,6 +33,7 @@ export enum MediaSource {
   Starchild,
   HLS,
   YouTube,
+  DiscordAttachment,
 }
 
 export interface QueuedPlaylist {
@@ -632,7 +633,7 @@ export default class {
     if (song.source === MediaSource.HLS) {
       return this.createReadStreamWithRetry({url: song.url, cacheKey: song.url});
     }
-    if (song.source === MediaSource.YouTube) {
+    if (song.source === MediaSource.YouTube || song.source === MediaSource.DiscordAttachment) {
       const ffmpegInputOptions: string[] = [];
       if (options.seek) {
         ffmpegInputOptions.push('-ss', options.seek.toString());

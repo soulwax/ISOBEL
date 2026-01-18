@@ -70,6 +70,7 @@ COPY --from=builder /usr/app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /usr/app/schema.prisma ./schema.prisma
 COPY --from=builder /usr/app/migrations ./migrations
 COPY --from=builder /usr/app/package.json ./package.json
+COPY --from=builder /usr/app/ecosystem.config.cjs ./ecosystem.config.cjs
 
 # Create data directory
 RUN mkdir -p /data
@@ -86,4 +87,4 @@ ENV ENV_FILE=/config
 # Use tini as entrypoint for proper signal handling
 ENTRYPOINT ["tini", "--"]
 
-CMD ["node", "--enable-source-maps", "dist/scripts/migrate-and-start.js"]
+CMD ["./node_modules/.bin/pm2-runtime", "ecosystem.config.cjs", "--env", "production"]
