@@ -14,7 +14,9 @@ import logBanner from '../utils/log-banner.js';
 
 const client = new PrismaClient();
 
-process.env.DATABASE_URL = process.env.DATABASE_URL ?? createDatabaseUrl(DATA_DIR);
+const databaseUrl = process.env.DATABASE_URL ?? createDatabaseUrl(DATA_DIR);
+process.env.DATABASE_URL = databaseUrl;
+const isFileDatabase = databaseUrl.startsWith('file:');
 
 const migrateFromSequelizeToPrisma = async () => {
   await execa('prisma', ['migrate', 'resolve', '--applied', '20220101155430_migrate_from_sequelize'], {preferLocal: true});
@@ -51,7 +53,7 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
 
   const spinner = ora('Applying database migrations...').start();
 
-  if (await doesUserHaveExistingDatabase()) {
+  if (isFileDatabase && await doesUserHaveExistingDatabase()) {
     if (!(await hasDatabaseBeenMigratedToPrisma())) {
       try {
         await migrateFromSequelizeToPrisma();

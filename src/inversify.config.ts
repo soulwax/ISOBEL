@@ -13,8 +13,9 @@ import PlayerManager from './managers/player.js';
 // Services
 import AddQueryToQueue from './services/add-query-to-queue.js';
 import GetSongs from './services/get-songs.js';
-import StarchildAPI from './services/starchild-api.js';
 import HealthServer from './services/health-server.js';
+import SongbirdNext from './services/songbird-next.js';
+import StarchildAPI from './services/starchild-api.js';
 
 // Commands
 import Clear from './commands/clear.js';
@@ -30,6 +31,7 @@ import Next from './commands/next.js';
 import NowPlaying from './commands/now-playing.js';
 import Pause from './commands/pause.js';
 import Play from './commands/play.js';
+import PlaybackControls from './commands/playback-controls.js';
 import QueueCommand from './commands/queue.js';
 import Remove from './commands/remove.js';
 import Replay from './commands/replay.js';
@@ -67,6 +69,7 @@ container.bind<GetSongs>(TYPES.Services.GetSongs).to(GetSongs).inSingletonScope(
 container.bind<AddQueryToQueue>(TYPES.Services.AddQueryToQueue).to(AddQueryToQueue).inSingletonScope();
 container.bind<StarchildAPI>(TYPES.Services.StarchildAPI).to(StarchildAPI).inSingletonScope();
 container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSingletonScope();
+container.bind<SongbirdNext>(TYPES.Services.SongbirdNext).to(SongbirdNext).inSingletonScope();
 
 // Commands
 [
@@ -82,6 +85,7 @@ container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSin
   NowPlaying,
   Pause,
   Play,
+  PlaybackControls,
   QueueCommand,
   Remove,
   Replay,

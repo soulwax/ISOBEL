@@ -1,6 +1,6 @@
 // File: src/utils/build-embed.ts
 
-import { EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import Player, { MediaSource, QueuedSong, STATUS } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
@@ -83,6 +83,77 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   }
 
   return message;
+};
+
+export const buildPlaybackControls = (player: Player): Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>> => {
+  const isPlaying = player.status === STATUS.PLAYING;
+  const canBack = player.canGoBack();
+  const canSkip = player.canGoForward(1);
+
+  const toggleButton = new ButtonBuilder()
+    .setCustomId('playback:toggle')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel(isPlaying ? 'Pause' : 'Resume')
+    .setEmoji(isPlaying ? '⏸️' : '▶️');
+
+  const prevButton = new ButtonBuilder()
+    .setCustomId('playback:prev')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Previous')
+    .setEmoji('⏮️')
+    .setDisabled(!canBack);
+
+  const nextButton = new ButtonBuilder()
+    .setCustomId('playback:next')
+    .setStyle(ButtonStyle.Primary)
+    .setLabel('Next')
+    .setEmoji('⏭️')
+    .setDisabled(!canSkip);
+
+  const searchButton = new ButtonBuilder()
+    .setCustomId('playback:search')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Search')
+    .setEmoji('🔎');
+
+  const stopButton = new ButtonBuilder()
+    .setCustomId('playback:stop')
+    .setStyle(ButtonStyle.Danger)
+    .setLabel('Stop')
+    .setEmoji('⏹️');
+
+  const primaryRow = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(toggleButton, prevButton, nextButton, searchButton, stopButton);
+
+  const seekButton = new ButtonBuilder()
+    .setCustomId('playback:seek')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Seek')
+    .setEmoji('⏩');
+
+  const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(seekButton);
+
+  const rows: Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>> = [primaryRow, secondaryRow];
+  const suggestions = player.getAiSuggestions();
+  if (suggestions.length > 0) {
+    const options = suggestions.slice(0, 5).map(value => ({
+      label: truncate(value, 100),
+      value,
+    }));
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('playback:suggest')
+      .setPlaceholder('Suggested by AI')
+      .addOptions(options);
+
+    rows.push(
+      new ActionRowBuilder<StringSelectMenuBuilder>()
+        .addComponents(selectMenu)
+    );
+  }
+
+  return rows;
 };
 
 /**

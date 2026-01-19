@@ -1,13 +1,13 @@
 // File: src/services/add-query-to-queue.ts
 
 import shuffle from 'array-shuffle';
-import { Attachment, ChatInputCommandInteraction, GuildMember, MessageFlags } from 'discord.js';
+import { Attachment, ChatInputCommandInteraction, GuildMember, MessageFlags, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { SponsorBlock } from 'sponsorblock-api';
 import PlayerManager from '../managers/player.js';
 import GetSongs from '../services/get-songs.js';
 import { TYPES } from '../types.js';
-import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
 import { ONE_HOUR_IN_SECONDS } from '../utils/constants.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
@@ -52,7 +52,7 @@ export default class AddQueryToQueue {
     shuffleAdditions: boolean;
     shouldSplitChapters: boolean;
     skipCurrentTrack: boolean;
-    interaction: ChatInputCommandInteraction;
+    interaction: ChatInputCommandInteraction | ModalSubmitInteraction | StringSelectMenuInteraction;
   }): Promise<void> {
     // Note: shouldSplitChapters is currently not implemented
     // This parameter is accepted for API compatibility but has no effect
@@ -157,6 +157,7 @@ export default class AddQueryToQueue {
 
       const message = await interaction.editReply({
         embeds: [buildPlayingMessageEmbed(player)],
+        components: buildPlaybackControls(player),
       });
       
       // Set the message for animated progress bar updates
