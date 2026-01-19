@@ -103,7 +103,7 @@ export default class {
 
     if (songs.length === 0) {
       if (isYouTubeLink) {
-        const youtubeSong = await this.fetchYouTubeSong(query);
+        const youtubeSong = await this.getYouTubeSong(query);
         newSongs.push(youtubeSong);
         return [newSongs, extraMsg];
       }
@@ -172,14 +172,32 @@ export default class {
     }
   }
 
-  private async fetchYouTubeSong(url: string): Promise<SongMetadata> {
+  public async getYouTubeSong(query: string): Promise<SongMetadata> {
+    const input = this.normalizeYouTubeInput(query);
+    return this.fetchYouTubeSong(input);
+  }
+
+  private normalizeYouTubeInput(query: string): string {
+    try {
+      const url = new URL(query);
+      if (this.isYouTubeUrl(url)) {
+        return query;
+      }
+    } catch {
+      // Not a URL, treat as search.
+    }
+
+    return `ytsearch1:${query}`;
+  }
+
+  private async fetchYouTubeSong(input: string): Promise<SongMetadata> {
     try {
       const {stdout} = await this.execFileAsync('yt-dlp', [
         '--no-playlist',
         '-f',
         'bestaudio/best',
         '--print-json',
-        url,
+        input,
       ], {
         timeout: 15000,
         maxBuffer: 1024 * 1024,
@@ -220,7 +238,7 @@ export default class {
       if (error instanceof Error && 'code' in error && (error as {code: string}).code === 'ENOENT') {
         throw new Error('yt-dlp is not installed or not in PATH');
       }
-      debug(`yt-dlp failed for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+      debug(`yt-dlp failed for ${input}: ${error instanceof Error ? error.message : String(error)}`);
       throw new Error('sorry, no matching song found for that YouTube link');
     }
   }

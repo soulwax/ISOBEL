@@ -36,6 +36,8 @@ export default class AddQueryToQueue {
   public async addToQueue({
     query,
     attachment,
+    songsOverride,
+    extraMsgOverride,
     addToFrontOfQueue,
     shuffleAdditions,
     shouldSplitChapters,
@@ -44,6 +46,8 @@ export default class AddQueryToQueue {
   }: {
     query?: string | null;
     attachment?: Attachment | null;
+    songsOverride?: SongMetadata[];
+    extraMsgOverride?: string;
     addToFrontOfQueue: boolean;
     shuffleAdditions: boolean;
     shouldSplitChapters: boolean;
@@ -81,7 +85,10 @@ export default class AddQueryToQueue {
     let newSongs: SongMetadata[] = [];
     let extraMsg = '';
 
-    if (attachment) {
+    if (songsOverride && songsOverride.length > 0) {
+      newSongs = songsOverride;
+      extraMsg = extraMsgOverride ?? '';
+    } else if (attachment) {
       const attachmentName = attachment.name ?? 'attachment.mp3';
       const isMp3 = attachment.contentType?.toLowerCase().includes('audio/mpeg')
         || attachmentName.toLowerCase().endsWith('.mp3');

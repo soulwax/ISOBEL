@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added YouTube link parsing with oEmbed title lookup to search Starchild
 - Added yt-dlp fallback for YouTube links when Starchild has no match
 - Added support for playing mp3 attachments uploaded to Discord
+- Added `/yt` command to play YouTube URLs or search terms via yt-dlp
 
 ## [2.17.0] - 2026-01-17
 
