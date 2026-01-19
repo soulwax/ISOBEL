@@ -60,4 +60,3 @@ Thumbs.db
 
 # PM2 runtime files
 .pm2
-ecosystem.config.cjs
