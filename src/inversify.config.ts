@@ -40,6 +40,7 @@ import Skip from './commands/skip.js';
 import Stop from './commands/stop.js';
 import Unskip from './commands/unskip.js';
 import Volume from './commands/volume.js';
+import Yt from './commands/yt.js';
 import FileCacheProvider from './services/file-cache.js';
 import KeyValueCacheProvider from './services/key-value-cache.js';
 
@@ -91,6 +92,7 @@ container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSin
   Stop,
   Unskip,
   Volume,
+  Yt,
 ].forEach(command => {
   container.bind<Command>(TYPES.Command).to(command).inSingletonScope();
 });
