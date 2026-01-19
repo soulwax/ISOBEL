@@ -22,11 +22,12 @@ import { inject } from 'inversify';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'stream';
 import { TYPES } from '../types.js';
-import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import debug from '../utils/debug.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import FileCacheProvider from './file-cache.js';
+import SongbirdNext from './songbird-next.js';
 import StarchildAPI from './starchild-api.js';
 
 export enum MediaSource {
@@ -90,6 +91,7 @@ export default class {
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
   private readonly starchildAPI: StarchildAPI;
+  private readonly songbirdNext: SongbirdNext;
   private disconnectTimer: NodeJS.Timeout | null = null;
   private nowPlayingMessage: Message | null = null;
   private embedUpdateInterval: NodeJS.Timeout | undefined;
@@ -99,15 +101,22 @@ export default class {
   private audioPlayerIdleHandler?: (oldState: AudioPlayerState, newState: AudioPlayerState) => void;
   private audioPlayerErrorHandler?: (error: Error) => void;
   private readonly preloadedStreamPaths = new Map<string, string>();
+  private aiSuggestions: string[] = [];
   private playbackErrorAttempts = 0;
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private allowReconnect = false;
 
-  constructor(fileCache: FileCacheProvider, guildId: string, @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI) {
+  constructor(
+    fileCache: FileCacheProvider,
+    guildId: string,
+    @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI,
+    @inject(TYPES.Services.SongbirdNext) songbirdNext: SongbirdNext
+  ) {
     this.fileCache = fileCache;
     this.guildId = guildId;
     this.starchildAPI = starchildAPI;
+    this.songbirdNext = songbirdNext;
   }
 
   async connect(channel: VoiceChannel): Promise<void> {
@@ -267,10 +276,12 @@ export default class {
       this.nowPlaying = currentSong;
       this.playbackErrorAttempts = 0;
 
+      const isNewSong = currentSong.url !== this.lastSongURL;
+
       // Always reset position when starting a new song
       // If it's the same URL, we're seeking/resuming, so preserve position
       // Otherwise, start from the beginning (or offset)
-      if (currentSong.url === this.lastSongURL) {
+      if (!isNewSong) {
         // Same song - preserve position (for seeking/resuming)
         this.startTrackingPosition(this.positionInSeconds);
       } else {
@@ -282,6 +293,9 @@ export default class {
       // Start updating the embed periodically
       this.startEmbedUpdates();
       this.prefetchNextSong();
+      if (isNewSong) {
+        this.safeAsync(this.refreshAiSuggestions(currentSong));
+      }
     } catch (error: unknown) {
       await this.forward(1);
 
@@ -741,6 +755,10 @@ export default class {
     this.nowPlayingMessage = message;
   }
 
+  getAiSuggestions(): string[] {
+    return this.aiSuggestions;
+  }
+
   /**
    * Safely executes an async operation, logging errors without throwing
    */
@@ -763,6 +781,7 @@ export default class {
           try {
             await this.nowPlayingMessage!.edit({
               embeds: [buildPlayingMessageEmbed(this)],
+              components: buildPlaybackControls(this),
             });
           } catch (error: unknown) {
             // Message might have been deleted or bot lost permissions
@@ -832,6 +851,25 @@ export default class {
     }
 
     this.scheduleReconnect();
+  }
+
+  private async refreshAiSuggestions(song: QueuedSong): Promise<void> {
+    const recommendations = await this.songbirdNext.getRecommendations({
+      title: song.title,
+      artist: song.artist,
+    });
+    this.aiSuggestions = recommendations;
+
+    if (this.nowPlayingMessage) {
+      try {
+        await this.nowPlayingMessage.edit({
+          embeds: [buildPlayingMessageEmbed(this)],
+          components: buildPlaybackControls(this),
+        });
+      } catch (error) {
+        debug(`Failed to update AI suggestions: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   private getOrCreateAudioPlayer(): AudioPlayer {

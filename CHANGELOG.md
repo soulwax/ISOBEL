@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added yt-dlp fallback for YouTube links when Starchild has no match
 - Added support for playing mp3 attachments uploaded to Discord
 - Added `/yt` command to play YouTube URLs or search terms via yt-dlp
+- Added playback buttons (pause/resume, next) to the Now Playing message
+- Added previous and stop buttons to the Now Playing controls
+- Added AI suggestion dropdown using Songbird Next API (`SONGBIRD_NEXT_URL`)
+- Added search modal button on Now Playing controls
+- Added Prisma 7 config file and moved datasource URL out of `schema.prisma`
+- Switched Prisma datasource provider to PostgreSQL with `isobel-bot` schema
 
 ## [2.17.0] - 2026-01-17
 

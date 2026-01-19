@@ -1,7 +1,7 @@
 // File: src/commands/index.ts
 
 import { SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from '@discordjs/builders';
-import { AutocompleteInteraction, ButtonInteraction, ChatInputCommandInteraction } from 'discord.js';
+import { AutocompleteInteraction, ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 
 export default interface Command {
   readonly slashCommand: (SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder | SlashCommandOptionsOnlyBuilder) & Pick<SlashCommandBuilder, 'toJSON'>;
@@ -10,4 +10,6 @@ export default interface Command {
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
   handleButtonInteraction?: (interaction: ButtonInteraction) => Promise<void>;
   handleAutocompleteInteraction?: (interaction: AutocompleteInteraction) => Promise<void>;
+  handleModalSubmit?: (interaction: ModalSubmitInteraction) => Promise<void>;
+  handleSelectMenuInteraction?: (interaction: StringSelectMenuInteraction) => Promise<void>;
 }
