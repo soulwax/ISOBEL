@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { execa, ExecaError } from 'execa';
 import { promises as fs } from 'fs';
 import ora from 'ora';
@@ -12,11 +14,12 @@ import { DATA_DIR } from '../services/config.js';
 import createDatabaseUrl, { createDatabasePath } from '../utils/create-database-url.js';
 import logBanner from '../utils/log-banner.js';
 
-const client = new PrismaClient();
-
 const databaseUrl = process.env.DATABASE_URL ?? createDatabaseUrl(DATA_DIR);
 process.env.DATABASE_URL = databaseUrl;
 const isFileDatabase = databaseUrl.startsWith('file:');
+const pool = new Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
+const client = new PrismaClient({ adapter });
 
 const migrateFromSequelizeToPrisma = async () => {
   await execa('prisma', ['migrate', 'resolve', '--applied', '20220101155430_migrate_from_sequelize'], {preferLocal: true});
