@@ -33,7 +33,7 @@ importers:
         specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
       '@snazzah/davey':
-        specifier: ^0.1.8
+        specifier: ^0.1.9
         version: 0.1.9
       '@types/libsodium-wrappers':
         specifier: ^0.7.14
@@ -48,7 +48,7 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
       discord-api-types:
-        specifier: ^0.38.36
+        specifier: ^0.38.37
         version: 0.38.37
       discord.js:
         specifier: ^14.25.1
@@ -69,19 +69,19 @@ importers:
         specifier: ^1.0.1
         version: 1.0.1
       got:
-        specifier: ^14.6.5
+        specifier: ^14.6.6
         version: 14.6.6
       hasha:
         specifier: ^7.0.0
         version: 7.0.0
       inversify:
-        specifier: ^7.10.4
+        specifier: ^7.11.0
         version: 7.11.0(reflect-metadata@0.2.2)
       iso8601-duration:
         specifier: ^2.1.3
         version: 2.1.3
       libsodium-wrappers:
-        specifier: ^0.7.15
+        specifier: ^0.7.16
         version: 0.7.16
       make-dir:
         specifier: ^3.1.0
@@ -96,13 +96,13 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       p-event:
-        specifier: ^7.0.1
-        version: 7.0.2
+        specifier: ^7.1.0
+        version: 7.1.0
       p-limit:
         specifier: ^7.2.0
         version: 7.2.0
       p-queue:
-        specifier: ^9.0.1
+        specifier: ^9.1.0
         version: 9.1.0
       p-retry:
         specifier: 6.2.0
@@ -111,7 +111,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(discord.js@14.25.1)
       parse-duration:
-        specifier: ^2.1.4
+        specifier: ^2.1.5
         version: 2.1.5
       patch-package:
         specifier: ^8.0.1
@@ -148,7 +148,7 @@ importers:
         version: 3.8.4
     devDependencies:
       '@eslint/js':
-        specifier: ^9.0.0
+        specifier: ^9.39.2
         version: 9.39.2
       '@release-it/keep-a-changelog':
         specifier: ^2.5.0
@@ -169,7 +169,7 @@ importers:
         specifier: 2.1.0
         version: 2.1.0
       '@types/node':
-        specifier: ^20.19.25
+        specifier: ^20.19.30
         version: 20.19.30
       '@types/node-emoji':
         specifier: ^2.1.0
@@ -184,16 +184,16 @@ importers:
         specifier: 8.18.1
         version: 8.18.1
       '@typescript-eslint/eslint-plugin':
-        specifier: ^8.0.0
+        specifier: ^8.53.0
         version: 8.53.0(@typescript-eslint/parser@8.53.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       '@typescript-eslint/parser':
-        specifier: ^8.0.0
+        specifier: ^8.53.0
         version: 8.53.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       concurrently:
         specifier: ^9.2.1
         version: 9.2.1
       eslint:
-        specifier: ^9.39.1
+        specifier: ^9.39.2
         version: 9.39.2(jiti@2.6.1)
       eslint-config-xo-typescript:
         specifier: ^9.0.0
@@ -211,7 +211,7 @@ importers:
         specifier: ^5.22.0
         version: 5.22.0
       release-it:
-        specifier: ^19.0.6
+        specifier: ^19.2.3
         version: 19.2.3(@types/node@20.19.30)
       type-fest:
         specifier: ^2.19.0
@@ -220,7 +220,7 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       typescript-eslint:
-        specifier: ^8.48.1
+        specifier: ^8.53.0
         version: 8.53.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
 
 packages:
@@ -2573,8 +2573,8 @@ packages:
     resolution: {integrity: sha512-wBowNApzd45EIKdO1LaU+LrMBwAcjfPaYtVzV3lmfM3gf8Z4CHZsiIqlM8TZZ8okYvh5A1cP6gTfCRQtwUpaUg==}
     engines: {node: '>=14.16'}
 
-  p-event@7.0.2:
-    resolution: {integrity: sha512-nDq4JpyYnNPDrndgY3z9vQsB0X1bdsOcDmMFbLvewcnt38Geda9x+gULX3+RiGzwJ1QvzqTwNB4EQp+OwMOVAA==}
+  p-event@7.1.0:
+    resolution: {integrity: sha512-/lkPs5W1aC3cp6vqZefpdosOn65J571sWodyfOQiF0+tmDCpU+H8Atwpu0vQROCVUlZuToDN5eyTLsMLLc54mg==}
     engines: {node: '>=20'}
 
   p-limit@3.1.0:
@@ -2596,10 +2596,6 @@ packages:
   p-retry@6.2.0:
     resolution: {integrity: sha512-JA6nkq6hKyWLLasXQXUrO4z8BUZGUt/LjlJxx8Gb2+2ntodU/SS63YZ8b0LUTbQ8ZB9iwOfhEPhg4ykKnn2KsA==}
     engines: {node: '>=16.17'}
-
-  p-timeout@6.1.4:
-    resolution: {integrity: sha512-MyIV3ZA/PmyBN/ud8vV9XzwTrNtR4jFrObymZYnZqMmW0zA8Z17vnT0rBgFE/TlohB+YCHqXMgZzb3Csp49vqg==}
-    engines: {node: '>=14.16'}
 
   p-timeout@7.0.1:
     resolution: {integrity: sha512-AxTM2wDGORHGEkPCt8yqxOTMgpfbEHqF51f/5fJCmwFC3C/zNcGT63SymH2ttOAaiIws2zVg4+izQCjrakcwHg==}
@@ -3111,6 +3107,7 @@ packages:
   tar@6.2.1:
     resolution: {integrity: sha512-DZ4yORTwrbTj/7MZYq2w+/ZFdI6OZ/f9SFHR+71gIVUZhOQPHzVCLpvRnPgyaMpfWxxk/4ONva3GQSyNIKRv6A==}
     engines: {node: '>=10'}
+    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exhorbitant rates) by contacting i@izs.me
 
   tinyexec@1.0.2:
     resolution: {integrity: sha512-W/KYk+NFhkmsYpuHq5JykngiOCnxeVL8v8dFnqxSD8qEEdRfXk1SDM6JzNqcERbcGYj9tMrDQBYV9cjgnunFIg==}
@@ -5913,9 +5910,9 @@ snapshots:
 
   p-cancelable@4.0.1: {}
 
-  p-event@7.0.2:
+  p-event@7.1.0:
     dependencies:
-      p-timeout: 6.1.4
+      p-timeout: 7.0.1
 
   p-limit@3.1.0:
     dependencies:
@@ -5939,8 +5936,6 @@ snapshots:
       '@types/retry': 0.12.2
       is-network-error: 1.3.0
       retry: 0.13.1
-
-  p-timeout@6.1.4: {}
 
   p-timeout@7.0.1: {}
 
