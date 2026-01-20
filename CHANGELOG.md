@@ -36,7 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added AI suggestion dropdown using Songbird Next API (`SONGBIRD_NEXT_URL`)
 - Added search modal button on Now Playing controls
 - Added Prisma 7 config file and moved datasource URL out of `schema.prisma`
-- Switched Prisma datasource provider to PostgreSQL with `isobel-bot` schema
+- Switched Prisma datasource provider to PostgreSQL (requires `DATABASE_URL` environment variable)
+- Updated Docker documentation to reflect PostgreSQL requirement and new environment variables
 
 ## [2.17.0] - 2026-01-17
 

@@ -32,6 +32,7 @@ nano .env  # or vim, code, etc.
 DISCORD_TOKEN=your-discord-bot-token
 SONGBIRD_BASE_URL=https://your-api-url
 SONGBIRD_API_KEY=your-api-key
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
 ```
 
 **If using web interface, also add:**
@@ -123,10 +124,17 @@ SONGBIRD_BASE_URL=https://api.example.com
 SONGBIRD_API_KEY=your-songbird-api-key
 
 # ============================================
+# REQUIRED: Database Configuration
+# ============================================
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
+
+# ============================================
 # OPTIONAL: Bot Data & Caching
 # ============================================
 DATA_DIR=./data
 CACHE_LIMIT=5GB
+HEALTH_PORT=3002
+SONGBIRD_NEXT_URL=https://songbirdapi.com
 
 # ============================================
 # OPTIONAL: Bot Status & Activity
