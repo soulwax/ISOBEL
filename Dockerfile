@@ -66,8 +66,9 @@ COPY --from=prod-deps /usr/app/prod_node_modules ./node_modules
 COPY --from=builder /usr/app/node_modules/.prisma/client ./node_modules/.prisma/client
 # Copy Prisma CLI (needed for migrations at runtime)
 COPY --from=builder /usr/app/node_modules/prisma ./node_modules/prisma
-# Copy Prisma schema and migrations (needed for migrate deploy)
+# Copy Prisma schema, config, and migrations (needed for migrate deploy)
 COPY --from=builder /usr/app/schema.prisma ./schema.prisma
+COPY --from=builder /usr/app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /usr/app/migrations ./migrations
 COPY --from=builder /usr/app/package.json ./package.json
 COPY --from=builder /usr/app/ecosystem.config.cjs ./ecosystem.config.cjs
