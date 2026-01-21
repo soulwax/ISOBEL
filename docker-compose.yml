@@ -21,6 +21,9 @@ services:
       - SONGBIRD_BASE_URL=${SONGBIRD_BASE_URL}
       - SONGBIRD_API_KEY=${SONGBIRD_API_KEY}
 
+      # Required: Database connection
+      - DATABASE_URL=${DATABASE_URL}
+
       # Optional: Bot configuration
       - DATA_DIR=/data
       - CACHE_LIMIT=${CACHE_LIMIT:-2GB}

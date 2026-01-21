@@ -4,7 +4,13 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// PostgreSQL is required - DATABASE_URL must be set
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL environment variable is required for PostgreSQL');
+}
+
+const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 
 export const prisma = new PrismaClient({
