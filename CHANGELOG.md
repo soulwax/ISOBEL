@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.17.2] - 2026-01-22
+
+### Fixed
+- Fixed Prisma client engine type error by adding PostgreSQL adapter support (`@prisma/adapter-pg`)
+- Updated migration system to support PostgreSQL by updating `migration_lock.toml` provider
+- Created baseline PostgreSQL migration to align with existing database schema
+- Fixed `yarn prisma:migrate:deploy` command to work with PostgreSQL migrations
+
+### Changed
+- Added `@prisma/adapter-pg` and `pg` dependencies for PostgreSQL driver adapter support
+- Updated Prisma client initialization to use PostgreSQL adapter instead of default engine
+- Migration history now properly tracks PostgreSQL migrations alongside legacy SQLite migrations
+
 ## [2.17.1] - 2026-01-18
 
 ### Changed
