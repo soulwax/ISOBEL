@@ -114,7 +114,7 @@
     "pm2": "^6.0.14",
     "prisma": "^5.22.0",
     "release-it": "^19.2.3",
-    "type-fest": "^2.19.0",
+    "type-fest": "^5.4.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.53.0"
   },
