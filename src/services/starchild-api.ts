@@ -77,8 +77,9 @@ export default class {
             retries: 2,
             minTimeout: 250,
             maxTimeout: 1500,
-            onFailedAttempt: error => {
-              debug(`Search retry ${error.attemptNumber} failed: ${error.message}`);
+            onFailedAttempt: ({error, attemptNumber}) => {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              debug(`Search retry ${attemptNumber} failed: ${errorMessage}`);
             },
           }
         );
