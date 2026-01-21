@@ -14,9 +14,20 @@ import { DATA_DIR } from '../services/config.js';
 import createDatabaseUrl, { createDatabasePath } from '../utils/create-database-url.js';
 import logBanner from '../utils/log-banner.js';
 
-const databaseUrl = process.env.DATABASE_URL ?? createDatabaseUrl(DATA_DIR);
-process.env.DATABASE_URL = databaseUrl;
+// PostgreSQL is required - DATABASE_URL must be set
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  console.error('DATABASE_URL environment variable is required for PostgreSQL');
+  process.exit(1);
+}
+
 const isFileDatabase = databaseUrl.startsWith('file:');
+if (isFileDatabase) {
+  console.error('SQLite is not supported. Please set DATABASE_URL to a PostgreSQL connection string.');
+  process.exit(1);
+}
+
+// PostgreSQL - use adapter
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const client = new PrismaClient({ adapter });

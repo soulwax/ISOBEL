@@ -4,9 +4,11 @@ FROM node:24-bookworm-slim AS base
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
-# Install ffmpeg
+# Install apt-utils early to suppress debconf warnings, then install runtime dependencies
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
+    apt-utils \
     ffmpeg \
     yt-dlp \
     python3 \
@@ -26,6 +28,7 @@ WORKDIR /usr/app
 # Add Python and build tools to compile native modules
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
+    apt-utils \
     ffmpeg \
     yt-dlp \
     python3 \
