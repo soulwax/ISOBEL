@@ -68,7 +68,10 @@ COPY --from=prod-deps /usr/app/prod_node_modules ./node_modules
 # Copy Prisma client (needed at runtime)
 COPY --from=builder /usr/app/node_modules/.prisma/client ./node_modules/.prisma/client
 # Copy Prisma CLI (needed for migrations at runtime)
+# Create .bin directory first, then copy prisma package and binary
+RUN mkdir -p ./node_modules/.bin
 COPY --from=builder /usr/app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /usr/app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 # Copy Prisma schema, config, and migrations (needed for migrate deploy)
 COPY --from=builder /usr/app/schema.prisma ./schema.prisma
 COPY --from=builder /usr/app/prisma.config.ts ./prisma.config.ts
@@ -91,4 +94,6 @@ ENV ENV_FILE=/config
 # Use tini as entrypoint for proper signal handling
 ENTRYPOINT ["tini", "--"]
 
-CMD ["./node_modules/.bin/pm2-runtime", "ecosystem.config.cjs", "--env", "production"]
+# Run the migrate-and-start script directly with node
+# Docker handles process management, so PM2 is not needed
+CMD ["node", "--enable-source-maps", "dist/scripts/migrate-and-start.js"]
