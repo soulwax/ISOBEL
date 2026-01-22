@@ -17,6 +17,7 @@ import HealthIndicator from "./components/HealthIndicator";
 import DiscordLogin from "./components/DiscordLogin";
 import DiscordGuildsSidebar from "./components/DiscordGuildsSidebar";
 import GuildSettings from "./components/GuildSettings";
+import { useAuth } from "./hooks/useAuth";
 
 interface Guild {
   id: string;
@@ -26,6 +27,7 @@ interface Guild {
 
 function App() {
   const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
+  const { isAuthenticated } = useAuth();
 
   const handleGuildSelect = (guild: Guild) => {
     setSelectedGuild(guild);
@@ -36,11 +38,13 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <DiscordGuildsSidebar 
-        onGuildSelect={handleGuildSelect}
-        selectedGuildId={selectedGuild?.id}
-      />
+    <div className={`app ${isAuthenticated ? 'app-with-sidebar' : ''}`}>
+      {isAuthenticated && (
+        <DiscordGuildsSidebar 
+          onGuildSelect={handleGuildSelect}
+          selectedGuildId={selectedGuild?.id}
+        />
+      )}
       {selectedGuild ? (
         <GuildSettings guild={selectedGuild} onBack={handleBack} />
       ) : (
