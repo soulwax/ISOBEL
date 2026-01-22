@@ -11,10 +11,8 @@ const AUTH_API_URL = import.meta.env.PROD
   : '/api/auth';
 
 export async function signIn() {
-  // NextAuth v5 signin - redirects directly to Discord OAuth provider
-  // Use the full current URL as callback so user returns to the same page
-  const callbackUrl = encodeURIComponent(window.location.href);
-  window.location.href = `${AUTH_API_URL}/signin/discord?callbackUrl=${callbackUrl}`;
+  // NextAuth v5 signin - redirects to Discord OAuth
+  window.location.href = `${AUTH_API_URL}/signin?callbackUrl=${encodeURIComponent(window.location.origin)}`;
 }
 
 export async function signOut() {

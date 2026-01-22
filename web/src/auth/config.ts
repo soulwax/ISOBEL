@@ -18,12 +18,14 @@ declare module 'next-auth' {
   }
 }
 
-const NEXTAUTH_URL = requireEnv('NEXTAUTH_URL');
+// Get NEXTAUTH_URL from environment, fallback to auto-detection
+const nextAuthUrl = process.env.NEXTAUTH_URL;
 
 export const authConfig = {
   adapter: DrizzleAdapter(db),
   trustHost: true, // Required for NextAuth v5 when not using Next.js
   basePath: '/api/auth', // Set the base path for auth routes
+  ...(nextAuthUrl && { url: nextAuthUrl }), // Explicitly set URL if provided
   providers: [
     Discord({
       clientId: requireEnv('DISCORD_CLIENT_ID'),
@@ -36,27 +38,6 @@ export const authConfig = {
     }),
   ],
   callbacks: {
-    async redirect({ url, baseUrl }) {
-      // Use NEXTAUTH_URL as the base if provided, otherwise use baseUrl from NextAuth
-      const frontendUrl = NEXTAUTH_URL || baseUrl;
-      
-      // If url is a relative path, make it absolute using frontend URL
-      if (url.startsWith('/')) {
-        return `${frontendUrl}${url}`;
-      }
-      // If url is on the same origin as frontend, allow it
-      try {
-        const urlObj = new URL(url);
-        const frontendUrlObj = new URL(frontendUrl);
-        if (urlObj.origin === frontendUrlObj.origin) {
-          return url;
-        }
-      } catch {
-        // Invalid URL, fall back to frontend URL
-      }
-      // Default to frontend URL (home page)
-      return frontendUrl;
-    },
     async signIn({ user, account, profile }) {
       if (account?.provider === 'discord' && account.access_token && profile && user.id) {
         try {
