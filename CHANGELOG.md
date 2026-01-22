@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.17.3] - 2026-01-22
+
+### Fixed
+- Fixed Docker container startup failure by replacing PM2 with direct Node execution
+- Fixed Discord login functionality in web interface - login now properly redirects to Discord OAuth and back
+- Fixed missing `DATABASE_URL` environment variable in docker-compose.yml
+- Fixed Prisma client initialization to require `DATABASE_URL` and fail fast with clear error messages
+- Fixed `migrate-and-start.ts` to properly handle PostgreSQL-only setup (removed SQLite fallback)
+
+### Changed
+- Updated Dockerfile to use `node` directly instead of `pm2-runtime` (Docker handles process management)
+- Added `apt-utils` to Dockerfile to suppress debconf warnings during package installation
+- Added `DEBIAN_FRONTEND=noninteractive` to Dockerfile for non-interactive package installation
+- Updated Discord login signIn function to use `/api/auth/signin/discord` endpoint directly
+- Updated Discord login callback URL to use full current page URL instead of just origin
+- Added redirect callback to NextAuth config to properly handle post-login redirects using `NEXTAUTH_URL`
+- Updated `migrate-and-start.ts` to require PostgreSQL and reject SQLite database URLs
+
 ## [2.17.2] - 2026-01-22
 
 ### Fixed
