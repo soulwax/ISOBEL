@@ -11,7 +11,11 @@
     "resolveJsonModule": true,
     "rootDir": "src",
     "outDir": "dist",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "ffmpeggy": ["./node_modules/ffmpeggy/cjs/index.js"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules"]
