@@ -28,6 +28,7 @@ interface Guild {
 function App() {
   const [selectedGuild, setSelectedGuild] = useState<Guild | null>(null);
   const { isAuthenticated } = useAuth();
+  const activeSelectedGuild = isAuthenticated ? selectedGuild : null;
 
   const handleGuildSelect = (guild: Guild) => {
     setSelectedGuild(guild);
@@ -42,11 +43,11 @@ function App() {
       {isAuthenticated && (
         <DiscordGuildsSidebar 
           onGuildSelect={handleGuildSelect}
-          selectedGuildId={selectedGuild?.id}
+          selectedGuildId={activeSelectedGuild?.id}
         />
       )}
-      {selectedGuild ? (
-        <GuildSettings guild={selectedGuild} onBack={handleBack} />
+      {activeSelectedGuild ? (
+        <GuildSettings guild={activeSelectedGuild} onBack={handleBack} />
       ) : (
         <>
       <nav className="nav">
