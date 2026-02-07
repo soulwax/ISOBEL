@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { execa, ExecaError } from 'execa';
 import { promises as fs } from 'fs';
 import ora from 'ora';
@@ -12,9 +14,23 @@ import { DATA_DIR } from '../services/config.js';
 import createDatabaseUrl, { createDatabasePath } from '../utils/create-database-url.js';
 import logBanner from '../utils/log-banner.js';
 
-const client = new PrismaClient();
+// PostgreSQL is required - DATABASE_URL must be set
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  console.error('DATABASE_URL environment variable is required for PostgreSQL');
+  process.exit(1);
+}
 
-process.env.DATABASE_URL = process.env.DATABASE_URL ?? createDatabaseUrl(DATA_DIR);
+const isFileDatabase = databaseUrl.startsWith('file:');
+if (isFileDatabase) {
+  console.error('SQLite is not supported. Please set DATABASE_URL to a PostgreSQL connection string.');
+  process.exit(1);
+}
+
+// PostgreSQL - use adapter
+const pool = new Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
+const client = new PrismaClient({ adapter });
 
 const migrateFromSequelizeToPrisma = async () => {
   await execa('prisma', ['migrate', 'resolve', '--applied', '20220101155430_migrate_from_sequelize'], {preferLocal: true});
@@ -51,7 +67,7 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
 
   const spinner = ora('Applying database migrations...').start();
 
-  if (await doesUserHaveExistingDatabase()) {
+  if (isFileDatabase && await doesUserHaveExistingDatabase()) {
     if (!(await hasDatabaseBeenMigratedToPrisma())) {
       try {
         await migrateFromSequelizeToPrisma();

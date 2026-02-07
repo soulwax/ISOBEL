@@ -179,7 +179,7 @@ export default class FileCacheProvider {
     const allHashes = await prisma.fileCache.findMany({
       select: {hash: true},
     });
-    const dbHashes = new Set(allHashes.map(m => m.hash));
+    const dbHashes = new Set(allHashes.map((m: {hash: string}) => m.hash));
 
     const orphans = [...allFiles].filter(f => !dbHashes.has(f));
     if (orphans.length > 0) {

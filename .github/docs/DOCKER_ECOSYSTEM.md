@@ -125,6 +125,7 @@ ISOBEL/
 DISCORD_TOKEN=your-bot-token
 SONGBIRD_BASE_URL=https://api.example.com
 SONGBIRD_API_KEY=your-api-key
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
 ```
 
 ### Web Interface (Required Only with `--profile with-web`)
@@ -141,6 +142,8 @@ CACHE_LIMIT=2GB
 BOT_STATUS=online
 WEB_PORT=3001
 AUTH_PORT=3003
+HEALTH_PORT=3002
+SONGBIRD_NEXT_URL=https://songbirdapi.com
 ```
 
 ## Docker Compose Profiles
@@ -165,12 +168,6 @@ All services share the `/data` volume:
 
 ```bash
 ./data/
-├── database.sqlite      # Prisma SQLite database
-│                       # - Guild settings
-│                       # - Favorites
-│                       # - File cache metadata
-│                       # - Key-value cache
-│
 ├── file-cache/         # Cached MP3 files
 │   ├── abc123.mp3
 │   ├── def456.mp3
@@ -181,6 +178,8 @@ All services share the `/data` volume:
     ├── pm2-out.log
     └── ...
 ```
+
+**Note:** Database (Guild settings, favorites, cache metadata) is stored in PostgreSQL configured via `DATABASE_URL`, not in the `/data` volume.
 
 **Important:**
 - Bot: Read/Write access to `/data`
@@ -297,16 +296,18 @@ All services are connected via the `isobel-network` bridge network:
 
 **Symptom:** Web interface shows "Database not found" error
 
-**Cause:** Data volume not properly mounted
+**Cause:** `DATABASE_URL` not set or incorrect, or database not accessible
 
 **Fix:**
 ```bash
-# Check volume mounts
-docker-compose config
+# Check DATABASE_URL is set
+docker-compose config | grep DATABASE_URL
 
-# Ensure ./data exists and has correct permissions
-ls -la ./data
-chmod 755 ./data
+# Verify database connection
+docker exec isobel-bot node -e "console.log(process.env.DATABASE_URL)"
+
+# Ensure PostgreSQL is accessible from container
+# Test connection from host: psql $DATABASE_URL
 ```
 
 ### Services won't start with --profile

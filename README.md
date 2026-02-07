@@ -158,6 +158,7 @@ docker run -d \
   -e DISCORD_TOKEN='your-discord-token' \
   -e SONGBIRD_API_KEY='your-songbird-api-key' \
   -e SONGBIRD_BASE_URL='https://your-api-url' \
+  -e DATABASE_URL='postgresql://user:password@host:5432/database?sslmode=require' \
   --restart unless-stopped \
   ghcr.io/soulwax/ISOBEL:latest
 ```
@@ -181,6 +182,7 @@ services:
       - DISCORD_TOKEN=your-discord-token
       - SONGBIRD_API_KEY=your-api-key
       - SONGBIRD_BASE_URL=https://your-api-url
+      - DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
 
       # Optional
       - CACHE_LIMIT=2GB
@@ -188,6 +190,7 @@ services:
       - BOT_ACTIVITY_TYPE=LISTENING
       - BOT_ACTIVITY=music
       - HEALTH_PORT=3002
+      - SONGBIRD_NEXT_URL=https://songbirdapi.com
 ```
 
 Then run:
@@ -241,6 +244,7 @@ Add these to your `.env` file:
 DISCORD_TOKEN=your-discord-bot-token
 SONGBIRD_BASE_URL=https://your-api-url
 SONGBIRD_API_KEY=your-api-key
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
 
 # Web Interface (Required for web UI)
 DISCORD_CLIENT_ID=your-oauth-client-id
@@ -252,6 +256,8 @@ NEXTAUTH_URL=http://localhost:3001
 CACHE_LIMIT=2GB
 WEB_PORT=3001
 AUTH_PORT=3003
+HEALTH_PORT=3002
+SONGBIRD_NEXT_URL=https://songbirdapi.com
 ```
 
 **Services Included:**
@@ -293,17 +299,19 @@ docker compose up -d
 
 #### Data Persistence
 
-All bot data (cache, database, logs) is stored in the `/data` volume:
+All bot data (cache, logs) is stored in the `/data` volume. The database is stored in PostgreSQL (configured via `DATABASE_URL`):
 
 ```bash
 # Volume location on host
 ./data/
-├── database.sqlite    # Guild settings, favorites
 ├── file-cache/        # Cached MP3 files
 └── logs/              # Application logs
 ```
 
-**Important:** Always mount `/data` to persist your bot's data across container restarts!
+**Important:** 
+- Always mount `/data` to persist your bot's cache and logs across container restarts
+- Ensure `DATABASE_URL` points to a PostgreSQL database (e.g., Neon, Supabase, or self-hosted)
+- The database schema is automatically created on first run via Prisma migrations
 
 #### Health Checks
 

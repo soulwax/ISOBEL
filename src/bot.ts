@@ -3,7 +3,7 @@
 import { REST } from '@discordjs/rest';
 import { generateDependencyReport } from '@discordjs/voice';
 import { Routes } from 'discord-api-types/v10';
-import { AutocompleteInteraction, ButtonInteraction, ChatInputCommandInteraction, Client, Collection, Interaction, MessageFlags, User } from 'discord.js';
+import { AutocompleteInteraction, ButtonInteraction, ChatInputCommandInteraction, Client, Collection, Interaction, MessageFlags, ModalSubmitInteraction, StringSelectMenuInteraction, User } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import ora from 'ora';
 import Command from './commands/index.js';
@@ -148,6 +148,10 @@ export default class {
         await this.handleCommandInteraction(interaction);
       } else if (interaction.isButton()) {
         await this.handleButtonInteraction(interaction);
+      } else if (interaction.isModalSubmit()) {
+        await this.handleModalSubmitInteraction(interaction);
+      } else if (interaction.isStringSelectMenu()) {
+        await this.handleSelectMenuInteraction(interaction);
       } else if (interaction.isAutocomplete()) {
         await this.handleAutocompleteInteraction(interaction);
       }
@@ -216,6 +220,38 @@ export default class {
   }
 
   /**
+   * Handles select menu interactions
+   * @param interaction - The select menu interaction to handle
+   */
+  private async handleSelectMenuInteraction(interaction: StringSelectMenuInteraction): Promise<void> {
+    const command = this.commandsByButtonId.get(interaction.customId);
+
+    if (!command) {
+      return;
+    }
+
+    if (command.handleSelectMenuInteraction) {
+      await command.handleSelectMenuInteraction(interaction);
+    }
+  }
+
+  /**
+   * Handles modal submit interactions
+   * @param interaction - The modal submit interaction to handle
+   */
+  private async handleModalSubmitInteraction(interaction: ModalSubmitInteraction): Promise<void> {
+    const command = this.commandsByButtonId.get(interaction.customId);
+
+    if (!command) {
+      return;
+    }
+
+    if (command.handleModalSubmit) {
+      await command.handleModalSubmit(interaction);
+    }
+  }
+
+  /**
    * Handles errors that occur during interaction processing
    * @param interaction - The interaction that caused the error
    * @param error - The error that occurred
@@ -225,7 +261,7 @@ export default class {
 
     // This can fail if the message was deleted, and we don't want to crash the whole bot
     try {
-      const isCommandOrButton = interaction.isCommand() || interaction.isButton();
+      const isCommandOrButton = interaction.isCommand() || interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit();
       const canEdit = isCommandOrButton && (interaction.replied || interaction.deferred);
 
       if (canEdit) {

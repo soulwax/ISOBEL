@@ -18,10 +18,14 @@ declare module 'next-auth' {
   }
 }
 
+// Get NEXTAUTH_URL from environment, fallback to auto-detection
+const nextAuthUrl = process.env.NEXTAUTH_URL;
+
 export const authConfig = {
   adapter: DrizzleAdapter(db),
   trustHost: true, // Required for NextAuth v5 when not using Next.js
   basePath: '/api/auth', // Set the base path for auth routes
+  ...(nextAuthUrl && { url: nextAuthUrl }), // Explicitly set URL if provided
   providers: [
     Discord({
       clientId: requireEnv('DISCORD_CLIENT_ID'),

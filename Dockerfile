@@ -4,9 +4,11 @@ FROM node:24-bookworm-slim AS base
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
-# Install ffmpeg
+# Install apt-utils early to suppress debconf warnings, then install runtime dependencies
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
+    apt-utils \
     ffmpeg \
     yt-dlp \
     python3 \
@@ -26,6 +28,7 @@ WORKDIR /usr/app
 # Add Python and build tools to compile native modules
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
+    apt-utils \
     ffmpeg \
     yt-dlp \
     python3 \
@@ -65,9 +68,13 @@ COPY --from=prod-deps /usr/app/prod_node_modules ./node_modules
 # Copy Prisma client (needed at runtime)
 COPY --from=builder /usr/app/node_modules/.prisma/client ./node_modules/.prisma/client
 # Copy Prisma CLI (needed for migrations at runtime)
+# Create .bin directory first, then copy prisma package and binary
+RUN mkdir -p ./node_modules/.bin
 COPY --from=builder /usr/app/node_modules/prisma ./node_modules/prisma
-# Copy Prisma schema and migrations (needed for migrate deploy)
+COPY --from=builder /usr/app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+# Copy Prisma schema, config, and migrations (needed for migrate deploy)
 COPY --from=builder /usr/app/schema.prisma ./schema.prisma
+COPY --from=builder /usr/app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /usr/app/migrations ./migrations
 COPY --from=builder /usr/app/package.json ./package.json
 COPY --from=builder /usr/app/ecosystem.config.cjs ./ecosystem.config.cjs
@@ -87,4 +94,6 @@ ENV ENV_FILE=/config
 # Use tini as entrypoint for proper signal handling
 ENTRYPOINT ["tini", "--"]
 
-CMD ["./node_modules/.bin/pm2-runtime", "ecosystem.config.cjs", "--env", "production"]
+# Run the migrate-and-start script directly with node
+# Docker handles process management, so PM2 is not needed
+CMD ["node", "--enable-source-maps", "dist/scripts/migrate-and-start.js"]
