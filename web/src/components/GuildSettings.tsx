@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { API_BASE_URL } from '../lib/api-paths';
 import './GuildSettings.css';
 
 interface GuildSettings {
@@ -46,12 +47,10 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
       try {
         setLoading(true);
         setError(null);
-        const authApiUrl = import.meta.env.PROD 
-          ? (import.meta.env.VITE_AUTH_API_URL || '/api')
-          : '/api';
-        
-        const response = await fetch(`${authApiUrl}/guilds/${guild.id}/settings`, {
+
+        const response = await fetch(`${API_BASE_URL}/guilds/${guild.id}/settings`, {
           credentials: 'include',
+          cache: 'no-store',
         });
 
         if (!response.ok) {
@@ -87,12 +86,8 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
       setSaving(true);
       setError(null);
       setSuccess(false);
-      
-      const authApiUrl = import.meta.env.PROD 
-        ? (import.meta.env.VITE_AUTH_API_URL || '/api')
-        : '/api';
-      
-      const response = await fetch(`${authApiUrl}/guilds/${guild.id}/settings`, {
+
+      const response = await fetch(`${API_BASE_URL}/guilds/${guild.id}/settings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

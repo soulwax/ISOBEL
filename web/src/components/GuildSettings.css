@@ -1,7 +1,7 @@
 /* File: web/src/components/GuildSettings.css */
 
 .guild-settings {
-  margin-left: 240px; /* Account for sidebar */
+  margin-left: 0;
   min-height: 100vh;
   background-color: var(--discord-dark);
   color: var(--text-primary);
@@ -253,7 +253,6 @@
 
 @media (max-width: 768px) {
   .guild-settings {
-    margin-left: 0;
     padding: 1rem;
   }
 
