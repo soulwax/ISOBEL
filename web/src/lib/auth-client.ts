@@ -8,12 +8,36 @@
 import { AUTH_BASE_URL } from './api-paths';
 
 function callbackUrl(): string {
-  return encodeURIComponent(window.location.href);
+  return window.location.href;
 }
 
 export async function signIn() {
-  // Redirect directly to Discord provider sign-in.
-  window.location.href = `${AUTH_BASE_URL}/signin/discord?callbackUrl=${callbackUrl()}`;
+  const csrfToken = await getCsrfToken();
+  if (!csrfToken) {
+    window.location.href = `${AUTH_BASE_URL}/signin?callbackUrl=${encodeURIComponent(callbackUrl())}`;
+    return;
+  }
+
+  // OAuth provider sign-in must be a browser form POST so redirects can navigate the page.
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = `${AUTH_BASE_URL}/signin/discord`;
+  form.style.display = 'none';
+
+  const csrfInput = document.createElement('input');
+  csrfInput.type = 'hidden';
+  csrfInput.name = 'csrfToken';
+  csrfInput.value = csrfToken;
+
+  const callbackInput = document.createElement('input');
+  callbackInput.type = 'hidden';
+  callbackInput.name = 'callbackUrl';
+  callbackInput.value = callbackUrl();
+
+  form.appendChild(csrfInput);
+  form.appendChild(callbackInput);
+  document.body.appendChild(form);
+  form.submit();
 }
 
 async function getCsrfToken(): Promise<string | null> {
