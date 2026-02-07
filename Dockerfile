@@ -40,6 +40,9 @@ RUN apt-get update \
 
 COPY package.json package-lock.json ./
 
+# Force packageManager to npm so postinstall-postinstall runs npm (not yarn); fixes typo "yarn@npm@..."
+RUN sed -i 's/"packageManager": "[^"]*"/"packageManager": "npm@11.9.0"/' package.json
+
 # Install full (dev + prod) deps for build stage
 RUN npm ci
 

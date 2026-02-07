@@ -14,7 +14,7 @@ import {
 import type { Setting } from '@prisma/client';
 import shuffle from 'array-shuffle';
 import { Message, Snowflake, VoiceChannel } from 'discord.js';
-import ffmpeg from 'fluent-ffmpeg';
+import { FFmpeggy } from 'ffmpeggy';
 import { WriteStream } from 'fs-capacitor';
 import got from 'got';
 import { hashSync } from 'hasha';
@@ -933,24 +933,32 @@ export default class {
       const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
       const inputOptions = options?.ffmpegInputOptions ?? (isFile ? [] : ['-re']);
 
-      const stream = ffmpeg(options.url)
-        .inputOptions(inputOptions)
-        .noVideo()
-        .audioCodec('libopus')
-        .outputFormat('webm')
-        .audioBitrate(OPUS_OUTPUT_BITRATE_KBPS as number)
-        .addOutputOption(['-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`])
-        .on('error', error => {
+      const ff = new FFmpeggy({
+        input: options.url,
+        inputOptions,
+        output: capacitor,
+        outputOptions: [
+          '-vn',
+          '-c:a', 'libopus',
+          '-b:a', `${OPUS_OUTPUT_BITRATE_KBPS}k`,
+          '-f', 'webm',
+          '-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`,
+        ],
+        overwriteExisting: true,
+      });
+
+      ff
+        .on('error', (error: Error) => {
           if (!hasReturnedStreamClosed && !hasResolved) {
             hasResolved = true;
             clearTimeout(startTimeout);
             reject(error);
           } else {
-            debug(`ffmpeg stream error after start: ${error}`);
+            debug(`ffmpeg stream error after start: ${error.message}`);
           }
         })
-        .on('start', command => {
-          debug(`Spawned ffmpeg with ${command}`);
+        .on('start', (args: readonly string[]) => {
+          debug(`Spawned ffmpeg with ${args.join(' ')}`);
           if (!hasResolved) {
             hasResolved = true;
             clearTimeout(startTimeout);
@@ -961,16 +969,16 @@ export default class {
       const startTimeout = setTimeout(() => {
         if (!hasResolved) {
           hasResolved = true;
-          stream.kill('SIGKILL');
+          void ff.stop();
           reject(new Error('ffmpeg start timeout'));
         }
       }, 5000);
 
-      stream.pipe(capacitor);
+      void ff.run();
 
       returnedStream.on('close', () => {
         if (!options.cache) {
-          stream.kill('SIGKILL');
+          void ff.stop();
         }
 
         hasReturnedStreamClosed = true;

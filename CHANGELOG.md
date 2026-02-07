@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.18.1] - 2026-02-07
+
+### Changed
+- Dockerfile: use npm instead of yarn (COPY package-lock.json, npm ci)
+- Dockerfile: set packageManager to npm before install to avoid postinstall-postinstall invoking yarn
+- Replaced deprecated fluent-ffmpeg with ffmpeggy for audio transcoding in player
+- HLS stream probe in get-songs now uses execFile ffprobe instead of fluent-ffmpeg
+
+### Removed
+- Deprecated direct dependencies: ytsr, fluent-ffmpeg, @types/fs-capacitor, @types/node-emoji
+
 ## [2.18.0] - 2026-02-07
 
 ### Fixed
