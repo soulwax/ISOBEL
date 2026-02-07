@@ -38,14 +38,14 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json yarn.lock ./
+COPY package.json package-lock.json ./
 
 # Install full (dev + prod) deps for build stage
-RUN yarn install --frozen-lockfile
+RUN npm ci
 
 # Create a production-only node_modules tree for runtime
 FROM dependencies AS prod-deps
-RUN yarn install --production --frozen-lockfile
+RUN npm ci --omit=dev
 RUN cp -R node_modules /usr/app/prod_node_modules
 
 FROM dependencies AS builder
@@ -53,8 +53,8 @@ FROM dependencies AS builder
 COPY . .
 
 # Run tsc build
-RUN yarn prisma:generate
-RUN yarn build:bot
+RUN npm run prisma:generate
+RUN npm run build:bot
 
 # Only keep what's necessary to run
 FROM base AS runner
