@@ -1,6 +1,9 @@
 # File: Dockerfile
 
-FROM node:24-bookworm-slim AS base
+FROM node:25-bookworm AS base
+
+# Update npm and corepack to latest before installing system packages
+RUN npm install -g npm@latest && corepack enable
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
@@ -40,15 +43,13 @@ RUN apt-get update \
 
 COPY package.json package-lock.json ./
 
-# Force packageManager to npm so postinstall-postinstall runs npm (not yarn); fixes typo "yarn@npm@..."
-RUN sed -i 's/"packageManager": "[^"]*"/"packageManager": "npm@11.9.0"/' package.json
-
-# Install full (dev + prod) deps for build stage
-RUN npm ci
+# Install deps without lifecycle scripts to avoid postinstall-postinstall (which reads packageManager and can invoke yarn).
+# Then run the root postinstall (patch-package) explicitly.
+RUN npm ci --ignore-scripts && npm run postinstall
 
 # Create a production-only node_modules tree for runtime
 FROM dependencies AS prod-deps
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts && npm run postinstall
 RUN cp -R node_modules /usr/app/prod_node_modules
 
 FROM dependencies AS builder
