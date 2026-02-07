@@ -2,8 +2,8 @@
 
 FROM node:25-bookworm AS base
 
-# Update npm and corepack to latest before installing system packages
-RUN npm install -g npm@latest && corepack enable
+# Update npm to latest; enable corepack if available (not in PATH in some node images)
+RUN npm install -g npm@latest && (corepack enable 2>/dev/null || true)
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
