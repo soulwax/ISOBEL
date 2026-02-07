@@ -1,6 +1,5 @@
 // File: src/services/get-songs.ts
 
-import ffmpeg from 'fluent-ffmpeg';
 import got from 'got';
 import { inject, injectable } from 'inversify';
 import { execFile } from 'node:child_process';
@@ -116,26 +115,27 @@ export default class {
   }
 
   private async httpLiveStream(url: string): Promise<SongMetadata | null> {
-    return new Promise((resolve) => {
-      ffmpeg(url).ffprobe((err) => {
-        if (err) {
-          resolve(null);
-          return;
-        }
-
-        resolve({
-          url,
-          source: MediaSource.HLS,
-          isLive: true,
-          title: url,
-          artist: url,
-          length: 0,
-          offset: 0,
-          playlist: null,
-          thumbnailUrl: null,
-        });
-      });
-    });
+    try {
+      await this.execFileAsync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'format=format_name',
+        '-of', 'default=noprint_wrappers=1',
+        url,
+      ], {timeout: 5000});
+      return {
+        url,
+        source: MediaSource.HLS,
+        isLive: true,
+        title: url,
+        artist: url,
+        length: 0,
+        offset: 0,
+        playlist: null,
+        thumbnailUrl: null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
