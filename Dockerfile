@@ -1,6 +1,6 @@
 # File: Dockerfile
 
-FROM node:25-bookworm AS base
+FROM node:25-bookworm-slim AS base
 
 # Update npm to latest; enable corepack if available (not in PATH in some node images)
 RUN npm install -g npm@latest && (corepack enable 2>/dev/null || true)
