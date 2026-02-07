@@ -174,6 +174,9 @@ export function createApp() {
         body,
       }) as Parameters<typeof handler>[0];
 
+      // Auth.js expects a Next.js-style request carrying nextUrl.
+      (nextReq as unknown as { nextUrl: URL }).nextUrl = new URL(fullUrl);
+
       const nextRes = await handler(nextReq);
 
       // Convert Next.js Response to Express response

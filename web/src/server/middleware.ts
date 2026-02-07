@@ -41,6 +41,9 @@ async function getSessionFromRequest(req: express.Request): Promise<Authenticate
     headers,
   }) as Parameters<typeof handlers.GET>[0];
 
+  // Auth.js expects a Next.js-style request carrying nextUrl.
+  (nextReq as unknown as { nextUrl: URL }).nextUrl = new URL(fullUrl);
+
   try {
     const sessionResponse = await handlers.GET(nextReq);
     const sessionText = await sessionResponse.text();
