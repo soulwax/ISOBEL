@@ -11,7 +11,7 @@ ISOBEL is a self-hosted Discord music bot that streams music from the Starchild 
 - **Runtime**: Node.js 20+ (latest 20.x.x LTS recommended)
 - **Language**: TypeScript with ES modules (`type: "module"`)
 - **Discord**: Discord.js v14 with @discordjs/voice for audio streaming
-- **Database**: Prisma with SQLite for persistence
+- **Database**: Prisma with PostgreSQL for persistence
 - **Dependency Injection**: Inversify with decorators (`experimentalDecorators: true`)
 - **Audio Processing**: fluent-ffmpeg (requires ffmpeg 4.1+ system dependency)
 - **Process Management**: PM2 for production deployments
@@ -51,14 +51,15 @@ npm run cache:clear-key-value  # Clear the key-value cache
 ### Database Migrations
 ```bash
 # Generate new migration (interactive, creates migration files)
-npm run migrations:generate
+npm run prisma:migrate:dev
 
 # Run pending migrations (used in production/Docker)
-npm run migrations:run
+npm run prisma:migrate:deploy
 
-# Direct Prisma commands (with DATABASE_URL set automatically)
-npm run prisma:with-env migrate dev
-npm run prisma:with-env migrate deploy
+# Check migration status
+npm run prisma:migrate:status
+
+# Generate Prisma client (required after schema changes)
 npm run prisma:generate
 ```
 
@@ -162,9 +163,9 @@ All services, managers, and commands are registered in `src/inversify.config.ts`
   - Updates "Now Playing" embeds with animated progress bars
   - Supports both Starchild API streams and HLS live streams
 
-### Database Schema (Prisma + SQLite)
+### Database Schema (Prisma + PostgreSQL)
 
-Located in `schema.prisma` at project root:
+Located in `schema.prisma` at project root. Database connection configured via `DATABASE_URL` environment variable:
 
 - **FileCache**: Stores cached MP3 files
   - `hash` (PK): SHA-256 hash of the source URL
@@ -190,7 +191,7 @@ Located in `schema.prisma` at project root:
   - `name` + `guildId` unique constraint
   - Allows custom aliases like `/play favorite:packers`
 
-Database file location: `${DATA_DIR}/database.sqlite` (defaults to `./data/database.sqlite`)
+Database connection: Configured via `DATABASE_URL` environment variable (PostgreSQL connection string, e.g., Neon, Supabase, or self-hosted)
 
 ### Commands Pattern
 
@@ -206,6 +207,7 @@ Required variables (set in `.env` or via Docker):
 - `DISCORD_TOKEN`: Bot token from Discord Developer Portal
 - `SONGBIRD_BASE_URL`: Starchild Music API base URL
 - `SONGBIRD_API_KEY`: API key for Starchild Music API
+- `DATABASE_URL`: PostgreSQL connection string (e.g., `postgresql://user:password@host:5432/database?sslmode=require`)
 
 Optional variables:
 - `DATA_DIR`: Data directory (default: `./data`)
@@ -295,7 +297,7 @@ Multi-stage build:
 
 Key runtime details:
 - Uses `tini` as PID 1 for proper signal handling
-- Runs `npm run migrations:run` before starting (via `migrate-and-start.ts`)
+- Runs `npm run prisma:migrate:deploy` before starting (via `migrate-and-start.ts`)
 - Data volume should be mounted at `/data`
 - Health check available via `HealthServer` service
 
@@ -371,7 +373,7 @@ If web submodule is missing: `npm run submodule:init` or `git submodule update -
 - **ffmpeg**: Must be installed on system (not npm package)
 - **64-bit OS required**: Due to Discord voice dependencies
 - **Submodules**: Always clone with `--recursive` flag or run `npm run submodule:init`
-- **Database URL**: Auto-generated as `file:${DATA_DIR}/database.sqlite`, managed by `run-with-database-url.ts`
+- **Database URL**: Set via `DATABASE_URL` environment variable (PostgreSQL connection string). Falls back to SQLite file path if not set (for backward compatibility)
 
 ## Testing & Quality
 
@@ -385,7 +387,7 @@ If web submodule is missing: `npm run submodule:init` or `git submodule update -
 - **401 Unauthorized from Starchild API**: Ensure `SONGBIRD_API_KEY` is set correctly. The API key must be passed as a query parameter (`key=`), which is handled automatically by the `StarchildAPI` service. If you see this error, check that `getStreamUrl()` in `services/starchild-api.ts` includes the API key in the URL params.
 - **ffmpeg not found**: Install system package (`apt-get install ffmpeg` on Debian/Ubuntu)
 - **Voice connection issues**: Check bot has Connect + Speak permissions (BOT_REQUIRED_PERMISSIONS = 36700160)
-- **Database locked**: SQLite issue - ensure only one bot instance per database file
+- **Database connection errors**: Ensure `DATABASE_URL` is set correctly and PostgreSQL is accessible. For SQLite (fallback), ensure only one bot instance per database file
 - **Submodule not found**: Run `npm run submodule:init` or `git submodule update --init --recursive`
 - **Build errors after git pull**: Run `npm run prisma:generate` to regenerate Prisma client
 - **PM2 process conflicts**: Use `npm run pm2:reset` to clear all processes and start fresh

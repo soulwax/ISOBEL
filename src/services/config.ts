@@ -15,6 +15,7 @@ const CONFIG_MAP = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   SONGBIRD_API_KEY: process.env.SONGBIRD_API_KEY,
   SONGBIRD_BASE_URL: process.env.SONGBIRD_BASE_URL,
+  SONGBIRD_NEXT_URL: process.env.SONGBIRD_NEXT_URL ?? '',
   REGISTER_COMMANDS_ON_BOT: process.env.REGISTER_COMMANDS_ON_BOT === 'true',
   DATA_DIR,
   CACHE_DIR: path.join(DATA_DIR, 'cache'),
@@ -39,6 +40,7 @@ export default class Config {
   readonly DISCORD_TOKEN!: string;
   readonly SONGBIRD_API_KEY!: string;
   readonly SONGBIRD_BASE_URL!: string;
+  readonly SONGBIRD_NEXT_URL!: string;
   readonly REGISTER_COMMANDS_ON_BOT!: boolean;
   readonly DATA_DIR!: string;
   readonly CACHE_DIR!: string;
