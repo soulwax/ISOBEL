@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-02-07
+
+### Fixed
+- Improved Discord web authentication reliability by preventing frequent `/api/auth/session` and `/api/auth/csrf` checks from being rate-limited during login flows
+- Fixed guild settings page layout alignment when the authenticated server sidebar is visible
+- Fixed authenticated guild selection handling so server settings only render when the user is logged in
+- Fixed guild settings fetch/update requests to consistently use the shared API base path
+
+### Changed
+- Increased auth endpoint rate limits to better support Discord OAuth callback/session traffic
+- Updated server management UX so the left sidebar server list and per-server settings navigation behave more consistently
+
 ## [2.17.3] - 2026-01-22
 
 ### Fixed
