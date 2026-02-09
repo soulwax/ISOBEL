@@ -7,7 +7,8 @@ import { and, eq } from "drizzle-orm";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import { handlers } from "../auth/index.js";
+// Lazy import handlers to avoid initialization errors at module load time
+// import { handlers } from "../auth/index.js";
 import { db } from "../db/index.js";
 import {
   discordGuilds,
@@ -38,6 +39,11 @@ if (process.env.VERCEL !== '1') {
 export function createApp() {
   const app = express();
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
+
+  // Trust proxy for Vercel (needed for correct protocol detection)
+  if (process.env.VERCEL) {
+    app.set('trust proxy', true);
+  }
 
   // Security headers
   app.use(helmet({
@@ -136,6 +142,31 @@ export function createApp() {
   // NextAuth API routes - match all paths starting with /api/auth/
   app.all(/^\/api\/auth\/.*/, authLimiter, async (req, res): Promise<void> => {
     try {
+      // Lazy import handlers to avoid initialization errors at module load time
+      let handlers;
+      try {
+        const authModule = await import("../auth/index.js");
+        handlers = authModule.handlers;
+      } catch (importError) {
+        const errorMessage = importError instanceof Error ? importError.message : String(importError);
+        const errorStack = importError instanceof Error ? importError.stack : undefined;
+        logger.error("Failed to import auth handlers", { 
+          error: errorMessage,
+          stack: errorStack,
+        });
+        res.status(500).json({ 
+          error: "Authentication service unavailable",
+          ...(process.env.NODE_ENV === 'development' && { details: errorMessage })
+        });
+        return;
+      }
+
+      if (!handlers) {
+        logger.error("Handlers not available");
+        res.status(500).json({ error: "Authentication handlers not initialized" });
+        return;
+      }
+
       const { GET, POST } = handlers;
       const handler = req.method === "GET" ? GET : POST;
 
@@ -145,8 +176,9 @@ export function createApp() {
       }
 
       // Build full URL using originalUrl which contains the full path
-      const protocol = req.protocol || "http";
-      const host = req.get("host") || "localhost:3001";
+      // Check X-Forwarded-Proto for Vercel/proxy environments
+      const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+      const host = req.get("x-forwarded-host") || req.get("host") || "localhost:3001";
       const fullUrl = `${protocol}://${host}${req.originalUrl}`;
 
       // Convert Express req to Next.js Request
@@ -198,8 +230,27 @@ export function createApp() {
 
       res.send(bodyText);
     } catch (error) {
-      logger.error("Auth handler error", { error, path: req.path });
-      res.status(500).json({ error: "Internal server error" });
+      // Enhanced error logging
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error("Auth handler error", { 
+        error: errorMessage,
+        stack: errorStack,
+        path: req.path,
+        method: req.method,
+        url: req.originalUrl,
+      });
+      
+      // Send more detailed error in development
+      if (process.env.NODE_ENV === 'development') {
+        res.status(500).json({ 
+          error: "Internal server error",
+          message: errorMessage,
+          path: req.path,
+        });
+      } else {
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
   });
 

@@ -10,6 +10,9 @@ import {
   HiOutlineStop,
   HiOutlineVideoCamera,
   HiOutlineVolumeUp,
+  HiOutlinePlay,
+  HiOutlineLink,
+  HiOutlineCollection,
 } from "react-icons/hi";
 import { useState } from "react";
 import "./App.css";
@@ -239,6 +242,33 @@ function App() {
                 <h3 className="feature-title">TypeScript</h3>
                 <p className="feature-description">
                   Written in TypeScript with full type safety, easily extendable
+                </p>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon">
+                  <HiOutlinePlay />
+                </div>
+                <h3 className="feature-title">Direct MP3 Playback</h3>
+                <p className="feature-description">
+                  Play MP3 files directly when selected, bypassing unnecessary processing for optimal performance
+                </p>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon">
+                  <HiOutlineLink />
+                </div>
+                <h3 className="feature-title">YouTube URL Support</h3>
+                <p className="feature-description">
+                  Simply paste YouTube URLs to instantly queue and play your favorite tracks
+                </p>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon">
+                  <HiOutlineCollection />
+                </div>
+                <h3 className="feature-title">Smart Queue Management</h3>
+                <p className="feature-description">
+                  Intelligent queue system with shuffle, repeat, and priority controls for seamless playback
                 </p>
               </div>
             </div>
