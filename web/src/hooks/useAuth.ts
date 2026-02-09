@@ -2,19 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { getSession, signIn, signOut } from '../lib/auth-client';
-
-interface Session {
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-    image?: string;
-  };
-  expires?: string;
-}
+import type { AppSession } from '../types/discord';
 
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AppSession | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshSession = async () => {

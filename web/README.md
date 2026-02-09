@@ -84,9 +84,10 @@ npx vercel
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Create or select your application
 3. Go to OAuth2 settings
-4. Add redirect URL: `https://isobelnet.vercel.app/api/auth/callback/discord`
-5. Copy Client ID and Client Secret to Vercel environment variables
-6. **Important**: Make sure `NEXTAUTH_URL` is set to `https://isobelnet.vercel.app` in your Vercel environment variables
+4. Add redirect URL: `${NEXTAUTH_URL}/api/auth/callback/discord` (example: `https://your-app.vercel.app/api/auth/callback/discord`)
+5. Under OAuth2 scopes, enable `identify` and `guilds`
+6. Copy Client ID and Client Secret to your environment variables
+7. **Important**: Make sure `NEXTAUTH_URL` matches your deployment base URL (e.g., `https://your-app.vercel.app`)
 
 ### Database Setup
 
