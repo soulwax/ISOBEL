@@ -32,7 +32,7 @@ export const authConfig = {
       clientSecret: requireEnv('DISCORD_CLIENT_SECRET'),
       authorization: {
         params: {
-          scope: 'identify email guilds',
+          scope: 'identify guilds',
         },
       },
     }),

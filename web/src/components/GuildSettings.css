@@ -61,6 +61,12 @@
   gap: 1rem;
 }
 
+.guild-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .guild-header-icon {
   width: 48px;
   height: 48px;
@@ -86,6 +92,12 @@
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.guild-header-id {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
 }
 
 .settings-content {
@@ -265,4 +277,3 @@
     width: 100%;
   }
 }
-

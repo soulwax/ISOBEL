@@ -3,35 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL } from '../lib/api-paths';
+import type { DiscordGuild, GuildSettingsData } from '../types/discord';
 import './GuildSettings.css';
 
-interface GuildSettings {
-  guildId: string;
-  playlistLimit: number;
-  secondsToWaitAfterQueueEmpties: number;
-  leaveIfNoListeners: boolean;
-  queueAddResponseEphemeral: boolean;
-  autoAnnounceNextSong: boolean;
-  defaultVolume: number;
-  defaultQueuePageSize: number;
-  turnDownVolumeWhenPeopleSpeak: boolean;
-  turnDownVolumeWhenPeopleSpeakTarget: number;
-}
-
-interface Guild {
-  id: string;
-  name: string;
-  icon: string | null;
-}
-
 interface GuildSettingsProps {
-  guild: Guild | null;
+  guild: DiscordGuild | null;
   onBack: () => void;
 }
 
 export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
   const { isAuthenticated } = useAuth();
-  const [settings, setSettings] = useState<GuildSettings | null>(null);
+  const [settings, setSettings] = useState<GuildSettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +102,7 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
     }
   };
 
-  const handleChange = (field: keyof GuildSettings, value: string | number | boolean) => {
+  const handleChange = (field: keyof GuildSettingsData, value: string | number | boolean) => {
     if (!settings) return;
     setSettings({
       ...settings,
@@ -178,7 +160,10 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
               {guild.name.substring(0, 2).toUpperCase()}
             </div>
           )}
-          <h2 className="guild-header-name">{guild.name} Settings</h2>
+          <div className="guild-header-text">
+            <h2 className="guild-header-name">{guild.name} Settings</h2>
+            <span className="guild-header-id">Server ID: {guild.id}</span>
+          </div>
         </div>
       </div>
 
@@ -372,4 +357,3 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
     </div>
   );
 }
-
