@@ -32,13 +32,11 @@
       ]
     },
     "types": [
-      "vite/client",
-      "astro/client"
+      "vite/client"
     ]
   },
   "include": [
     "src",
-    "astro.config.*",
     "vite.config.*",
     "env.d.ts"
   ],

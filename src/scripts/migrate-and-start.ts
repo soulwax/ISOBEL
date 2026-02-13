@@ -87,9 +87,17 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
     await execa('prisma', ['migrate', 'deploy'], {preferLocal: true});
   } catch (error: unknown) {
     if ((error as ExecaError).stderr) {
-      spinner.fail('Failed to apply database migrations:');
-      console.error((error as ExecaError).stderr);
-      process.exit(1);
+      const errorMessage = (error as ExecaError).stderr as string;
+
+      // P3005: Database schema is not empty - this is OK for existing databases
+      if (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('P3005')) {
+        spinner.warn('Database schema already exists, skipping migrations.');
+        console.log('💡 Tip: Run "npx prisma migrate resolve --applied 0_init" to baseline migrations if needed.');
+      } else {
+        spinner.fail('Failed to apply database migrations:');
+        console.error(errorMessage);
+        process.exit(1);
+      }
     } else {
       throw error;
     }
