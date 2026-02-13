@@ -172,6 +172,5 @@
   },
   "resolutions": {
     "@types/ws": "8.18.1"
-  },
-  "packageManager": "npm@11.9.0"
+  }
 }
