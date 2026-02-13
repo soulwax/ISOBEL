@@ -32,7 +32,8 @@
       ]
     },
     "types": [
-      "vite/client"
+      "vite/client",
+      "astro/client"
     ]
   },
   "include": [

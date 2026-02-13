@@ -12,12 +12,14 @@ services:
     ports:
       - "${WEB_PORT:-3001}:3001"
     volumes:
-      - ./data:/data:ro  # Read-only access to bot data
+      - ./data:/data:de # Read-only access to bot data
     environment:
       # Web server configuration
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=file:/data/database.sqlite
+
+      # Database (required - must be PostgreSQL)
+      - DATABASE_URL=${DATABASE_URL}
 
       # Discord OAuth (required for web interface)
       - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
@@ -25,14 +27,15 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
 
-      # Optional: Point to the bot's database
+      # Optional: Bot health endpoint
+      - BOT_HEALTH_URL=${BOT_HEALTH_URL:-http://bot:3002/health}
       - DATA_DIR=/data
     networks:
       - isobel-network
     depends_on:
       - bot
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health", "||", "exit", "1"]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health", "||", "exit", "1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -50,16 +53,23 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3003
+
+      # Database (required for NextAuth sessions)
+      - DATABASE_URL=${DATABASE_URL}
+
+      # NextAuth configuration
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3003}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+
+      # Discord OAuth
       - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
       - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
     networks:
       - isobel-network
     depends_on:
       - bot
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/health", "||", "exit", "1"]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/health", "||", "exit", "1" ]
       interval: 30s
       timeout: 10s
       retries: 3

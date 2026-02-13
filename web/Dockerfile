@@ -1,0 +1,50 @@
+# Web Interface Dockerfile
+# Multi-stage build for the ISOBEL web interface
+
+# Stage 1: Build
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Stage 2: Production
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Install production dependencies
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy built application from builder
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/scripts ./scripts
+
+# Copy necessary config files
+COPY tsconfig.json ./
+COPY vite.config.ts ./
+
+# Expose port
+EXPOSE 3001
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3001/health || exit 1
+
+# Start the web server
+CMD ["node", "scripts/start-web.js"]
