@@ -30,6 +30,33 @@ import FileCacheProvider from './file-cache.js';
 import SongbirdNext from './songbird-next.js';
 import StarchildAPI from './starchild-api.js';
 
+const configureFfmpeggy = (): void => {
+  const ffmpeggy = FFmpeggy as unknown as {
+    DefaultConfig?: {
+      ffmpegBin?: string;
+      ffprobeBin?: string;
+    };
+  };
+  const defaultConfig = ffmpeggy.DefaultConfig;
+
+  if (!defaultConfig) {
+    return;
+  }
+
+  const ffmpegPath = process.env.FFMPEG_PATH?.trim();
+  const ffprobePath = process.env.FFPROBE_PATH?.trim();
+
+  if (!defaultConfig.ffmpegBin || defaultConfig.ffmpegBin.trim() === '') {
+    defaultConfig.ffmpegBin = ffmpegPath && ffmpegPath.length > 0 ? ffmpegPath : 'ffmpeg';
+  }
+
+  if (!defaultConfig.ffprobeBin || defaultConfig.ffprobeBin.trim() === '') {
+    defaultConfig.ffprobeBin = ffprobePath && ffprobePath.length > 0 ? ffprobePath : 'ffprobe';
+  }
+};
+
+configureFfmpeggy();
+
 export enum MediaSource {
   Starchild,
   HLS,
@@ -86,7 +113,6 @@ export default class {
   private defaultVolume: number = DEFAULT_VOLUME;
   private nowPlaying: QueuedSong | null = null;
   private playPositionInterval: NodeJS.Timeout | undefined;
-  private lastSongURL = '';
 
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
@@ -272,22 +298,22 @@ export default class {
 
       this.attachListeners();
 
+      const previousSong = this.nowPlaying;
       this.status = STATUS.PLAYING;
       this.nowPlaying = currentSong;
       this.playbackErrorAttempts = 0;
 
-      const isNewSong = currentSong.url !== this.lastSongURL;
+      const isNewSong = previousSong !== currentSong;
 
-      // Always reset position when starting a new song
-      // If it's the same URL, we're seeking/resuming, so preserve position
-      // Otherwise, start from the beginning (or offset)
+      // Always reset position when starting a different queued song.
+      // If it's the same queue item, we're seeking/resuming, so preserve position.
       if (!isNewSong) {
         // Same song - preserve position (for seeking/resuming)
         this.startTrackingPosition(this.positionInSeconds);
       } else {
         // New song - reset position to start (or offset)
         this.startTrackingPosition(positionSeconds ?? 0);
-        this.lastSongURL = currentSong.url;
+        await this.rotateNowPlayingMessage();
       }
 
       // Start updating the embed periodically
@@ -808,6 +834,38 @@ export default class {
     }
   }
 
+  /**
+   * Sends a fresh now-playing post for the current song and deletes the previous post.
+   * Falls back silently if the message cannot be sent/deleted (missing permissions, deleted message, etc.).
+   */
+  private async rotateNowPlayingMessage(): Promise<void> {
+    const previousMessage = this.nowPlayingMessage;
+    if (!previousMessage) {
+      return;
+    }
+    const channel = previousMessage.channel;
+    if (!('send' in channel) || typeof channel.send !== 'function') {
+      return;
+    }
+
+    try {
+      const newMessage = await channel.send({
+        embeds: [buildPlayingMessageEmbed(this)],
+        components: buildPlaybackControls(this),
+      });
+      this.nowPlayingMessage = newMessage;
+    } catch (error) {
+      debug(`Failed to create new now-playing message: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+
+    try {
+      await previousMessage.delete();
+    } catch (error) {
+      debug(`Failed to delete previous now-playing message: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private attachListeners(): void {
     if (!this.voiceConnection) {
       return;
@@ -936,7 +994,7 @@ export default class {
       const ff = new FFmpeggy({
         input: options.url,
         inputOptions,
-        output: capacitor,
+        pipe: true,
         outputOptions: [
           '-vn',
           '-c:a', 'libopus',
@@ -946,6 +1004,7 @@ export default class {
         ],
         overwriteExisting: true,
       });
+      ff.toStream().pipe(capacitor as unknown as NodeJS.WritableStream);
 
       ff
         .on('error', (error: Error) => {
@@ -974,7 +1033,15 @@ export default class {
         }
       }, 5000);
 
-      void ff.run();
+      void ff.run().catch((error: unknown) => {
+        if (hasResolved) {
+          return;
+        }
+
+        hasResolved = true;
+        clearTimeout(startTimeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
 
       returnedStream.on('close', () => {
         if (!options.cache) {

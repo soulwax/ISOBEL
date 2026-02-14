@@ -17,6 +17,7 @@ declare module 'ffmpeggy' {
     constructor(opts?: FFmpeggyOptions);
     run(): Promise<unknown>;
     stop(signal?: number): Promise<void>;
+    toStream(): NodeJS.ReadableStream;
     on(event: 'error', listener: (error: Error) => void): this;
     on(event: 'start', listener: (args: readonly string[]) => void): this;
   }
