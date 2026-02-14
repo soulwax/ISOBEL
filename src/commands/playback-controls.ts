@@ -118,15 +118,27 @@ export default class implements Command {
     }
 
     try {
-      await interaction.message.edit({
-        embeds: [buildPlayingMessageEmbed(player)],
-        components: buildPlaybackControls(player),
-      });
+      const currentSong = player.getCurrent();
+      if (currentSong) {
+        player.setNowPlayingMessage(interaction.message);
+        await interaction.update({
+          embeds: [buildPlayingMessageEmbed(player)],
+          components: buildPlaybackControls(player),
+        });
+      } else {
+        player.setNowPlayingMessage(null);
+        await interaction.update({
+          content: 'Playback stopped.',
+          embeds: [],
+          components: [],
+        });
+      }
     } catch {
-      // If message was deleted or can't be edited, fall back to ack
+      // If message was deleted or can't be updated, fall back to ack.
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferUpdate();
+      }
     }
-
-    await interaction.deferUpdate();
   }
 
   public async handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
