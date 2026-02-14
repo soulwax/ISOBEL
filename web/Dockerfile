@@ -42,9 +42,9 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Health check
+# Health check (using node instead of wget for Alpine)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3001/health || exit 1
+  CMD node -e "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 # Start the production server
 CMD ["node", "scripts/serve-prod.js"]
