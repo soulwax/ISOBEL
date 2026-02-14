@@ -85,14 +85,25 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
 
   try {
     await execa('prisma', ['migrate', 'deploy'], {preferLocal: true});
+    spinner.succeed('Database migrations applied.');
   } catch (error: unknown) {
     if ((error as ExecaError).stderr) {
       const errorMessage = (error as ExecaError).stderr as string;
 
-      // P3005: Database schema is not empty - this is OK for existing databases
+      // P3005: Database schema is not empty - need to baseline migrations first
       if (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('P3005')) {
-        spinner.warn('Database schema already exists, skipping migrations.');
-        console.log('💡 Tip: Run "npx prisma migrate resolve --applied 0_init" to baseline migrations if needed.');
+        spinner.fail('Database schema is not empty. Need to baseline migrations first.');
+        console.error('\n❌ The database has an existing schema but no migration history.');
+        console.error('📝 This usually means you need to baseline your migrations.\n');
+        console.error('To fix this, run ONE of the following commands:\n');
+        console.error('  1. Baseline existing migrations (if database has ISOBEL tables):');
+        console.error('     docker compose exec bot npx prisma migrate resolve --applied "0_init"\n');
+        console.error('  2. Reset and recreate the database (WARNING: deletes all data):');
+        console.error('     docker compose exec bot npx prisma migrate reset --force\n');
+        console.error('  3. Create a fresh baseline migration:');
+        console.error('     docker compose exec bot npx prisma migrate diff --from-empty --to-schema-datamodel schema.prisma --script > baseline.sql');
+        console.error('     # Then apply it manually to your database\n');
+        process.exit(1);
       } else {
         spinner.fail('Failed to apply database migrations:');
         console.error(errorMessage);
@@ -102,8 +113,6 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
       throw error;
     }
   }
-
-  spinner.succeed('Database migrations applied.');
 
   await startBot();
 })();
