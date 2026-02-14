@@ -1,7 +1,7 @@
 // File: src/scripts/migrate-and-start.ts
 
-import dotenv from 'dotenv';
-dotenv.config();
+// CRITICAL: This must be the FIRST import to load environment variables
+import './load-env.js';
 
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';

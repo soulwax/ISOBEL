@@ -28,7 +28,7 @@ function App() {
   const { isAuthenticated } = useAuth();
   const activeSelectedGuild = isAuthenticated ? selectedGuild : null;
 
-  const handleGuildSelect = (guild: Guild) => {
+  const handleGuildSelect = (guild: DiscordGuild) => {
     setSelectedGuild(guild);
   };
 
