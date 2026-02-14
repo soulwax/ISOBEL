@@ -32,7 +32,7 @@ First of all, this bot does not depend on YouTube or Spotify for music streaming
 Yes, it is more of a black box experience now than before, but with spotify and youtube being so unreliable for music streaming, this was the only way to go. Sorry Max.
 The second big change is that this bot is coming with its own web interface for configuration and settings management but this is work in progress. See [./web/README.md](./web/README.md).
 
-**OTHERWISE**, ISOBEL works like before, you /play songs, /skip them, /pause, /resume, /seek, etc.
+**OTHERWISE**, ISOBEL works like before, you /play songs, /file uploads, /skip, /pause, /resume, /seek, etc.
 
 ## Features
 

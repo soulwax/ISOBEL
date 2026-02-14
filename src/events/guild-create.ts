@@ -48,6 +48,7 @@ I'm ISOBEL, a Discord music bot that streams high-quality audio from the Starchi
 
 🎵 **Music Playback**
 • Play songs with \`/play\` - search for tracks or use HLS stream URLs
+• Play uploads with \`/file\` - attach an mp3 directly from Discord
 • Queue management - view, shuffle, remove, and move songs in the queue
 • Favorites system - save and quickly access your favorite tracks
 • Looping - loop the current song or entire queue
