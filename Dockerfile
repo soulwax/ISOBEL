@@ -58,7 +58,7 @@ COPY . .
 
 # Run tsc build
 RUN npm run prisma:generate
-RUN npm run build:bot
+RUN npm run build
 
 # Only keep what's necessary to run
 FROM base AS runner

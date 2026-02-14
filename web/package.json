@@ -21,13 +21,17 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "pm2:start:web": "pm2 start ecosystem.config.cjs --only isobel-web",
+    "pm2:restart:web": "pm2 restart ecosystem.config.cjs --only isobel-web --update-env",
+    "pm2:stop:web": "pm2 stop isobel-web",
+    "pm2:delete:web": "pm2 delete isobel-web",
     "pm2:start": "pm2 start ecosystem.config.cjs",
     "pm2:start:dev": "pm2 start ecosystem.config.cjs --env development",
     "pm2:start:prod": "pm2 start ecosystem.config.cjs --env production",
-    "pm2:stop": "pm2 stop ecosystem.config.cjs",
-    "pm2:restart": "pm2 restart ecosystem.config.cjs --update-env",
-    "pm2:reload": "pm2 reload ecosystem.config.cjs --update-env",
-    "pm2:delete": "pm2 delete ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop isobel-web isobel-auth",
+    "pm2:restart": "pm2 restart isobel-web isobel-auth --update-env",
+    "pm2:reload": "pm2 reload isobel-web isobel-auth --update-env",
+    "pm2:delete": "pm2 delete isobel-web isobel-auth",
     "pm2:logs": "pm2 logs",
     "pm2:logs:auth": "pm2 logs isobel-auth",
     "pm2:logs:web": "pm2 logs isobel-web",
@@ -52,7 +56,8 @@
     "react-dom": "^19.2.4",
     "react-icons": "^5.5.0",
     "winston": "^3.19.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "dotenv": "^17.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -63,7 +68,6 @@
     "@vercel/node": "^3.2.29",
     "@vitejs/plugin-react": "^5.1.3",
     "concurrently": "^9.2.1",
-    "dotenv": "^17.2.4",
     "drizzle-kit": "^0.31.8",
     "eslint": "^9.39.2",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -73,6 +77,5 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.54.0",
     "vite": "^7.3.1"
-  },
-  "packageManager": "npm@11.9.0"
+  }
 }

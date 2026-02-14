@@ -22,6 +22,7 @@ import Clear from './commands/clear.js';
 import Config from './commands/config.js';
 import Disconnect from './commands/disconnect.js';
 import Favorites from './commands/favorites.js';
+import File from './commands/file.js';
 import ForwardSeek from './commands/fseek.js';
 import Command from './commands/index.js';
 import LoopQueue from './commands/loop-queue.js';
@@ -77,6 +78,7 @@ container.bind<SongbirdNext>(TYPES.Services.SongbirdNext).to(SongbirdNext).inSin
   Config,
   Disconnect,
   Favorites,
+  File,
   ForwardSeek,
   LoopQueue,
   Loop,

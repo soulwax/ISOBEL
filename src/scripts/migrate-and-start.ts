@@ -85,17 +85,34 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
 
   try {
     await execa('prisma', ['migrate', 'deploy'], {preferLocal: true});
+    spinner.succeed('Database migrations applied.');
   } catch (error: unknown) {
     if ((error as ExecaError).stderr) {
-      spinner.fail('Failed to apply database migrations:');
-      console.error((error as ExecaError).stderr);
-      process.exit(1);
+      const errorMessage = (error as ExecaError).stderr as string;
+
+      // P3005: Database schema is not empty - need to baseline migrations first
+      if (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('P3005')) {
+        spinner.fail('Database schema is not empty. Need to baseline migrations first.');
+        console.error('\n❌ The database has an existing schema but no migration history.');
+        console.error('📝 This usually means you need to baseline your migrations.\n');
+        console.error('To fix this, run ONE of the following commands:\n');
+        console.error('  1. Baseline existing migrations (if database has ISOBEL tables):');
+        console.error('     docker compose exec bot npx prisma migrate resolve --applied "0_init"\n');
+        console.error('  2. Reset and recreate the database (WARNING: deletes all data):');
+        console.error('     docker compose exec bot npx prisma migrate reset --force\n');
+        console.error('  3. Create a fresh baseline migration:');
+        console.error('     docker compose exec bot npx prisma migrate diff --from-empty --to-schema-datamodel schema.prisma --script > baseline.sql');
+        console.error('     # Then apply it manually to your database\n');
+        process.exit(1);
+      } else {
+        spinner.fail('Failed to apply database migrations:');
+        console.error(errorMessage);
+        process.exit(1);
+      }
     } else {
       throw error;
     }
   }
-
-  spinner.succeed('Database migrations applied.');
 
   await startBot();
 })();

@@ -32,8 +32,15 @@
     "env:set-database-url": "tsx src/scripts/run-with-database-url.ts",
     "release": "release-it",
     "build": "tsc",
-    "build:bot": "tsc",
-    "pm2:start": "pm2 start ecosystem.config.cjs --env production",
+    "build:all": "npm run build && npm run web:build",
+    "verify:env": "tsx src/scripts/verify-environment.ts",
+    "verify:db": "tsx src/scripts/verify-database.ts",
+    "deploy": "npm run build:all && npm run start:all:prod",
+    "deploy:dev": "npm run build && npm run pm2:start:dev && npm run web:pm2:start:dev",
+    "db:status": "npm run prisma:migrate:status",
+    "db:reset": "npm run prisma:with-env -- migrate reset",
+    "health": "curl -s http://localhost:3002/health || echo 'Health check failed - bot may not be running'",
+    "health:web": "curl -s http://localhost:3001/health || echo 'Health check failed - web may not be running'",
     "pm2:start:prod": "pm2 start ecosystem.config.cjs --env production",
     "pm2:start:staging": "pm2 start ecosystem.config.cjs --env staging",
     "pm2:start:dev": "pm2 start ecosystem.config.cjs --env development",
@@ -84,8 +91,7 @@
     "lint:all": "npm run lint && (test -d web && cd web && npm run lint || echo 'Web lint skipped - web directory may not exist')",
     "lint:fix:all": "npm run lint:fix && (test -d web && cd web && npm run lint -- --fix || echo 'Web lint:fix skipped - web directory may not exist')",
     "typecheck:all": "npm run typecheck && (test -d web && cd web && npx tsc --noEmit || echo 'Web typecheck skipped - web directory may not exist')",
-    "build:all": "npm run build:bot && npm run web:build",
-    "start:all": "npm run pm2:start && npm run web:pm2:start",
+    "start:all": "npm run pm2:start:prod && npm run web:pm2:start",
     "start:all:dev": "npm run pm2:start:dev && npm run web:pm2:start:dev",
     "start:all:prod": "npm run pm2:start:prod && npm run web:pm2:start:prod",
     "stop:all": "npm run pm2:stop && npm run web:pm2:stop",
@@ -171,6 +177,5 @@
   },
   "resolutions": {
     "@types/ws": "8.18.1"
-  },
-  "packageManager": "npm@11.9.0"
+  }
 }
