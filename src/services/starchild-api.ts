@@ -119,7 +119,7 @@ export default class {
       params.set('offset', options.offset.toString());
     }
 
-    return `${this.baseUrl}/music/stream?${params.toString()}`;
+    return `${this.baseUrl}/music/stream/direct?${params.toString()}`;
   }
 
   /**

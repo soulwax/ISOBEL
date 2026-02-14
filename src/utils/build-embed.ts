@@ -1,7 +1,7 @@
 // File: src/utils/build-embed.ts
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-import Player, { MediaSource, QueuedSong, STATUS } from '../services/player.js';
+import Player, { QueuedSong, STATUS } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
 import { truncate } from './string.js';
@@ -13,19 +13,38 @@ const getMaxSongTitleLength = (title: string) => {
   return nonASCII.test(title) ? 28 : 48;
 };
 
-const getSongTitle = ({title, url, offset, source}: QueuedSong, shouldTruncate = false) => {
-  if (source === MediaSource.HLS) {
-    return `[${title}](${url})`;
+const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() || '';
+
+const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
+
+const buildSongLink = (artist: string, title: string): string | null => {
+  if (SONG_LINK_TEMPLATE === '') {
+    return null;
   }
 
-  const cleanSongTitle = title.replace(/\[.*\]/, '').trim();
+  const encodedArtist = encodeDarkfloorPart(artist);
+  const encodedTitle = encodeDarkfloorPart(title);
+  const encodedQuery = `${encodedArtist}+${encodedTitle}`;
 
-  const songTitle = shouldTruncate ? truncate(cleanSongTitle, getMaxSongTitleLength(cleanSongTitle)) : cleanSongTitle;
-  
-  // For Starchild, url is the Deezer track ID
-  const deezerUrl = `https://www.deezer.com/track/${url}`;
+  return SONG_LINK_TEMPLATE
+    .replaceAll('{artist}', encodedArtist)
+    .replaceAll('{title}', encodedTitle)
+    .replaceAll('{query}', encodedQuery);
+};
 
-  return `[${songTitle}](${deezerUrl})`;
+const getSongTitle = ({title, artist}: QueuedSong, shouldTruncate = false) => {
+  const cleanSongTitle = title.replace(/\[.*\]/, '').trim() || 'Unknown title';
+  const cleanArtist = artist.trim() || 'Unknown artist';
+
+  const linkText = `${cleanSongTitle} - ${cleanArtist}`;
+  const songTitle = shouldTruncate ? truncate(linkText, getMaxSongTitleLength(linkText)) : linkText;
+  const songUrl = buildSongLink(cleanArtist, cleanSongTitle);
+
+  if (!songUrl) {
+    return songTitle;
+  }
+
+  return `[${songTitle}](${songUrl})`;
 };
 
 const getQueueInfo = (player: Player) => {
