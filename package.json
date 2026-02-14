@@ -112,7 +112,7 @@
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
     "concurrently": "^9.2.1",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "eslint-config-xo-typescript": "^9.0.0",
     "eslint-plugin-import": "^2.32.0",
     "husky": "^9.1.7",
