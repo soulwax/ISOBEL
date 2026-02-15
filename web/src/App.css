@@ -620,6 +620,63 @@ body {
   color: var(--text-secondary);
 }
 
+/* Setup Section */
+.setup {
+  padding: 6rem 2rem;
+  background-color: var(--discord-dark);
+  position: relative;
+}
+
+.setup::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+.setup-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.setup-card-title {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.setup-list {
+  color: var(--text-secondary);
+  padding-left: 1.25rem;
+  line-height: 1.7;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setup-code {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(88, 101, 242, 0.35);
+  background-color: rgba(88, 101, 242, 0.12);
+  color: var(--text-primary);
+  padding: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
 .feature-card {
   background-color: var(--card-bg);
   padding: 2rem;
@@ -902,6 +959,10 @@ body {
   }
 
   .help {
+    padding: 4rem 1rem;
+  }
+
+  .setup {
     padding: 4rem 1rem;
   }
 
