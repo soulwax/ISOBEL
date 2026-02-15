@@ -59,7 +59,9 @@ export default class HealthServer {
   }
 
   public start(): void {
-    const port = process.env.HEALTH_PORT ? parseInt(process.env.HEALTH_PORT, 10) : 3002;
+    const configuredPort = process.env.HEALTH_PORT ?? process.env.PORT ?? '3002';
+    const parsedPort = parseInt(configuredPort, 10);
+    const port = Number.isNaN(parsedPort) ? 3002 : parsedPort;
 
     // Clear any existing interval before creating a new one
     if (this.cleanupInterval) {
