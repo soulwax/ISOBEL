@@ -1,8 +1,7 @@
 const path = require('path');
-const { config } = require('dotenv');
+const { loadEnvWithSafeguard } = require('./scripts/load-env.cjs');
 
-// Load environment variables from .env file
-config();
+loadEnvWithSafeguard(path.resolve(__dirname, '.env'));
 
 module.exports = {
   apps: [

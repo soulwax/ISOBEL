@@ -4,14 +4,13 @@
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { config } from 'dotenv';
+import { loadEnvWithSafeguard } from './load-env.js';
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from .env file
-config();
+loadEnvWithSafeguard();
 
 const isProduction = process.env.NODE_ENV === 'production';
 

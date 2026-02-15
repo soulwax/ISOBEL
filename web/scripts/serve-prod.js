@@ -4,10 +4,9 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { config } from 'dotenv';
+import { loadEnvWithSafeguard } from './load-env.js';
 
-// Load environment variables
-config();
+loadEnvWithSafeguard();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
