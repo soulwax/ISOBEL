@@ -16,7 +16,7 @@ export default defineConfig({
     allowedHosts: true, // Allow all hosts
     proxy: {
       '/api': {
-        target: process.env.VITE_AUTH_API_URL || 'http://localhost:3003',
+        target: process.env.AUTH_PROXY_TARGET || 'http://localhost:3003',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -25,7 +25,7 @@ export default defineConfig({
             console.log('proxy error', err);
           });
           proxy.on('proxyReq', (_proxyReq, req, _res) => {
-            console.log('Proxying:', req.method, req.url, '-> target:', process.env.VITE_AUTH_API_URL || 'http://localhost:3003');
+            console.log('Proxying:', req.method, req.url, '-> target:', process.env.AUTH_PROXY_TARGET || 'http://localhost:3003');
           });
         },
       },
@@ -36,7 +36,7 @@ export default defineConfig({
     port: parseInt(process.env.PORT || '3001', 10),
     proxy: {
       '/api': {
-        target: process.env.VITE_AUTH_API_URL || 'http://localhost:3003',
+        target: process.env.AUTH_PROXY_TARGET || 'http://localhost:3003',
         changeOrigin: true,
         secure: false,
         ws: true,
