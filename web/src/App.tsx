@@ -110,6 +110,7 @@ function App() {
             <HealthIndicator />
             <a href="#features">Features</a>
             <a href="#help">Help</a>
+            <a href="#setup">Setup</a>
             <a href="#about">About</a>
             <a
               href="https://songbirdapi.com"
@@ -392,6 +393,47 @@ function App() {
             <p className="help-note">
               Most playback commands require you to be in a voice channel.
             </p>
+          </div>
+        </section>
+
+        <section id="setup" className="setup">
+          <div className="container">
+            <h2 className="section-title">Setup Your Own ISOBEL</h2>
+            <p className="section-subtitle">
+              Run your own bot instance with local control over settings, data, and uptime.
+            </p>
+            <div className="setup-grid">
+              <article className="setup-card">
+                <h3 className="setup-card-title">Prerequisites</h3>
+                <ul className="setup-list">
+                  <li>Node.js 24+ and npm</li>
+                  <li>PostgreSQL database (local or managed)</li>
+                  <li>Discord Bot Token and OAuth app credentials</li>
+                  <li>ffmpeg/ffprobe available on your server</li>
+                </ul>
+              </article>
+              <article className="setup-card">
+                <h3 className="setup-card-title">Quick Start</h3>
+                <pre className="setup-code">
+                  <code>{`git clone --recursive git@github.com:soulwax/isobel.git
+cd isobel
+cp .env.example .env
+npm install
+npm run build
+cd web && npm install && npm run build && cd ..
+npm run start:all:prod`}</code>
+                </pre>
+              </article>
+              <article className="setup-card">
+                <h3 className="setup-card-title">After Startup</h3>
+                <ul className="setup-list">
+                  <li>Verify bot health: <code>curl http://localhost:3002/health</code></li>
+                  <li>Verify web health: <code>curl http://localhost:3001/health</code></li>
+                  <li>Open the dashboard and sign in with Discord</li>
+                  <li>Run <code>/help</code> in Discord to confirm command sync</li>
+                </ul>
+              </article>
+            </div>
           </div>
         </section>
       </main>
