@@ -29,7 +29,6 @@ export function validateEnv(): void {
   const required = [
     'DISCORD_CLIENT_ID',
     'DISCORD_CLIENT_SECRET',
-    'NEXTAUTH_SECRET',
   ];
 
   const missing: string[] = [];

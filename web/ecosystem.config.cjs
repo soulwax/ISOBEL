@@ -48,7 +48,7 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         PORT: '3003', // Auth server always uses port 3003
-        NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'https://isobel.battlecry.tech',
+        NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'https://isobelnet.de',
       },
       error_file: path.join(__dirname, 'logs', 'auth-error.log'),
       out_file: path.join(__dirname, 'logs', 'auth-out.log'),
