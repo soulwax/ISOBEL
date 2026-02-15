@@ -1,7 +1,7 @@
 // File: web/src/db/index.ts
 
-import { config } from 'dotenv';
-config();
+import { loadEnvWithSafeguard } from '../lib/load-env.js';
+loadEnvWithSafeguard();
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
