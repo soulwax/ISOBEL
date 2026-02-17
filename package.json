@@ -109,7 +109,7 @@
     "@types/validator": "^13.15.10",
     "@types/ws": "8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
-    "@typescript-eslint/parser": "^8.53.1",
+    "@typescript-eslint/parser": "^8.56.0",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.2",
     "eslint-config-xo-typescript": "^9.0.0",
