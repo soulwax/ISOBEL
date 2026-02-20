@@ -141,6 +141,7 @@ export default class AddQueryToQueue {
     });
 
     const firstSong = newSongs[0];
+    const firstSongDisplay = `${firstSong.title} - ${firstSong.artist}`;
 
     let statusMsg = '';
     let showedEmbed = false;
@@ -197,8 +198,8 @@ export default class AddQueryToQueue {
     if (!showedEmbed) {
       await interaction.editReply(
         newSongs.length === 1
-          ? `**${firstSong.title}** added to the${addToFrontOfQueue ? ' front of the' : ''} queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
-          : `**${firstSong.title}** and ${newSongs.length - 1} other songs were added to the queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
+          ? `**${firstSongDisplay}** added to the${addToFrontOfQueue ? ' front of the' : ''} queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
+          : `**${firstSongDisplay}** and ${newSongs.length - 1} other songs were added to the queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
       );
     }
   }

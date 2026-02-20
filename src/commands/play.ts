@@ -36,10 +36,7 @@ export default class implements Command {
         .setName('query')
         .setDescription('search query or HLS stream URL')
         .setAutocomplete(true)
-        .setRequired(false))
-      .addAttachmentOption(option => option
-        .setName('file')
-        .setDescription('attach an mp3 to play directly'))
+        .setRequired(true))
       .addBooleanOption(option => option
         .setName('immediate')
         .setDescription('add track to the front of the queue'))
@@ -55,17 +52,11 @@ export default class implements Command {
   }
 
   public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const attachment = interaction.options.getAttachment('file');
-    const query = interaction.options.getString('query')?.trim();
-
-    if (!attachment && (!query || query.length === 0)) {
-      throw new Error('provide a search query or attach an mp3');
-    }
+    const query = interaction.options.getString('query')!.trim();
 
     await this.addQueryToQueue.addToQueue({
       interaction,
       query,
-      attachment,
       addToFrontOfQueue: interaction.options.getBoolean('immediate') ?? false,
       shuffleAdditions: interaction.options.getBoolean('shuffle') ?? false,
       shouldSplitChapters: interaction.options.getBoolean('split') ?? false,
@@ -81,13 +72,11 @@ export default class implements Command {
       return;
     }
 
-    try {
-      // Don't return suggestions for URLs
-      // eslint-disable-next-line no-new
-      new URL(query);
+    // Don't return suggestions for URLs
+    if (URL.canParse(query)) {
       await interaction.respond([]);
       return;
-    } catch {}
+    }
 
     const suggestions = await this.cache.wrap<typeof getStarchildSuggestionsFor, GetStarchildSuggestionsForReturn>(
       getStarchildSuggestionsFor,
