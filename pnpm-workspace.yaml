@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+  - '@discordjs/opus'
+  - '@prisma/engines'
+  - esbuild
+  - prisma
