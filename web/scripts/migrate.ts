@@ -1,13 +1,12 @@
 // File: web/scripts/migrate.ts
 
-import { config } from 'dotenv';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import * as schema from '../src/db/schema';
+import { loadEnvWithSafeguard } from '../src/lib/load-env';
 
-// Load environment variables from .env file
-config();
+loadEnvWithSafeguard();
 
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
 

@@ -20,6 +20,17 @@ declare module 'next-auth' {
 
 // Get NEXTAUTH_URL from environment, fallback to auto-detection
 const nextAuthUrl = process.env.NEXTAUTH_URL;
+const nextAuthSecret = process.env.NEXTAUTH_SECRET?.trim()
+  || process.env.AUTH_SECRET?.trim()
+  || process.env.DISCORD_CLIENT_SECRET?.trim();
+
+if (!nextAuthSecret) {
+  throw new Error('Missing auth secret. Set NEXTAUTH_SECRET or DISCORD_CLIENT_SECRET.');
+}
+
+if (!process.env.NEXTAUTH_SECRET?.trim() && !process.env.AUTH_SECRET?.trim()) {
+  logger.warn('NEXTAUTH_SECRET not set, falling back to DISCORD_CLIENT_SECRET for Auth.js secret.');
+}
 
 export const authConfig = {
   adapter: DrizzleAdapter(db),
@@ -163,5 +174,5 @@ export const authConfig = {
   session: {
     strategy: 'database',
   },
-  secret: requireEnv('NEXTAUTH_SECRET'),
+  secret: nextAuthSecret,
 } satisfies NextAuthConfig;

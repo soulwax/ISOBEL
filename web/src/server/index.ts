@@ -1,7 +1,7 @@
 // File: web/src/server/index.ts
 
-import { config } from 'dotenv';
-config();
+import { loadEnvWithSafeguard } from "../lib/load-env";
+loadEnvWithSafeguard();
 
 import { logger } from "../lib/logger";
 import { validateEnv, getEnv } from "../lib/env";

@@ -1,7 +1,7 @@
 // File: web/src/server/app.ts
 
-import { config } from 'dotenv';
-config();
+import { loadEnvWithSafeguard } from '../lib/load-env.js';
+loadEnvWithSafeguard();
 
 import { and, eq } from "drizzle-orm";
 import express from "express";

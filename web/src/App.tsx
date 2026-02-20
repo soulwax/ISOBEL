@@ -27,8 +27,60 @@ function App() {
   const [selectedGuild, setSelectedGuild] = useState<DiscordGuild | null>(null);
   const { isAuthenticated } = useAuth();
   const activeSelectedGuild = isAuthenticated ? selectedGuild : null;
+  const helpSections = [
+    {
+      title: "Getting Started",
+      icon: <HiOutlinePlay />,
+      commands: [
+        "/play query:<song or URL>",
+        "/queue",
+        "/now-playing",
+        "/help",
+      ],
+    },
+    {
+      title: "Playback",
+      icon: <HiOutlineFastForward />,
+      commands: [
+        "/pause, /resume, /skip, /stop",
+        "/next, /replay, /unskip",
+        "/volume level:<0-100>",
+        "/disconnect",
+      ],
+    },
+    {
+      title: "Queue Tools",
+      icon: <HiOutlineCollection />,
+      commands: [
+        "/move from:<n> to:<n>",
+        "/remove position:<n> or range:<a-b>",
+        "/shuffle, /loop, /loop-queue",
+        "/seek time:<m:ss>, /fseek time:<m:ss>",
+      ],
+    },
+    {
+      title: "Library & Shortcuts",
+      icon: <HiOutlineLink />,
+      commands: [
+        "/favorites create|use|list|remove",
+        "/yt query:<text>",
+        "/file file:<upload>",
+        "/playback-controls",
+      ],
+    },
+    {
+      title: "Server Settings",
+      icon: <HiOutlineCode />,
+      commands: [
+        "/config get",
+        "/config set-default-volume",
+        "/config set-default-queue-page-size",
+        "/config set-playlist-limit",
+      ],
+    },
+  ];
 
-  const handleGuildSelect = (guild: Guild) => {
+  const handleGuildSelect = (guild: DiscordGuild) => {
     setSelectedGuild(guild);
   };
 
@@ -57,6 +109,8 @@ function App() {
           <div className="nav-links">
             <HealthIndicator />
             <a href="#features">Features</a>
+            <a href="#help">Help</a>
+            <a href="#setup">Setup</a>
             <a href="#about">About</a>
             <a
               href="https://songbirdapi.com"
@@ -309,6 +363,76 @@ function App() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="help" className="help">
+          <div className="container">
+            <h2 className="section-title">Help & Commands</h2>
+            <p className="section-subtitle">
+              Run <code>/help</code> in Discord for the embed, or use this quick reference.
+            </p>
+            <div className="help-grid">
+              {helpSections.map((section) => (
+                <article key={section.title} className="help-card">
+                  <div className="help-card-header">
+                    <div className="help-card-icon">{section.icon}</div>
+                    <h3 className="help-card-title">{section.title}</h3>
+                  </div>
+                  <ul className="help-command-list">
+                    {section.commands.map((command) => (
+                      <li key={command}>
+                        <code className="help-command">{command}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+            <p className="help-note">
+              Most playback commands require you to be in a voice channel.
+            </p>
+          </div>
+        </section>
+
+        <section id="setup" className="setup">
+          <div className="container">
+            <h2 className="section-title">Setup Your Own ISOBEL</h2>
+            <p className="section-subtitle">
+              Run your own bot instance with local control over settings, data, and uptime.
+            </p>
+            <div className="setup-grid">
+              <article className="setup-card">
+                <h3 className="setup-card-title">Prerequisites</h3>
+                <ul className="setup-list">
+                  <li>Node.js 24+ and npm</li>
+                  <li>PostgreSQL database (local or managed)</li>
+                  <li>Discord Bot Token and OAuth app credentials</li>
+                  <li>ffmpeg/ffprobe available on your server</li>
+                </ul>
+              </article>
+              <article className="setup-card">
+                <h3 className="setup-card-title">Quick Start</h3>
+                <pre className="setup-code">
+                  <code>{`git clone --recursive git@github.com:soulwax/isobel.git
+cd isobel
+cp .env.example .env
+npm install
+npm run build
+cd web && npm install && npm run build && cd ..
+npm run start:all:prod`}</code>
+                </pre>
+              </article>
+              <article className="setup-card">
+                <h3 className="setup-card-title">After Startup</h3>
+                <ul className="setup-list">
+                  <li>Verify bot health: <code>curl http://localhost:3002/health</code></li>
+                  <li>Verify web health: <code>curl http://localhost:3001/health</code></li>
+                  <li>Open the dashboard and sign in with Discord</li>
+                  <li>Run <code>/help</code> in Discord to confirm command sync</li>
+                </ul>
+              </article>
             </div>
           </div>
         </section>

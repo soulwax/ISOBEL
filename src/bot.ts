@@ -77,13 +77,13 @@ export default class {
     // Register event handlers
     this.client.on('interactionCreate', interaction => this.handleInteraction(interaction));
 
+    // Start health server before Discord login so container platforms can detect open port immediately.
+    this.healthServer.start();
+
     const spinner = ora('📡 connecting to Discord...').start();
 
     this.client.once('ready', async () => {
       debug(generateDependencyReport());
-
-      // Start health server
-      this.healthServer.start();
 
       // Update commands
       const rest = new REST({version: DISCORD_API_VERSION}).setToken(this.config.DISCORD_TOKEN);

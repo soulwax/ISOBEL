@@ -54,6 +54,7 @@ module.exports = {
       node_args: '--enable-source-maps',
       
       // Environment variables
+      env_file: '.env',
       env: {
         NODE_ENV: 'development',
       },

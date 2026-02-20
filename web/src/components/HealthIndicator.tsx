@@ -21,7 +21,12 @@ export default function HealthIndicator() {
     try {
       // Call the bot health endpoint directly (CORS is now enabled on the bot side)
       const botHealthUrl = import.meta.env.VITE_BOT_HEALTH_URL || 'https://isobelhealth.soulwax.dev';
-      const healthUrl = `${botHealthUrl}/health`;
+      const trimmedUrl = botHealthUrl.trim();
+      const healthUrl = trimmedUrl.endsWith('/health')
+        ? trimmedUrl
+        : trimmedUrl.endsWith('/')
+          ? `${trimmedUrl}health`
+          : `${trimmedUrl}/health`;
       
       // Simple GET request - no headers or credentials needed, avoids OPTIONS preflight
       const response = await fetch(healthUrl);

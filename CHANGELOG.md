@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Auth.js request handling in the Express bridge by attaching `nextUrl` to auth requests, resolving `500` errors on `/api/auth/*` endpoints
 - Fixed Discord sign-in flow by switching from direct GET navigation to CSRF-backed form POST for provider login
 - Fixed session resolution in protected API middleware by applying the same Auth.js request bridging behavior used by auth routes
+- We fixed shit and complicated more, but also some things were streamlined 
 
 ### Changed
 - Updated web auth client flow to use browser-native form submission for OAuth handoff reliability
