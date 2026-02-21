@@ -1,3 +1,5 @@
+# File: web/Dockerfile
+
 # Web Interface Dockerfile
 # Multi-stage build for the ISOBEL web interface
 

@@ -1,3 +1,5 @@
+# File: docker-compose.web.yml
+
 # Optional web interface services. Use with:
 # docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
 
