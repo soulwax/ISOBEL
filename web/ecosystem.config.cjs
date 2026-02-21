@@ -1,3 +1,5 @@
+// File: web/ecosystem.config.cjs
+
 const path = require('path');
 const { loadEnvWithSafeguard } = require('./scripts/load-env.cjs');
 

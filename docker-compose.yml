@@ -1,3 +1,5 @@
+# File: docker-compose.yml
+
 services:
   # Discord Bot Service
   bot:

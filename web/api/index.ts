@@ -1,5 +1,4 @@
 // File: web/api/index.ts
-// Vercel Serverless Function - handles all /api/* routes
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 

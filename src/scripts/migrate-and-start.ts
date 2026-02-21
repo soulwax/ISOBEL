@@ -1,6 +1,5 @@
 // File: src/scripts/migrate-and-start.ts
 
-// CRITICAL: This must be the FIRST import to load environment variables
 import './load-env.js';
 
 import { Prisma, PrismaClient } from '@prisma/client';

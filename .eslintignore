@@ -1,6 +1,6 @@
 # File: .eslintignore
-
 # Dependencies
+
 node_modules/
 
 # Build output

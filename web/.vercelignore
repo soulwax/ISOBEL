@@ -1,3 +1,5 @@
+# File: web/.vercelignore
+
 # Dependencies
 node_modules/
 
