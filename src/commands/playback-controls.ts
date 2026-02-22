@@ -14,7 +14,9 @@ import errorMsg from '../utils/error-msg.js';
 import type Command from './index.js';
 
 @injectable()
-export default class implements Command {
+export default class PlaybackControls implements Command {
+  private static readonly aiSuggestionValuePrefix = 'ai-suggest:';
+
   public readonly slashCommand = new SlashCommandBuilder()
     .setName('playback-controls')
     .setDescription('internal playback controls');
@@ -224,15 +226,27 @@ export default class implements Command {
       return;
     }
 
-    const [value] = interaction.values;
-    if (!value) {
+    const [selectedValue] = interaction.values;
+    if (!selectedValue) {
       await interaction.reply({content: errorMsg('No suggestion selected'), flags: MessageFlags.Ephemeral});
       return;
     }
 
+    const player = this.playerManager.get(interaction.guild.id);
+    let query = selectedValue;
+    if (selectedValue.startsWith(PlaybackControls.aiSuggestionValuePrefix)) {
+      const index = Number.parseInt(selectedValue.slice(PlaybackControls.aiSuggestionValuePrefix.length), 10);
+      const suggestion = player.getAiSuggestions()[index];
+      if (!suggestion) {
+        await interaction.reply({content: errorMsg('Suggestion is no longer available'), flags: MessageFlags.Ephemeral});
+        return;
+      }
+      query = suggestion;
+    }
+
     await this.addQueryToQueue.addToQueue({
       interaction,
-      query: value,
+      query,
       addToFrontOfQueue: false,
       shuffleAdditions: false,
       shouldSplitChapters: false,

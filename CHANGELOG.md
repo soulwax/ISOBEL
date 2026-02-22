@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-02-22
+
+### Fixed
+- Prevented select menu payload validation failures by replacing long AI suggestion option values with short identifiers and resolving them safely on interaction.
+- Corrected `/queue` pagination math so exact page-size queue lengths no longer expose an extra empty page.
+- Enforced valid queue page bounds by requiring `page >= 1` in the slash command and validating both `page` and `pageSize` defensively at embed-build time.
+
+### Added
+- Added unit tests for queue pagination boundaries (`page < 1`, `pageSize < 1`, and exact page-size behavior).
+- Added `npm run test:unit` to run Node.js unit tests in `test/**/*.test.ts`.
+
 ## [3.0.0] - 2026-02-07
 
 ### Fixed

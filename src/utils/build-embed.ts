@@ -16,6 +16,7 @@ const getMaxSongTitleLength = (title: string) => {
 
 const EXTERNAL_PLAYER_URL = process.env.EXTERNAL_PLAYER_URL?.trim() ?? '';
 const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() ?? '';
+const AI_SUGGESTION_VALUE_PREFIX = 'ai-suggest:';
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
@@ -168,9 +169,9 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
   const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [primaryRow, secondaryRow];
   const suggestions = player.getAiSuggestions();
   if (suggestions.length > 0) {
-    const options = suggestions.slice(0, 5).map(value => ({
+    const options = suggestions.slice(0, 5).map((value, index) => ({
       label: truncate(value, 100),
-      value,
+      value: `${AI_SUGGESTION_VALUE_PREFIX}${index}`,
     }));
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -203,9 +204,13 @@ export const buildQueueEmbed = (player: Player, page: number, pageSize: number):
   }
 
   const queueSize = player.queueSize();
-  const maxQueuePage = Math.ceil((queueSize + 1) / pageSize);
+  if (pageSize < 1) {
+    throw new Error('page size must be at least 1');
+  }
 
-  if (page > maxQueuePage) {
+  const maxQueuePage = Math.max(1, Math.ceil(queueSize / pageSize));
+
+  if (page < 1 || page > maxQueuePage) {
     throw new Error('the queue isn\'t that big');
   }
 
