@@ -1,14 +1,15 @@
 // File: src/services/starchild-api.ts
 
-import got, { Got } from 'got';
+import got, { type Got } from 'got';
 import { inject, injectable } from 'inversify';
 import pRetry from 'p-retry';
 import { TYPES } from '../types.js';
 import { ONE_HOUR_IN_SECONDS } from '../utils/constants.js';
 import debug from '../utils/debug.js';
-import Config from './config.js';
-import KeyValueCacheProvider from './key-value-cache.js';
-import { MediaSource, SongMetadata } from './player.js';
+import { formatError } from '../utils/error-msg.js';
+import type Config from './config.js';
+import type KeyValueCacheProvider from './key-value-cache.js';
+import { MediaSource, type SongMetadata } from './player.js';
 
 interface DeezerSearchResult {
   id: number;
@@ -37,16 +38,14 @@ interface DeezerSearchResponse {
 }
 
 @injectable()
-export default class {
+export default class StarchildAPI {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly httpClient: Got;
-  private readonly cache: KeyValueCacheProvider;
 
-  constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
+  constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) private readonly cache: KeyValueCacheProvider) {
     this.apiKey = config.SONGBIRD_API_KEY;
     this.baseUrl = config.SONGBIRD_BASE_URL ?? 'https://api.starchildmusic.com';
-    this.cache = cache;
 
     this.httpClient = got.extend({
       prefixUrl: this.baseUrl,
@@ -77,9 +76,8 @@ export default class {
             retries: 2,
             minTimeout: 250,
             maxTimeout: 1500,
-            onFailedAttempt: ({error, attemptNumber}) => {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              debug(`Search retry ${attemptNumber} failed: ${errorMessage}`);
+            onFailedAttempt: (error) => {
+              debug(`Search retry ${error.attemptNumber} failed: ${formatError(error)}`);
             },
           }
         );
@@ -92,7 +90,7 @@ export default class {
           offset: 0,
           playlist: null,
           isLive: false,
-          thumbnailUrl: track.album.cover_medium || track.album.cover || null,
+          thumbnailUrl: track.album.cover_medium ?? track.album.cover ?? null,
           source: MediaSource.Starchild,
         }));
       },

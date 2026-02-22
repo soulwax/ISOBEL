@@ -1,11 +1,11 @@
 // File: src/commands/config.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { type ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { injectable } from 'inversify';
 import { prisma } from '../utils/db.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {

@@ -1,11 +1,11 @@
 // File: src/events/guild-create.ts
 
 import { REST } from '@discordjs/rest';
-import { Setting } from '@prisma/client';
-import { Client, Guild } from 'discord.js';
-import Command from '../commands/index.js';
+import { type Setting } from '@prisma/client';
+import { type Client, type Guild } from 'discord.js';
+import type Command from '../commands/index.js';
 import container from '../inversify.config.js';
-import Config from '../services/config.js';
+import type Config from '../services/config.js';
 import { TYPES } from '../types.js';
 import { prisma } from '../utils/db.js';
 import registerCommandsOnGuild from '../utils/register-commands-on-guild.js';

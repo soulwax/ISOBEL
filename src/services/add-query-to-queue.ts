@@ -1,36 +1,35 @@
 // File: src/services/add-query-to-queue.ts
 
 import shuffle from 'array-shuffle';
-import { Attachment, ChatInputCommandInteraction, GuildMember, MessageFlags, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { type Attachment, type ChatInputCommandInteraction, type GuildMember, MessageFlags, type ModalSubmitInteraction, type StringSelectMenuInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { SponsorBlock } from 'sponsorblock-api';
-import PlayerManager from '../managers/player.js';
-import GetSongs from '../services/get-songs.js';
+import type PlayerManager from '../managers/player.js';
+import type GetSongs from '../services/get-songs.js';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
 import { ONE_HOUR_IN_SECONDS } from '../utils/constants.js';
+import debug from '../utils/debug.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
-import Config from './config.js';
-import KeyValueCacheProvider from './key-value-cache.js';
-import { MediaSource, STATUS, SongMetadata } from './player.js';
+import type Config from './config.js';
+import type KeyValueCacheProvider from './key-value-cache.js';
+import { MediaSource, STATUS, type SongMetadata } from './player.js';
 
 @injectable()
 export default class AddQueryToQueue {
   private readonly sponsorBlock?: SponsorBlock;
   private sponsorBlockDisabledUntil?: Date;
   private readonly sponsorBlockTimeoutDelay;
-  private readonly cache: KeyValueCacheProvider;
 
   constructor(@inject(TYPES.Services.GetSongs) private readonly getSongs: GetSongs,
     @inject(TYPES.Managers.Player) private readonly playerManager: PlayerManager,
     @inject(TYPES.Config) private readonly config: Config,
-    @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
+    @inject(TYPES.KeyValueCache) private readonly cache: KeyValueCacheProvider) {
     this.sponsorBlockTimeoutDelay = config.SPONSORBLOCK_TIMEOUT;
     this.sponsorBlock = config.ENABLE_SPONSORBLOCK
       ? new SponsorBlock('echo-sb-integration') // UserID matters only for submissions
       : undefined;
-    this.cache = cache;
   }
 
   public async addToQueue({
@@ -77,9 +76,9 @@ export default class AddQueryToQueue {
 
     const settings = await getGuildSettings(guildId);
 
-    const {queueAddResponseEphemeral} = settings;
+    const { queueAddResponseEphemeral } = settings;
 
-    await interaction.deferReply({flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined});
+    await interaction.deferReply({ flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined });
 
     // For play command, only add one song regardless of playlist limit
     let newSongs: SongMetadata[] = [];
@@ -90,7 +89,7 @@ export default class AddQueryToQueue {
       extraMsg = extraMsgOverride ?? '';
     } else if (attachment) {
       const attachmentName = attachment.name ?? 'attachment.mp3';
-      const isMp3 = attachment.contentType?.toLowerCase().includes('audio/mpeg')
+      const isMp3 = (attachment.contentType?.toLowerCase()?.includes('audio/mpeg') ?? false)
         || attachmentName.toLowerCase().endsWith('.mp3');
 
       if (!isMp3) {
@@ -137,7 +136,7 @@ export default class AddQueryToQueue {
         ...song,
         addedInChannelId: interaction.channel!.id,
         requestedBy: (interaction.member as GuildMember).user.id,
-      }, {immediate: addToFrontOfQueue ?? false});
+      }, { immediate: addToFrontOfQueue ?? false });
     });
 
     const firstSong = newSongs[0];
@@ -160,7 +159,7 @@ export default class AddQueryToQueue {
         embeds: [buildPlayingMessageEmbed(player)],
         components: buildPlaybackControls(player),
       });
-      
+
       // Set the message for animated progress bar updates
       if (message) {
         player.setNowPlayingMessage(message);
@@ -206,9 +205,9 @@ export default class AddQueryToQueue {
 
   private async skipNonMusicSegments(song: SongMetadata) {
     if (!this.sponsorBlock
-          || (this.sponsorBlockDisabledUntil && new Date() < this.sponsorBlockDisabledUntil)
-          || song.source !== MediaSource.Starchild
-          || !song.url) {
+      || (this.sponsorBlockDisabledUntil && new Date() < this.sponsorBlockDisabledUntil)
+      || song.source !== MediaSource.Starchild
+      || !song.url) {
       return song;
     }
 
@@ -222,13 +221,13 @@ export default class AddQueryToQueue {
       ) ?? [];
       const skipSegments = segments
         .sort((a, b) => a.startTime - b.startTime)
-        .reduce((acc: {startTime: number; endTime: number}[], {startTime, endTime}) => {
+        .reduce((acc: { startTime: number; endTime: number }[], { startTime, endTime }) => {
           const previousSegment = acc[acc.length - 1];
           // If segments overlap merge
           if (previousSegment && previousSegment.endTime > startTime) {
             acc[acc.length - 1].endTime = endTime;
           } else {
-            acc.push({startTime, endTime});
+            acc.push({ startTime, endTime });
           }
 
           return acc;
@@ -248,13 +247,13 @@ export default class AddQueryToQueue {
       return song;
     } catch (e) {
       if (!(e instanceof Error)) {
-        console.error('Unexpected event occurred while fetching skip segments : ', e);
+        debug(`Unexpected event occurred while fetching skip segments: ${String(e)}`);
         return song;
       }
 
       if (!e.message.includes('404')) {
         // Don't log 404 response, it just means that there are no segments for given video
-        console.warn(`Could not fetch skip segments for "${song.url}" :`, e);
+        debug(`Could not fetch skip segments for "${song.url}": ${e.message}`);
       }
 
       if (e.message.includes('504')) {

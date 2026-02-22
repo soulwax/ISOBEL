@@ -1,40 +1,68 @@
 // File: src/services/health-server.ts
 
+import { type Client } from 'discord.js';
 import http from 'http';
-import { injectable, inject } from 'inversify';
-import { Client } from 'discord.js';
+import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
-import Config from './config.js';
+import debug from '../utils/debug.js';
 
 interface RateLimitEntry {
   count: number;
   resetTime: number;
 }
 
+interface HealthResponse {
+  status: 'ok' | 'not_ready';
+  ready: boolean;
+  guilds: number;
+  uptime: number;
+  uptimeFormatted: string;
+  timestamp: string;
+}
+
 @injectable()
 export default class HealthServer {
   private readonly client: Client;
-  private readonly config: Config;
   private server: http.Server | null = null;
   private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly rateLimitMap = new Map<string, RateLimitEntry>();
   private readonly rateLimitPoints = 10; // 10 requests
   private readonly rateLimitWindow = 60_000; // per 60 seconds
+  private readonly defaultHealthPort = 3002;
+  private static readonly jsonContentType = {'Content-Type': 'application/json'};
 
   constructor(
     @inject(TYPES.Client) client: Client,
-    @inject(TYPES.Config) config: Config
   ) {
     this.client = client;
-    this.config = config;
   }
 
   private getClientIdentifier(req: http.IncomingMessage): string {
     const forwarded = req.headers['x-forwarded-for'];
-    const ip = typeof forwarded === 'string' 
-      ? forwarded.split(',')[0].trim() 
-      : req.socket.remoteAddress || 'unknown';
+
+    const forwardedHeader = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const ip = typeof forwardedHeader === 'string'
+      ? forwardedHeader.split(',')[0].trim()
+      : req.socket.remoteAddress ?? 'unknown';
+
     return ip;
+  }
+
+  private resolvePort(): number {
+    const configuredPort = process.env.HEALTH_PORT ?? process.env.PORT ?? String(this.defaultHealthPort);
+    const parsedPort = Number.parseInt(configuredPort, 10);
+    return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
+  }
+
+  private setCorsHeaders(res: http.ServerResponse): void {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+
+  private sendJson(res: http.ServerResponse, statusCode: number, payload: unknown): void {
+    res.writeHead(statusCode, HealthServer.jsonContentType);
+    res.end(JSON.stringify(payload));
   }
 
   private checkRateLimit(identifier: string): boolean {
@@ -59,9 +87,11 @@ export default class HealthServer {
   }
 
   public start(): void {
-    const configuredPort = process.env.HEALTH_PORT ?? process.env.PORT ?? '3002';
-    const parsedPort = parseInt(configuredPort, 10);
-    const port = Number.isNaN(parsedPort) ? 3002 : parsedPort;
+    const port = this.resolvePort();
+
+    if (this.server) {
+      this.stop();
+    }
 
     // Clear any existing interval before creating a new one
     if (this.cleanupInterval) {
@@ -77,12 +107,10 @@ export default class HealthServer {
         }
       }
     }, this.rateLimitWindow);
+    this.cleanupInterval.unref();
 
     this.server = http.createServer((req, res) => {
-      // Set CORS headers - always allow access from anywhere
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      this.setCorsHeaders(res);
 
       if (req.method === 'OPTIONS') {
         res.writeHead(200);
@@ -90,40 +118,27 @@ export default class HealthServer {
         return;
       }
 
-      // Rate limiting
-      if (req.url === '/health' && req.method === 'GET') {
-        const identifier = this.getClientIdentifier(req);
-        if (!this.checkRateLimit(identifier)) {
-          res.writeHead(429, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Too many requests' }));
-          return;
-        }
+      if (req.url !== '/health' || req.method !== 'GET') {
+        this.sendJson(res, 404, {error: 'Not found'});
+        return;
       }
 
-      if (req.url === '/health' && req.method === 'GET') {
-        const isReady = this.client.isReady();
-        const guildsCount = this.client.guilds.cache.size;
-        const uptime = this.client.uptime || 0;
-
-        const healthData = {
-          status: isReady ? 'ok' : 'not_ready',
-          ready: isReady,
-          guilds: guildsCount,
-          uptime: uptime,
-          uptimeFormatted: this.formatUptime(uptime),
-          timestamp: new Date().toISOString(),
-        };
-
-        res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(healthData));
-      } else {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Not found' }));
+      const identifier = this.getClientIdentifier(req);
+      if (!this.checkRateLimit(identifier)) {
+        this.sendJson(res, 429, {error: 'Too many requests'});
+        return;
       }
+
+      const healthData = this.getHealthData();
+      this.sendJson(res, healthData.ready ? 200 : 503, healthData);
+    });
+
+    this.server.on('error', error => {
+      debug(`health-server.error: ${this.normalizeError(error).message}`);
     });
 
     this.server.listen(port, () => {
-      console.log(`🏥 Health server running on http://localhost:${port}`);
+      debug(`🏥 Health server running on http://localhost:${port}`);
     });
   }
 
@@ -137,6 +152,34 @@ export default class HealthServer {
       this.server.close();
       this.server = null;
     }
+
+    this.rateLimitMap.clear();
+  }
+
+  private getHealthData(): HealthResponse {
+    const ready = this.client.isReady();
+    const uptime = this.client.uptime ?? 0;
+
+    return {
+      status: ready ? 'ok' : 'not_ready',
+      ready,
+      guilds: this.client.guilds.cache.size,
+      uptime,
+      uptimeFormatted: this.formatUptime(uptime),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  private normalizeError(error: unknown): Error {
+    if (error instanceof Error) {
+      return error;
+    }
+
+    if (typeof error === 'string') {
+      return new Error(error);
+    }
+
+    return new Error('Unknown error occurred');
   }
 
   private formatUptime(uptime: number): string {

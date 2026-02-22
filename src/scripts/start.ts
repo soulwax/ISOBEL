@@ -3,7 +3,7 @@
 import { startBot } from '../index.js';
 import logBanner from '../utils/log-banner.js';
 
-(async () => {
+void (async () => {
   logBanner();
   await startBot();
 })();
