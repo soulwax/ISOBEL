@@ -1,3 +1,5 @@
+// File: web/scripts/load-env.cjs
+
 const { existsSync, readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { config, parse } = require('dotenv');

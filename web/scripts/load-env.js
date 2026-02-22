@@ -1,3 +1,5 @@
+// File: web/scripts/load-env.js
+
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config, parse } from 'dotenv';

@@ -1,3 +1,5 @@
+// File: src/scripts/load-env.ts
+
 // Load environment variables before anything else
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';

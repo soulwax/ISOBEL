@@ -1,6 +1,6 @@
 # File: .dockerignore
-
 # Dependencies (will be reinstalled)
+
 node_modules
 web/node_modules
 

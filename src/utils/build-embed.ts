@@ -1,7 +1,8 @@
 // File: src/utils/build-embed.ts
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-import Player, { QueuedSong, STATUS } from '../services/player.js';
+import type Player from '../services/player.js';
+import { STATUS, type QueuedSong } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
 import { truncate } from './string.js';
@@ -17,6 +18,10 @@ const EXTERNAL_PLAYER_URL = process.env.EXTERNAL_PLAYER_URL?.trim() ?? '';
 const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() ?? '';
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
+const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
+  .replaceAll('{artist}', encodedArtist)
+  .replaceAll('{title}', encodedTitle)
+  .replaceAll('{query}', encodedQuery);
 
 const buildSongLink = (artist: string, title: string): string | null => {
   if (EXTERNAL_PLAYER_URL === '' && SONG_LINK_TEMPLATE === '') {
@@ -28,13 +33,14 @@ const buildSongLink = (artist: string, title: string): string | null => {
   const encodedQuery = `${encodedArtist}+${encodedTitle}`;
 
   if (EXTERNAL_PLAYER_URL !== '') {
+    if (EXTERNAL_PLAYER_URL.includes('{')) {
+      return buildSongLinkFromTemplate(EXTERNAL_PLAYER_URL, encodedArtist, encodedTitle, encodedQuery);
+    }
+
     return `${EXTERNAL_PLAYER_URL}${encodedQuery}`;
   }
 
-  return SONG_LINK_TEMPLATE
-    .replaceAll('{artist}', encodedArtist)
-    .replaceAll('{title}', encodedTitle)
-    .replaceAll('{query}', encodedQuery);
+  return buildSongLinkFromTemplate(SONG_LINK_TEMPLATE, encodedArtist, encodedTitle, encodedQuery);
 };
 
 const getSongTitle = ({title, artist}: QueuedSong, shouldTruncate = false) => {
@@ -73,7 +79,8 @@ const getPlayerUI = (player: Player) => {
   const progressBar = getProgressBar(PROGRESS_BAR_SEGMENTS, position / song.length);
   const elapsedTime = song.isLive ? 'live' : `${prettyTime(position)}/${prettyTime(song.length)}`;
   const loop = player.loopCurrentSong ? '🔂' : player.loopCurrentQueue ? '🔁' : '';
-  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()}%` : '';
+  const volume = player.getVolume();
+  const vol = Number.isFinite(volume) ? `${volume}%` : '-';
   return `${button} ${progressBar} \`[${elapsedTime}]\`🔉 ${vol} ${loop}`;
 };
 

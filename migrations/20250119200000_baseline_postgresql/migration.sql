@@ -1,3 +1,5 @@
+-- File: migrations/20250119200000_baseline_postgresql/migration.sql
+
 -- CreateTable
 CREATE TABLE "FileCache" (
     "hash" TEXT NOT NULL,

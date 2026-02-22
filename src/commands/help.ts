@@ -1,9 +1,9 @@
 // File: src/commands/help.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { type ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { injectable } from 'inversify';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {

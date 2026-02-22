@@ -1,20 +1,21 @@
 // File: src/services/songbird-next.ts
 
-import got, { Got } from 'got';
+import got, { type Got } from 'got';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
 import debug from '../utils/debug.js';
-import Config from './config.js';
+import { formatError } from '../utils/error-msg.js';
+import type Config from './config.js';
 
 interface SpiceUpResponseDto {
-  recommendations?: Array<{
+  recommendations?: {
     name?: string;
-    artists?: Array<{name?: string}>;
-  }>;
+    artists?: {name?: string}[];
+  }[];
 }
 
 @injectable()
-export default class {
+export default class SongbirdNext {
   private readonly baseUrl: string;
   private readonly httpClient: Got | null;
 
@@ -52,7 +53,7 @@ export default class {
         })
         .filter((value): value is string => Boolean(value));
     } catch (error) {
-      debug(`Songbird Next recommendations failed: ${error instanceof Error ? error.message : String(error)}`);
+      debug(`Songbird Next recommendations failed: ${formatError(error)}`);
       return [];
     }
   }

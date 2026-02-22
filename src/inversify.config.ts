@@ -25,7 +25,7 @@ import Favorites from './commands/favorites.js';
 import File from './commands/file.js';
 import ForwardSeek from './commands/fseek.js';
 import Help from './commands/help.js';
-import Command from './commands/index.js';
+import type Command from './commands/index.js';
 import LoopQueue from './commands/loop-queue.js';
 import Loop from './commands/loop.js';
 import Move from './commands/move.js';

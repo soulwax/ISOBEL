@@ -1,12 +1,12 @@
 // File: src/commands/yt.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ChatInputCommandInteraction } from 'discord.js';
+import { type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
-import AddQueryToQueue from '../services/add-query-to-queue.js';
-import GetSongs from '../services/get-songs.js';
+import type AddQueryToQueue from '../services/add-query-to-queue.js';
+import type GetSongs from '../services/get-songs.js';
 import { TYPES } from '../types.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {

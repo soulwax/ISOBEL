@@ -2,10 +2,10 @@
 
 import { mkdir } from 'node:fs/promises';
 import path from 'path';
-import Bot from './bot.js';
+import type Bot from './bot.js';
 import container from './inversify.config.js';
-import Config from './services/config.js';
-import FileCacheProvider from './services/file-cache.js';
+import type Config from './services/config.js';
+import type FileCacheProvider from './services/file-cache.js';
 import { TYPES } from './types.js';
 
 const bot = container.get<Bot>(TYPES.Bot);

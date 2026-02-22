@@ -3,10 +3,16 @@
     "lib": [
       "esnext"
     ],
-    "target": "es2020",
+    "target": "esnext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": [
+      "node"
+    ],
     "experimentalDecorators": true,
     "esModuleInterop": true,
     "sourceMap": true,
