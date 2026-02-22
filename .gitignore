@@ -125,3 +125,5 @@ CLAUDE.md
 !yarn.lock
 
 .github/docs/DOCKER_ECOSYSTEM.md
+
+dist/
