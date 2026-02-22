@@ -13,18 +13,23 @@ const getMaxSongTitleLength = (title: string) => {
   return nonASCII.test(title) ? 28 : 48;
 };
 
-const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() || '';
+const EXTERNAL_PLAYER_URL = process.env.EXTERNAL_PLAYER_URL?.trim() ?? '';
+const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() ?? '';
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 
 const buildSongLink = (artist: string, title: string): string | null => {
-  if (SONG_LINK_TEMPLATE === '') {
+  if (EXTERNAL_PLAYER_URL === '' && SONG_LINK_TEMPLATE === '') {
     return null;
   }
 
   const encodedArtist = encodeDarkfloorPart(artist);
   const encodedTitle = encodeDarkfloorPart(title);
   const encodedQuery = `${encodedArtist}+${encodedTitle}`;
+
+  if (EXTERNAL_PLAYER_URL !== '') {
+    return `${EXTERNAL_PLAYER_URL}${encodedQuery}`;
+  }
 
   return SONG_LINK_TEMPLATE
     .replaceAll('{artist}', encodedArtist)
@@ -68,7 +73,7 @@ const getPlayerUI = (player: Player) => {
   const progressBar = getProgressBar(PROGRESS_BAR_SEGMENTS, position / song.length);
   const elapsedTime = song.isLive ? 'live' : `${prettyTime(position)}/${prettyTime(song.length)}`;
   const loop = player.loopCurrentSong ? '🔂' : player.loopCurrentQueue ? '🔁' : '';
-  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()!}%` : '';
+  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()}%` : '';
   return `${button} ${progressBar} \`[${elapsedTime}]\`🔉 ${vol} ${loop}`;
 };
 
@@ -104,7 +109,7 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   return message;
 };
 
-export const buildPlaybackControls = (player: Player): Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>> => {
+export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {
   const isPlaying = player.status === STATUS.PLAYING;
   const canBack = player.canGoBack();
   const canSkip = player.canGoForward(1);
@@ -153,7 +158,7 @@ export const buildPlaybackControls = (player: Player): Array<ActionRowBuilder<Bu
   const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
     .addComponents(seekButton);
 
-  const rows: Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>> = [primaryRow, secondaryRow];
+  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [primaryRow, secondaryRow];
   const suggestions = player.getAiSuggestions();
   if (suggestions.length > 0) {
     const options = suggestions.slice(0, 5).map(value => ({

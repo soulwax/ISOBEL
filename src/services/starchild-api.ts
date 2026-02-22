@@ -45,7 +45,7 @@ export default class {
 
   constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
     this.apiKey = config.SONGBIRD_API_KEY;
-    this.baseUrl = config.SONGBIRD_BASE_URL ?? 'https://api.starchildmusic.com';
+    this.baseUrl = config.SONGBIRD_BASE_URL ?? '';
     this.cache = cache;
 
     this.httpClient = got.extend({
