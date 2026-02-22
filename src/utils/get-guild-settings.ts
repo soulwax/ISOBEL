@@ -1,6 +1,6 @@
 // File: src/utils/get-guild-settings.ts
 
-import { Setting } from '@prisma/client';
+import { type Setting } from '@prisma/client';
 import { createGuildSettings } from '../events/guild-create.js';
 import { prisma } from './db.js';
 

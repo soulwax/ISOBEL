@@ -1,3 +1,5 @@
+// File: web/src/lib/load-env.ts
+
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config, parse } from 'dotenv';

@@ -2,16 +2,25 @@
 
 import { redactSecrets } from './redact-secrets.js';
 
-export default (error?: string | Error): string => {
-  let str = 'unknown error';
-
-  if (error) {
-    if (typeof error === 'string') {
-      str = `🚫 ope: ${redactSecrets(error)}`;
-    } else if (error instanceof Error) {
-      str = `🚫 ope: ${redactSecrets(error.message)}`;
-    }
+/**
+ * Extracts a human-readable message from an unknown error value.
+ * Useful for normalizing caught errors in catch blocks.
+ * @param error - The error to extract a message from
+ * @returns A string representation of the error
+ */
+export const formatError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
   }
 
-  return str;
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  return 'unknown error';
+};
+
+export default (error?: string | Error): string => {
+  const message = error ? formatError(error) : 'unknown error';
+  return `🚫 ope: ${redactSecrets(message)}`;
 };

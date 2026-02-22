@@ -1,7 +1,7 @@
 // File: src/utils/db.ts
 
-import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
 
 // PostgreSQL is required - DATABASE_URL must be set
@@ -19,19 +19,19 @@ export const prisma = new PrismaClient({
 });
 
 // Graceful shutdown
-process.on('beforeExit', async () => {
+const cleanup = async () => {
   await prisma.$disconnect();
   await pool.end();
+};
+
+process.on('beforeExit', () => {
+  void cleanup();
 });
 
-process.on('SIGINT', async () => {
-  await prisma.$disconnect();
-  await pool.end();
-  process.exit(0);
+process.on('SIGINT', () => {
+  void cleanup().then(() => process.exit(0));
 });
 
-process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
-  await pool.end();
-  process.exit(0);
+process.on('SIGTERM', () => {
+  void cleanup().then(() => process.exit(0));
 });

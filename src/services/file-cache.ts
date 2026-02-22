@@ -1,6 +1,6 @@
 // File: src/services/file-cache.ts
 
-import { FileCache } from '@prisma/client';
+import { type FileCache } from '@prisma/client';
 import { createWriteStream, promises as fs } from 'fs';
 import { inject, injectable } from 'inversify';
 import PQueue from 'p-queue';
@@ -8,7 +8,7 @@ import path from 'path';
 import { TYPES } from '../types.js';
 import { prisma } from '../utils/db.js';
 import debug from '../utils/debug.js';
-import Config from './config.js';
+import type Config from './config.js';
 
 @injectable()
 export default class FileCacheProvider {
@@ -72,40 +72,54 @@ export default class FileCacheProvider {
   }
 
   /**
-   * Returns a write stream for the given hash key.
-   * The stream handles saving a new file and will
-   * update the database after the stream is closed.
+   * Returns a write stream and a `committed` promise for the given hash key.
+   * The stream handles saving a new file. The `committed` promise resolves
+   * with the final file path once the data has been moved out of tmp and
+   * recorded in the database, or `null` if the write was empty / failed.
    * @param hash lookup key
    */
-  createWriteStream(hash: string) {
+  createWriteStream(hash: string): { stream: ReturnType<typeof createWriteStream>; committed: Promise<string | null> } {
     this.validateHash(hash);
     const tmpPath = path.join(this.config.CACHE_DIR, 'tmp', hash);
     const finalPath = path.join(this.config.CACHE_DIR, hash);
 
     const stream = createWriteStream(tmpPath);
 
-    stream.on('close', () => {
-      // Only move if size is non-zero (may have errored out)
-      void (async () => {
-        const stats = await fs.stat(tmpPath);
+    const committed = new Promise<string | null>((resolve, reject) => {
+      stream.on('close', () => {
+        void (async () => {
+          try {
+            const stats = await fs.stat(tmpPath);
 
-        if (stats.size !== 0) {
-          await fs.rename(tmpPath, finalPath);
+            if (stats.size === 0) {
+              resolve(null);
+              return;
+            }
 
-          await prisma.fileCache.create({
-            data: {
-              hash,
-              accessedAt: new Date(),
-              bytes: stats.size,
-            },
-          });
-        }
+            await fs.rename(tmpPath, finalPath);
 
-        await this.evictOldestIfNecessary();
-      })();
+            await prisma.fileCache.create({
+              data: {
+                hash,
+                accessedAt: new Date(),
+                bytes: stats.size,
+              },
+            });
+
+            await this.evictOldestIfNecessary();
+            resolve(finalPath);
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        })();
+      });
+
+      stream.on('error', (error) => {
+        reject(error);
+      });
     });
 
-    return stream;
+    return { stream, committed };
   }
 
   /**

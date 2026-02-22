@@ -1,3 +1,5 @@
+# File: web/Dockerfile.auth
+
 # Auth Server Dockerfile
 # Dockerfile for the ISOBEL authentication server
 

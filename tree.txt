@@ -1,46 +1,36 @@
 ISOBEL
 ├───.annot8_backup.json
 ├───.dockerignore
-├───.env.sample
+├───.env.example
 ├───.eslintignore
 ├───.gitignore
 ├───.release-it.json
 ├───CHANGELOG.md
-├───CLAUDE.md
+├───CHANGELOG_SESSION.md
+├───darkfloor.one.yaml
+├───docker-compose.web.yml
+├───docker-compose.yml
 ├───Dockerfile
 ├───ecosystem.config.cjs
 ├───eslint.config.js
-├───LICENSE
+├───LICENSE.md
 ├───package-lock.json
 ├───package.json
-├───PM2.md
+├───pnpm-workspace.yaml
+├───prisma.config.ts
 ├───README.md
-├───RELEASING.md
 ├───schema.prisma
 ├───tree.txt
 ├───tsconfig.json
-├───yarn.lock
-├───.claude/
-│   └───settings.local.json
-├───.cursor/
-│   ├───mcp.json
-│   └───commands/
-│       ├───api-contract.md
-│       ├───commit-message.md
-│       ├───db-schema.md
-│       ├───docker-audit.md
-│       ├───docs.md
-│       ├───init.md
-│       ├───perf-check.md
-│       ├───refactor.md
-│       ├───review.md
-│       ├───security-scan.md
-│       └───test-setup.md
 ├───.github/
 │   ├───dependabot.yml
 │   ├───nginx-file.sh
 │   ├───pull_request_template.md
 │   ├───songbird.png
+│   ├───docs/
+│   │   ├───DOCKER_ECOSYSTEM.md
+│   │   ├───DOCKER_ENV_GUIDE.md
+│   │   └───SUMMARY.md
 │   ├───ISSUE_TEMPLATE/
 │   │   └───support-request.md
 │   └───workflows/
@@ -50,18 +40,6 @@ ISOBEL
 │       ├───publish.yml
 │       ├───release-comment.yml
 │       └───type-check.yml
-├───data/
-│   ├───db.sqlite
-│   └───cache/
-│       ├───36fa05b874b700eb4533d4eed946dcfcd7d42a11ccf306eb66b40c674dd3c267954e5a8f39b66872a8b2a5e16dac17f202e009cd4164acbbe40e033eae8da72f
-│       ├───e2c5ad4f7f236eaf96e52ae2b3f0284e5c08b88cd51fdda671e796304f6838fa1cf7aab7f22119fa73f9b2398bd87de086bb5a63069bd96de01dccffe76fd258
-│       ├───ee64343d2cc4cf31290e2740c4dac7fa488fc9068ba0ab81841026e23082754ed418caa01accfe61c88ef08b668fd8814442fa26644152a1ed99f5f05358d1bc
-│       └───tmp/
-│           └───da4f00ab151696f7d62b583828b9c989176e51ff8d8d5e0284ebbf12d247102436059d2d399dc3af824e71ff010410576d32c3ae175ac0c7a16ffb83d4f349c6
-├───logs/
-│   ├───pm2-combined.log
-│   ├───pm2-error.log
-│   └───pm2-out.log
 ├───migrations/
 │   ├───migration_lock.toml
 │   ├───20220101155430_migrate_from_sequelize/
@@ -100,10 +78,13 @@ ISOBEL
 │   │   └───migration.sql
 │   ├───20240824215313_add_default_queue_page_size/
 │   │   └───migration.sql
-│   └───20241031084730_add_turn_down_volume_when_people_speak/
+│   ├───20241031084730_add_turn_down_volume_when_people_speak/
+│   │   └───migration.sql
+│   └───20250119200000_baseline_postgresql/
 │       └───migration.sql
 ├───src/
 │   ├───bot.ts
+│   ├───ffmpeggy.d.ts
 │   ├───index.ts
 │   ├───inversify.config.ts
 │   ├───types.ts
@@ -112,7 +93,9 @@ ISOBEL
 │   │   ├───config.ts
 │   │   ├───disconnect.ts
 │   │   ├───favorites.ts
+│   │   ├───file.ts
 │   │   ├───fseek.ts
+│   │   ├───help.ts
 │   │   ├───index.ts
 │   │   ├───loop-queue.ts
 │   │   ├───loop.ts
@@ -121,6 +104,7 @@ ISOBEL
 │   │   ├───now-playing.ts
 │   │   ├───pause.ts
 │   │   ├───play.ts
+│   │   ├───playback-controls.ts
 │   │   ├───queue.ts
 │   │   ├───remove.ts
 │   │   ├───replay.ts
@@ -130,7 +114,8 @@ ISOBEL
 │   │   ├───skip.ts
 │   │   ├───stop.ts
 │   │   ├───unskip.ts
-│   │   └───volume.ts
+│   │   ├───volume.ts
+│   │   └───yt.ts
 │   ├───events/
 │   │   ├───guild-create.ts
 │   │   └───voice-state-update.ts
@@ -138,9 +123,12 @@ ISOBEL
 │   │   └───player.ts
 │   ├───scripts/
 │   │   ├───cache-clear-key-value.ts
+│   │   ├───load-env.ts
 │   │   ├───migrate-and-start.ts
 │   │   ├───run-with-database-url.ts
-│   │   └───start.ts
+│   │   ├───start.ts
+│   │   ├───verify-database.ts
+│   │   └───verify-environment.ts
 │   ├───services/
 │   │   ├───add-query-to-queue.ts
 │   │   ├───config.ts
@@ -149,6 +137,7 @@ ISOBEL
 │   │   ├───health-server.ts
 │   │   ├───key-value-cache.ts
 │   │   ├───player.ts
+│   │   ├───songbird-next.ts
 │   │   └───starchild-api.ts
 │   └───utils/
 │       ├───arrays.ts
@@ -159,11 +148,13 @@ ISOBEL
 │       ├───db.ts
 │       ├───debug.ts
 │       ├───duration-string-to-seconds.ts
+│       ├───env-validation.ts
 │       ├───error-msg.ts
 │       ├───get-guild-settings.ts
 │       ├───get-progress-bar.ts
 │       ├───get-starchild-suggestions-for.ts
 │       ├───log-banner.ts
+│       ├───redact-secrets.ts
 │       ├───register-commands-on-guild.ts
 │       ├───string.ts
 │       ├───time.ts
@@ -171,52 +162,39 @@ ISOBEL
 └───web/
     ├───.env.example
     ├───.gitignore
-    ├───BUILD.md
-    ├───CHANGELOG.md
-    ├───CLAUDE.md
-    ├───CODE_REVIEW.md
-    ├───DEBUG_PORT.md
+    ├───.vercelignore
+    ├───Dockerfile
+    ├───Dockerfile.auth
     ├───drizzle.config.ts
     ├───ecosystem.config.cjs
     ├───env.d.ts
     ├───eslint.config.js
-    ├───FIXES_APPLIED.md
     ├───index.html
-    ├───MIGRATION_TO_POSTGRES.md
-    ├───package-lock.json
     ├───package.json
     ├───README.md
-    ├───SETUP.md
     ├───tree.txt
     ├───tsconfig.app.json
     ├───tsconfig.json
     ├───tsconfig.node.json
     ├───vercel.json
-    ├───VERCEL_DEPLOYMENT.md
-    ├───vite.config.js
     ├───vite.config.ts
     ├───api/
     │   ├───index.ts
-    │   └───auth/
-    ├───data/
-    │   └───db.sqlite
+    │   └───tsconfig.json
     ├───drizzle/
     │   ├───0000_bored_swarm.sql
     │   └───meta/
     │       ├───0000_snapshot.json
     │       └───_journal.json
-    ├───logs/
-    │   ├───auth-error.log
-    │   ├───auth-out.log
-    │   ├───combined.log
-    │   ├───error.log
-    │   ├───web-error.log
-    │   └───web-out.log
     ├───public/
+    │   ├───favicon.png
     │   ├───songbird.png
     │   └───vite.svg
     ├───scripts/
+    │   ├───load-env.cjs
+    │   ├───load-env.js
     │   ├───migrate.ts
+    │   ├───serve-prod.js
     │   └───start-web.js
     └───src/
         ├───App.css
@@ -241,17 +219,21 @@ ISOBEL
         ├───hooks/
         │   └───useAuth.ts
         ├───lib/
+        │   ├───api-paths.ts
         │   ├───auth-client.ts
         │   ├───env.ts
         │   ├───errors.ts
+        │   ├───load-env.ts
         │   ├───logger.ts
         │   ├───utils.ts
         │   └───validation.ts
-        └───server/
-            ├───app.ts
-            ├───index.ts
-            ├───middleware.ts
-            └───api/
-                └───auth/
-                    └───[...nextauth]/
-                        └───route.ts
+        ├───server/
+        │   ├───app.ts
+        │   ├───index.ts
+        │   ├───middleware.ts
+        │   └───api/
+        │       └───auth/
+        │           └───[...nextauth]/
+        │               └───route.ts
+        └───types/
+            └───discord.ts

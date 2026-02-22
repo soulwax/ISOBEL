@@ -1,17 +1,17 @@
 // File: src/commands/playback-controls.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ActionRowBuilder, ButtonInteraction, ChatInputCommandInteraction, GuildMember, MessageFlags, ModalBuilder, ModalSubmitInteraction, StringSelectMenuInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { ActionRowBuilder, type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, MessageFlags, ModalBuilder, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { URL } from 'node:url';
-import PlayerManager from '../managers/player.js';
-import AddQueryToQueue from '../services/add-query-to-queue.js';
-import { MediaSource, STATUS, SongMetadata } from '../services/player.js';
+import type PlayerManager from '../managers/player.js';
+import type AddQueryToQueue from '../services/add-query-to-queue.js';
+import { MediaSource, STATUS, type SongMetadata } from '../services/player.js';
 import { TYPES } from '../types.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel } from '../utils/channels.js';
 import errorMsg from '../utils/error-msg.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {
@@ -245,7 +245,7 @@ export default class implements Command {
       return parseInt(value, 10);
     }
 
-    const match = value.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+    const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i.exec(value);
     if (!match) {
       return null;
     }

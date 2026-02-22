@@ -1,14 +1,14 @@
 // File: src/commands/favorites.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { APIEmbedField, AutocompleteInteraction, ChatInputCommandInteraction } from 'discord.js';
+import { type APIEmbedField, type AutocompleteInteraction, type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { Pagination } from 'pagination.djs';
-import AddQueryToQueue from '../services/add-query-to-queue.js';
+import type AddQueryToQueue from '../services/add-query-to-queue.js';
 import { TYPES } from '../types.js';
 import { DISCORD_AUTOCOMPLETE_MAX_CHOICES, DISCORD_PAGINATION_LIMIT } from '../utils/constants.js';
 import { prisma } from '../utils/db.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {

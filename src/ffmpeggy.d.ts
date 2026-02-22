@@ -1,3 +1,5 @@
+// File: src/ffmpeggy.d.ts
+
 // Type declaration for ffmpeggy (package exports don't expose types for ESM resolution)
 declare module 'ffmpeggy' {
   export interface FFmpeggyOptions {

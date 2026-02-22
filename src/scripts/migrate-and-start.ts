@@ -1,17 +1,16 @@
 // File: src/scripts/migrate-and-start.ts
 
-// CRITICAL: This must be the FIRST import to load environment variables
 import './load-env.js';
 
-import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
-import { execa, ExecaError } from 'execa';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { execa, type ExecaError } from 'execa';
 import { promises as fs } from 'fs';
 import ora from 'ora';
+import { Pool } from 'pg';
 import { startBot } from '../index.js';
 import { DATA_DIR } from '../services/config.js';
-import createDatabaseUrl, { createDatabasePath } from '../utils/create-database-url.js';
+import { createDatabasePath } from '../utils/create-database-url.js';
 import logBanner from '../utils/log-banner.js';
 
 // PostgreSQL is required - DATABASE_URL must be set
@@ -50,7 +49,7 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
   try {
     await client.$queryRaw`SELECT COUNT(id) FROM _prisma_migrations`;
   } catch (error: unknown) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && (error as Prisma.PrismaClientKnownRequestError).code === 'P2010') {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2010') {
       // Table doesn't exist
       return false;
     }
@@ -61,7 +60,7 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
   return true;
 };
 
-(async () => {
+void (async () => {
   // Banner
   logBanner();
 
