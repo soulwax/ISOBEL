@@ -7,8 +7,8 @@
  * Run with: npm run verify:db
  */
 
-import { config } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
+import { config } from 'dotenv';
 import { validatePostgresUrl } from '../utils/env-validation.js';
 
 // Load environment variables
@@ -45,7 +45,7 @@ async function verifyDatabase() {
 
     // Try a simple query
     console.log('\n📊 Checking database...');
-    const result = await prisma.$queryRaw<Array<{version: string}>>`SELECT version()`;
+    const result = await prisma.$queryRaw<{version: string}[]>`SELECT version()`;
     console.log(`✅ PostgreSQL version: ${result[0].version.split(' ')[0]} ${result[0].version.split(' ')[1]}`);
 
     // Check if migrations are applied
@@ -54,7 +54,7 @@ async function verifyDatabase() {
       // Simple check - try to query a known table
       await prisma.setting.findFirst();
       console.log('✅ Database schema appears to be set up correctly');
-    } catch (error) {
+    } catch {
       console.warn('⚠️  Database tables may not exist yet');
       console.warn('   Run migrations with: npm run prisma:migrate:deploy');
     }

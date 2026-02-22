@@ -3,7 +3,7 @@
 import ora from 'ora';
 import { prisma } from '../utils/db.js';
 
-(async () => {
+void (async () => {
   const spinner = ora('Clearing key value cache...').start();
 
   await prisma.keyValueCache.deleteMany({});

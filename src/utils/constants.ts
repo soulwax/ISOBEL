@@ -68,3 +68,44 @@ export const AUDIO_BITRATE_KBPS = 320;
  * Set to 192kbps for good quality while maintaining compatibility
  */
 export const OPUS_OUTPUT_BITRATE_KBPS = 192;
+
+/**
+ * FFmpeg start timeout in milliseconds
+ * How long to wait for ffmpeg to emit its 'start' event before aborting
+ */
+export const FFMPEG_START_TIMEOUT_MS = 5000;
+
+/**
+ * Maximum playback error retry attempts before skipping the track
+ */
+export const PLAYBACK_ERROR_MAX_RETRIES = 2;
+
+/**
+ * Base delay in milliseconds for playback error exponential backoff
+ */
+export const PLAYBACK_ERROR_BACKOFF_BASE_MS = 300;
+
+/**
+ * Maximum voice reconnection attempts before giving up
+ */
+export const RECONNECT_MAX_ATTEMPTS = 5;
+
+/**
+ * Maximum delay in milliseconds for reconnection exponential backoff
+ */
+export const RECONNECT_MAX_DELAY_MS = 30_000;
+
+/**
+ * Base delay in milliseconds for reconnection exponential backoff
+ */
+export const RECONNECT_BACKOFF_BASE_MS = 1000;
+
+/**
+ * Maximum retries for creating a read stream (ffmpeg)
+ */
+export const STREAM_CREATE_MAX_RETRIES = 2;
+
+/**
+ * Base delay in milliseconds for stream creation retry backoff
+ */
+export const STREAM_CREATE_BACKOFF_BASE_MS = 250;

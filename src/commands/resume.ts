@@ -1,14 +1,14 @@
 // File: src/commands/resume.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ChatInputCommandInteraction, GuildMember } from 'discord.js';
+import { type ChatInputCommandInteraction, type GuildMember } from 'discord.js';
 import { inject, injectable } from 'inversify';
-import PlayerManager from '../managers/player.js';
+import type PlayerManager from '../managers/player.js';
 import { STATUS } from '../services/player.js';
 import { TYPES } from '../types.js';
 import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {

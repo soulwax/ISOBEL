@@ -1,17 +1,12 @@
 // File: src/utils/channels.ts
 
-import { ChannelType, Guild, GuildMember, User, VoiceChannel } from 'discord.js';
+import { ChannelType, type Guild, type GuildMember, type User, type VoiceChannel } from 'discord.js';
 
 export const isUserInVoice = (guild: Guild, user: User): boolean => {
-  let inVoice = false;
-
-  guild.channels.cache.filter(channel => channel.type === ChannelType.GuildVoice).forEach(channel => {
-    if ((channel as VoiceChannel).members.find(member => member.id === user.id)) {
-      inVoice = true;
-    }
-  });
-
-  return inVoice;
+  return guild.channels.cache.some(
+    channel => channel.type === ChannelType.GuildVoice
+      && channel.members.has(user.id),
+  );
 };
 
 export const getSizeWithoutBots = (channel: VoiceChannel): number => channel.members.reduce((s, member) => {
@@ -24,7 +19,7 @@ export const getSizeWithoutBots = (channel: VoiceChannel): number => channel.mem
 
 export const getMemberVoiceChannel = (member?: GuildMember): [VoiceChannel, number] | null => {
   const channel = member?.voice?.channel;
-  if (channel && channel.type === ChannelType.GuildVoice) {
+  if (channel?.type === ChannelType.GuildVoice) {
     return [
       channel,
       getSizeWithoutBots(channel),
@@ -66,5 +61,5 @@ export const getMostPopularVoiceChannel = (guild: Guild): [VoiceChannel, number]
     return [popularChannel.channel, popularChannel.n];
   }
 
-  throw new Error();
+  throw new Error('Failed to find a suitable voice channel: no voice channels available in this guild');
 };

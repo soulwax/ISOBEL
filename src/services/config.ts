@@ -1,11 +1,11 @@
 // File: src/services/config.ts
 
-import { ActivityType, PresenceStatusData } from 'discord.js';
+import { ActivityType, type PresenceStatusData } from 'discord.js';
 import dotenv from 'dotenv';
 import { injectable } from 'inversify';
 import path from 'path';
 import 'reflect-metadata';
-import { ConditionalKeys } from 'type-fest';
+import { type ConditionalKeys } from 'type-fest';
 import xbytes from 'xbytes';
 dotenv.config({path: process.env.ENV_FILE ?? path.resolve(process.cwd(), '.env')});
 

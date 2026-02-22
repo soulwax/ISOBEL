@@ -2,7 +2,7 @@
 
 const REDACTED = '[REDACTED]';
 
-const STRING_REDACTION_PATTERNS: Array<[RegExp, string]> = [
+const STRING_REDACTION_PATTERNS: [RegExp, string][] = [
   [/([?&](?:key|api[_-]?key|token|access[_-]?token|refresh[_-]?token)=)([^&#\s]+)/gi, `$1${REDACTED}`],
   [/(["']?(?:x-api-key|api[_-]?key|token|access[_-]?token|refresh[_-]?token)["']?\s*[:=]\s*["']?)([^"',\s}]+)/gi, `$1${REDACTED}`],
   [/\b(Bearer\s+)([A-Za-z0-9._~+/=-]+)/gi, `$1${REDACTED}`],

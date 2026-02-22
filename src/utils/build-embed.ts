@@ -1,7 +1,8 @@
 // File: src/utils/build-embed.ts
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-import Player, { QueuedSong, STATUS } from '../services/player.js';
+import type Player from '../services/player.js';
+import { STATUS, type QueuedSong } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
 import { truncate } from './string.js';
@@ -13,7 +14,7 @@ const getMaxSongTitleLength = (title: string) => {
   return nonASCII.test(title) ? 28 : 48;
 };
 
-const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() || '';
+const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() ?? '';
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 
@@ -68,7 +69,8 @@ const getPlayerUI = (player: Player) => {
   const progressBar = getProgressBar(PROGRESS_BAR_SEGMENTS, position / song.length);
   const elapsedTime = song.isLive ? 'live' : `${prettyTime(position)}/${prettyTime(song.length)}`;
   const loop = player.loopCurrentSong ? '🔂' : player.loopCurrentQueue ? '🔁' : '';
-  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()!}%` : '';
+  const volume = player.getVolume();
+  const vol: string = typeof volume === 'number' ? `${volume}%` : '';
   return `${button} ${progressBar} \`[${elapsedTime}]\`🔉 ${vol} ${loop}`;
 };
 
@@ -104,7 +106,7 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   return message;
 };
 
-export const buildPlaybackControls = (player: Player): Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>> => {
+export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {
   const isPlaying = player.status === STATUS.PLAYING;
   const canBack = player.canGoBack();
   const canSkip = player.canGoForward(1);
@@ -153,7 +155,7 @@ export const buildPlaybackControls = (player: Player): Array<ActionRowBuilder<Bu
   const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
     .addComponents(seekButton);
 
-  const rows: Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>> = [primaryRow, secondaryRow];
+  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [primaryRow, secondaryRow];
   const suggestions = player.getAiSuggestions();
   if (suggestions.length > 0) {
     const options = suggestions.slice(0, 5).map(value => ({
