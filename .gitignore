@@ -127,3 +127,5 @@ CLAUDE.md
 .github/docs/DOCKER_ECOSYSTEM.md
 
 dist/
+.vercel
+.env*.local
