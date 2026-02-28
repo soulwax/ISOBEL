@@ -495,7 +495,7 @@ function App() {
               <article className="setup-card">
                 <h3 className="setup-card-title">Prerequisites</h3>
                 <ul className="setup-list">
-                  <li>Node.js 24+ and npm</li>
+                  <li>Node.js 24+ and pnpm</li>
                   <li>PostgreSQL database (local or managed)</li>
                   <li>Discord Bot Token and OAuth app credentials</li>
                   <li>ffmpeg/ffprobe available on your server</li>
@@ -507,10 +507,9 @@ function App() {
                   <code>{`git clone --recursive git@github.com:soulwax/isobel.git
 cd isobel
 cp .env.example .env
-npm install
-npm run build
-cd web && npm install && npm run build && cd ..
-npm run start:all:prod`}</code>
+pnpm install -r
+pnpm build:all
+pnpm start:all:prod`}</code>
                 </pre>
               </article>
               <article className="setup-card">

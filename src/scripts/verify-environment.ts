@@ -4,7 +4,7 @@
  * Environment Verification Script
  *
  * Validates all required environment variables for the bot to run properly.
- * Run with: npm run verify:env
+ * Run with: pnpm verify:env
  */
 
 import { config } from 'dotenv';
@@ -27,8 +27,8 @@ try {
 
   console.log('\n✅ All required environment variables are properly configured!');
   console.log('\nYou can now start the bot with:');
-  console.log('  - Development: npm run dev');
-  console.log('  - Production:  npm run pm2:start:prod\n');
+  console.log('  - Development: pnpm dev');
+  console.log('  - Production:  pnpm pm2:start:prod\n');
   process.exit(0);
 } catch (error) {
   console.error('\n❌ Unexpected error during validation:', error);

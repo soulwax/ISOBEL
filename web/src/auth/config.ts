@@ -1,22 +1,13 @@
 // File: web/src/auth/config.ts
 
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
-import Discord from 'next-auth/providers/discord';
-import type { DefaultSession, NextAuthConfig } from 'next-auth';
+import Discord from '@auth/core/providers/discord';
+import type { AuthConfig } from '@auth/core';
 import { db } from '../db/index.js';
 import { discordUsers, discordGuilds, guildMembers } from '../db/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import { requireEnv } from '../lib/env.js';
 import { logger } from '../lib/logger.js';
-
-declare module 'next-auth' {
-  interface Session extends DefaultSession {
-    user: {
-      id: string;
-      discordId?: string;
-    } & DefaultSession['user'];
-  }
-}
 
 // Get NEXTAUTH_URL from environment, fallback to auto-detection
 const nextAuthUrl = process.env.NEXTAUTH_URL;
@@ -34,7 +25,7 @@ if (!process.env.NEXTAUTH_SECRET?.trim() && !process.env.AUTH_SECRET?.trim()) {
 
 export const authConfig = {
   adapter: DrizzleAdapter(db),
-  trustHost: true, // Required for NextAuth v5 when not using Next.js
+  trustHost: true, // Required for Auth.js core when running behind proxies/serverless
   basePath: '/api/auth', // Set the base path for auth routes
   ...(nextAuthUrl && { url: nextAuthUrl }), // Explicitly set URL if provided
   providers: [
@@ -155,7 +146,11 @@ export const authConfig = {
     },
     async session({ session, user }) {
       if (session.user) {
-        session.user.id = user.id;
+        const sessionUser = session.user as typeof session.user & {
+          id?: string;
+          discordId?: string;
+        };
+        sessionUser.id = user.id;
         // Get Discord ID from discordUsers table
         const discordUser = await db
           .select()
@@ -164,15 +159,17 @@ export const authConfig = {
           .limit(1);
         
         if (discordUser.length > 0) {
-          session.user.discordId = discordUser[0].id;
+          sessionUser.discordId = discordUser[0].id;
         }
+
+        session.user = sessionUser;
       }
       return session;
     },
   },
-  // Use default NextAuth pages (auto-generated signin page)
+  // Use default Auth.js pages (auto-generated sign-in page)
   session: {
     strategy: 'database',
   },
   secret: nextAuthSecret,
-} satisfies NextAuthConfig;
+} satisfies AuthConfig;

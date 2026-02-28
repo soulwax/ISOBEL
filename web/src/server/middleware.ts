@@ -22,7 +22,7 @@ export interface AuthenticatedRequest extends express.Request {
 }
 
 /**
- * Get session from NextAuth request
+ * Get session from Auth.js request
  */
 async function getSessionFromRequest(req: express.Request): Promise<AuthenticatedRequest['session'] | null> {
   const protocol = req.protocol || 'http';
@@ -36,16 +36,13 @@ async function getSessionFromRequest(req: express.Request): Promise<Authenticate
     }
   });
 
-  const nextReq = new Request(fullUrl, {
+  const authReq = new Request(fullUrl, {
     method: 'GET',
     headers,
   }) as Parameters<typeof handlers.GET>[0];
 
-  // Auth.js expects a Next.js-style request carrying nextUrl.
-  (nextReq as unknown as { nextUrl: URL }).nextUrl = new URL(fullUrl);
-
   try {
-    const sessionResponse = await handlers.GET(nextReq);
+    const sessionResponse = await handlers.GET(authReq);
     const sessionText = await sessionResponse.text();
     return sessionText ? JSON.parse(sessionText) : null;
   } catch (error) {

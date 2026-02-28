@@ -4,7 +4,7 @@ This document describes how Discord-based authentication works in the ISOBEL web
 
 ## Overview
 
-- **Stack**: [Auth.js](https://authjs.dev/) (NextAuth v5) with the **Discord** OAuth2 provider.
+- **Stack**: [Auth.js](https://authjs.dev/) core with the **Discord** OAuth2 provider.
 - **Session strategy**: Database-backed sessions (PostgreSQL via Drizzle). Sessions are stored in the `session` table; the adapter also uses `user`, `account`, and `verificationToken` tables.
 - **Scopes**: Discord OAuth requests `identify` and `guilds` so the app can show the user’s profile and the servers (guilds) they share with the bot.
 
@@ -67,7 +67,7 @@ Redirect URL that must be allowed in the Discord Developer Portal:
    Discord sends the user to `{NEXTAUTH_URL}/api/auth/callback/discord?code=...&state=...`.
 
 6. **Auth.js callback**  
-   The route `web/src/server/api/auth/[...nextauth]/route.ts` delegates all `GET`/`POST` under `/api/auth/*` to Auth.js handlers. On the callback request, Auth.js:
+   The route bridge in `web/src/server/app.ts` delegates all `GET`/`POST` under `/api/auth/*` to Auth.js handlers. On the callback request, Auth.js:
    - Exchanges the `code` for tokens with Discord.
    - Runs the **signIn** callback (see below).
    - Creates or updates the **user** and **account** in the DB (via Drizzle adapter).
@@ -90,14 +90,14 @@ Redirect URL that must be allowed in the Discord Developer Portal:
   2. Turned into a Web `Request` with the correct full URL (using `x-forwarded-proto` / `x-forwarded-host` when present).
   3. Passed to Auth.js handlers (GET or POST). The response (including redirects and `Set-Cookie`) is translated back to Express and sent.
 
-The **same Express app** serves `/api/guilds`, `/api/auth/*`, and the rest of the API. In production (Docker, PM2, or Vercel) a single web process serves both the frontend and the API (including auth). For **local development**, you can run `npm run dev:all`: Vite (port 3001) serves the frontend and proxies `/api` to the API server (port 3003) so auth and API routes work without a separate deployment.
+The **same Express app** serves `/api/guilds`, `/api/auth/*`, and the rest of the API. In production (Docker, PM2, or Vercel) a single web process serves both the frontend and the API (including auth). For **local development**, you can run `pnpm dev:all`: Vite (port 3001) serves the frontend and proxies `/api` to the API server (port 3003) so auth and API routes work without a separate deployment.
 
 ---
 
 ## Auth.js config (what runs on sign-in and for the session)
 
 - **Config file**: `web/src/auth/config.ts`.  
-- **Entry**: `web/src/auth/index.ts` exports `handlers`, `signIn`, `signOut`, `auth` from `NextAuth(authConfig)`.
+- **Entry**: `web/src/auth/index.ts` exports request handlers that call `Auth(request, authConfig)`.
 
 Important details:
 
@@ -151,7 +151,7 @@ Important details:
 
 ## Database tables involved
 
-- **NextAuth (Auth.js)**  
+- **Auth.js adapter tables**  
   - `user` — internal user id, name, email, image.  
   - `account` — links user to Discord (provider, providerAccountId, access_token, refresh_token, etc.).  
   - `session` — sessionToken, userId, expires.  
@@ -189,7 +189,7 @@ When the web app is hosted on **Vercel**, authentication works with the same Aut
    (or your custom domain). Discord will only redirect back to URLs listed there.
 
 3. **Database**  
-   Run your migrations (e.g. `npm run db:push` from `web/`) so the `user`, `account`, `session`, and `verificationToken` tables exist in the DB Vercel uses (same `DATABASE_URL` / `POSTGRES_URL`).
+   Run your migrations (e.g. `pnpm db:push` from `web/`) so the `user`, `account`, `session`, and `verificationToken` tables exist in the DB Vercel uses (same `DATABASE_URL` / `POSTGRES_URL`).
 
 ### Checklist
 
@@ -206,6 +206,7 @@ If you end up at `https://your-domain/api/auth/signin?callbackUrl=...` and the r
 
 1. **Redeploy** so the latest API code is live (the handler now returns the real error message on Vercel).
 2. **Check the response body** after redeploy — it will show the underlying error (e.g. missing env var or DB error).
+   - If you see `Cannot find module .../next/server imported from .../next-auth/...`, the deployment is still using `next-auth`. This project now uses `@auth/core`; redeploy with the updated `web/package.json` and `web/src/auth/index.ts`.
 3. **Environment variables**: In Vercel → Project → Settings → Environment Variables, ensure **Production** (and Preview if you test there) has:
    - `DISCORD_CLIENT_ID`
    - `DISCORD_CLIENT_SECRET`
@@ -219,13 +220,13 @@ If you end up at `https://your-domain/api/auth/signin?callbackUrl=...` and the r
 
 ## Development (two processes)
 
-Run `npm run dev:all` in the web directory: Vite runs on port 3001 and the API server on port 3003. Vite proxies `/api` to `http://localhost:3003` (override with `API_PROXY_TARGET`). Same auth flow; the browser talks to the same origin (3001) and the proxy forwards API and auth requests to the API server.
+Run `pnpm dev:all` in the web directory: Vite runs on port 3001 and the API server on port 3003. Vite proxies `/api` to `http://localhost:3003` (override with `API_PROXY_TARGET`). Same auth flow; the browser talks to the same origin (3001) and the proxy forwards API and auth requests to the API server.
 
 ---
 
 ## Summary
 
 - **Discord OAuth** is used only for the **web UI**: users log in with Discord; the app stores them in `user` + `account` and keeps Discord profile and guild list in `discordUsers` / `discordGuilds` / `guildMembers`.
-- **Auth.js** (NextAuth v5) with **Drizzle adapter** and **database sessions** handles the OAuth flow, callbacks, and session management under `/api/auth`.
+- **Auth.js core** with **Drizzle adapter** and **database sessions** handles the OAuth flow, callbacks, and session management under `/api/auth`.
 - **Protected routes** use `requireAuth`, which resolves the session via `GET /api/auth/session` and the same Auth.js handlers.  
 - **Redirect URL** must be exactly `{NEXTAUTH_URL}/api/auth/callback/discord` in the Discord application’s OAuth2 settings, and `NEXTAUTH_URL` must match the URL the user sees in the browser.

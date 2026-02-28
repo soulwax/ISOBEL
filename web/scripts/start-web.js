@@ -19,7 +19,7 @@ if (isProduction) {
   console.log('Starting production server (serving from ./build)...');
   console.log(`PORT from environment: ${process.env.PORT || 'not set'}`);
   // Use execFile to avoid shell injection and deprecation warning
-  const vitePreview = spawn('npm', ['run', 'preview'], {
+  const vitePreview = spawn('pnpm', ['run', 'preview'], {
     cwd: join(__dirname, '..'),
     stdio: 'inherit',
     env: {
@@ -39,7 +39,7 @@ if (isProduction) {
   // In development, use vite dev server
   console.log('Starting development server...');
   console.log(`PORT from environment: ${process.env.PORT || 'not set'}`);
-  const viteDev = spawn('npm', ['run', 'dev'], {
+  const viteDev = spawn('pnpm', ['run', 'dev'], {
     cwd: join(__dirname, '..'),
     stdio: 'inherit',
     shell: true,

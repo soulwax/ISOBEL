@@ -3,7 +3,7 @@
 import { relations } from 'drizzle-orm';
 import { boolean, index, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
 
-// NextAuth required tables
+// Auth.js required tables
 export const users = pgTable('user', {
   id: text('id').primaryKey(),
   name: text('name'),
@@ -57,7 +57,7 @@ export const discordUsers = pgTable('discord_user', {
   userId: text('userId')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' })
-    .unique(), // Link to NextAuth user
+    .unique(), // Link to Auth.js user
   username: text('username').notNull(),
   discriminator: text('discriminator'), // Legacy discriminator (may be null for new users)
   globalName: text('globalName'), // New username system

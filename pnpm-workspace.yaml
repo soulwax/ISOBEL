@@ -1,5 +1,9 @@
 # File: pnpm-workspace.yaml
 
+packages:
+  - .
+  - web
+
 onlyBuiltDependencies:
   - '@discordjs/opus'
   - '@prisma/engines'

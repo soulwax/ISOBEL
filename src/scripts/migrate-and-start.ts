@@ -96,11 +96,11 @@ void (async () => {
         console.error('📝 This usually means you need to baseline your migrations.\n');
         console.error('To fix this, run ONE of the following commands:\n');
         console.error('  1. Baseline existing migrations (if database has ISOBEL tables):');
-        console.error('     docker compose exec bot npx prisma migrate resolve --applied "0_init"\n');
+        console.error('     docker compose exec bot pnpm exec prisma migrate resolve --applied "0_init"\n');
         console.error('  2. Reset and recreate the database (WARNING: deletes all data):');
-        console.error('     docker compose exec bot npx prisma migrate reset --force\n');
+        console.error('     docker compose exec bot pnpm exec prisma migrate reset --force\n');
         console.error('  3. Create a fresh baseline migration:');
-        console.error('     docker compose exec bot npx prisma migrate diff --from-empty --to-schema-datamodel schema.prisma --script > baseline.sql');
+        console.error('     docker compose exec bot pnpm exec prisma migrate diff --from-empty --to-schema-datamodel schema.prisma --script > baseline.sql');
         console.error('     # Then apply it manually to your database\n');
         process.exit(1);
       } else {
