@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-02-28
+
+### Added
+- Added crawl discovery files for the web app: `web/public/robots.txt`, `web/public/sitemap.xml`, and `web/public/site.webmanifest`.
+- Added structured data in `web/index.html` for `WebSite`, `SoftwareApplication`, and `FAQPage`.
+- Added a dedicated FAQ section on the landing page to expand search-intent coverage for self-hosted Discord music bot queries.
+
+### Changed
+- Upgraded web page metadata with canonical URL, richer description/keywords, Open Graph tags, and Twitter card tags.
+- Added static fallback HTML content in `web/index.html` so crawlers can index meaningful content before client-side hydration.
+- Updated landing copy and image metadata to better target discoverability for ISOBEL as a self-hosted Discord music bot.
+- Added dynamic `robots` handling in `web/src/App.tsx` to keep authenticated dashboard views out of search indexes (`noindex, nofollow`).
+
+### Fixed
+- Fixed `web` TypeScript/Vite env typing by adding `vite/client` references in `web/env.d.ts`, restoring successful `npm --prefix web run build`.
+
 ## [3.0.1] - 2026-02-22
 
 ### Fixed
