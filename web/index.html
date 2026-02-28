@@ -4,12 +4,178 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ISOBEL - Discord Music Bot</title>
+    <title>ISOBEL | Self-Hosted Discord Music Bot</title>
+    <meta
+      name="description"
+      content="ISOBEL is an open-source, self-hosted Discord music bot with high-quality audio streaming, smart queue management, and a web dashboard for server settings."
+    />
+    <meta
+      name="keywords"
+      content="Discord music bot, self-hosted Discord bot, open source Discord bot, Discord audio bot, ISOBEL"
+    />
+    <meta
+      name="robots"
+      content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta name="author" content="ISOBEL Contributors" />
+    <meta name="application-name" content="ISOBEL" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="theme-color" content="#1E2124" />
+    <link rel="canonical" href="https://isobelnet.de/" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/png" sizes="1024x1024" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/songbird.png" />
+    <link rel="preload" as="image" href="/songbird.png" fetchpriority="high" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ISOBEL" />
+    <meta property="og:title" content="ISOBEL | Self-Hosted Discord Music Bot" />
+    <meta
+      property="og:description"
+      content="Open-source Discord music bot with clean audio, smart queue tools, and a web dashboard for per-server settings."
+    />
+    <meta property="og:url" content="https://isobelnet.de/" />
+    <meta property="og:image" content="https://isobelnet.de/songbird.png" />
+    <meta
+      property="og:image:alt"
+      content="ISOBEL songbird logo for the self-hosted Discord music bot"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ISOBEL | Self-Hosted Discord Music Bot" />
+    <meta
+      name="twitter:description"
+      content="Open-source Discord music bot with high-quality playback and full self-hosted control."
+    />
+    <meta name="twitter:image" content="https://isobelnet.de/songbird.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "name": "ISOBEL",
+            "url": "https://isobelnet.de/",
+            "description": "Open-source, self-hosted Discord music bot with high-quality audio and practical queue controls."
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "ISOBEL",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Linux, macOS, Windows, Docker",
+            "url": "https://isobelnet.de/",
+            "downloadUrl": "https://github.com/soulwax/ISOBEL",
+            "license": "https://github.com/soulwax/ISOBEL/blob/master/LICENSE",
+            "image": "https://isobelnet.de/songbird.png",
+            "description": "Self-hosted Discord music bot with high-quality audio streaming, queue management, and server-level settings.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "sameAs": [
+              "https://github.com/soulwax/ISOBEL",
+              "https://songbirdapi.com"
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is ISOBEL free and open source?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. ISOBEL is GPLv3-licensed and open source."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I self-host ISOBEL on a VPS or Docker?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. ISOBEL can run on VPS or container setups with Node.js, PostgreSQL, and ffmpeg/ffprobe."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does ISOBEL support YouTube URLs?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. You can paste supported track URLs, including YouTube links, for quick queueing."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <style>
+      .seo-fallback {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 3rem;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+        line-height: 1.6;
+      }
+      .seo-fallback h1,
+      .seo-fallback h2 {
+        line-height: 1.25;
+        margin: 0 0 0.75rem;
+      }
+      .seo-fallback p {
+        margin: 0 0 1rem;
+      }
+      .seo-fallback ul {
+        margin: 0 0 1.25rem 1.25rem;
+      }
+      .seo-fallback a {
+        color: #5865f2;
+      }
+      .seo-noscript {
+        max-width: 860px;
+        margin: 0 auto 2rem;
+        padding: 0 1.5rem;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="seo-fallback">
+        <h1>ISOBEL: Self-Hosted Discord Music Bot</h1>
+        <p>
+          ISOBEL is an open-source Discord music bot built for reliable playback,
+          clean audio quality, and practical server-level controls. It includes
+          caching, queue tools, and a web dashboard for configuration.
+        </p>
+        <p>
+          <a href="https://discord.com/oauth2/authorize">Add to Discord</a>
+          |
+          <a href="https://github.com/soulwax/ISOBEL">View on GitHub</a>
+          |
+          <a href="https://songbirdapi.com">Songbird API</a>
+        </p>
+        <h2>Core Features</h2>
+        <ul>
+          <li>High-quality audio streaming with smart queue management</li>
+          <li>Per-server configuration through a Discord-authenticated dashboard</li>
+          <li>Support for direct MP3 playback, YouTube URLs, and livestream audio</li>
+          <li>Open-source, self-hosted architecture for full ownership and control</li>
+        </ul>
+        <h2>Quick Setup</h2>
+        <p>
+          Clone the repository, configure environment variables, install
+          dependencies, and start the bot and web interface to manage settings.
+        </p>
+      </main>
+    </div>
+    <noscript>
+      <div class="seo-noscript">
+        JavaScript is disabled. You can still access project resources via
+        GitHub and follow the self-hosted setup instructions.
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

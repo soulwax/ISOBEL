@@ -14,7 +14,7 @@ import {
   HiOutlineLink,
   HiOutlineCollection,
 } from "react-icons/hi";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import HealthIndicator from "./components/HealthIndicator";
 import DiscordLogin from "./components/DiscordLogin";
@@ -23,10 +23,30 @@ import GuildSettings from "./components/GuildSettings";
 import { useAuth } from "./hooks/useAuth";
 import type { DiscordGuild } from "./types/discord";
 
+const DEFAULT_META_TITLE = "ISOBEL | Self-Hosted Discord Music Bot";
+const DEFAULT_META_DESCRIPTION =
+  "ISOBEL is an open-source, self-hosted Discord music bot with high-quality audio streaming, smart queue management, and a web dashboard for server settings.";
+const DEFAULT_ROBOTS_CONTENT =
+  "index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1";
+
+function setMetaContent(name: string, content: string) {
+  const meta = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+  if (meta) {
+    meta.setAttribute("content", content);
+    return;
+  }
+
+  const created = document.createElement("meta");
+  created.setAttribute("name", name);
+  created.setAttribute("content", content);
+  document.head.appendChild(created);
+}
+
 function App() {
   const [selectedGuild, setSelectedGuild] = useState<DiscordGuild | null>(null);
   const { isAuthenticated } = useAuth();
   const activeSelectedGuild = isAuthenticated ? selectedGuild : null;
+
   const helpSections = [
     {
       title: "Getting Started",
@@ -80,6 +100,65 @@ function App() {
     },
   ];
 
+  const faqItems = [
+    {
+      question: "Is ISOBEL free and open source?",
+      answer:
+        "Yes. ISOBEL is GPLv3-licensed and fully open source, so you can audit it, modify it, and run your own instance.",
+    },
+    {
+      question: "Can I self-host ISOBEL on a VPS or Docker?",
+      answer:
+        "Yes. You can run ISOBEL on a VPS, dedicated server, or container setup as long as Node.js, PostgreSQL, and ffmpeg/ffprobe are available.",
+    },
+    {
+      question: "What audio quality does ISOBEL support?",
+      answer:
+        "ISOBEL streams from 320kbps MP3 sources and outputs high-quality Opus audio to Discord voice channels.",
+    },
+    {
+      question: "Does ISOBEL support YouTube links?",
+      answer:
+        "Yes. You can paste supported track URLs, including YouTube links, to queue music quickly without extra setup.",
+    },
+    {
+      question: "How do I manage server-specific bot settings?",
+      answer:
+        "Sign in through the web dashboard with Discord, select a server where you have permissions, and configure playback defaults and limits.",
+    },
+    {
+      question: "Who should use ISOBEL?",
+      answer:
+        "ISOBEL is ideal for small to medium Discord communities that want reliable music playback, low overhead, and full control through self-hosting.",
+    },
+  ];
+
+  useEffect(() => {
+    if (isAuthenticated && activeSelectedGuild) {
+      document.title = `${activeSelectedGuild.name} Settings | ISOBEL Dashboard`;
+      setMetaContent("robots", "noindex, nofollow, noarchive");
+      setMetaContent(
+        "description",
+        "Manage ISOBEL guild settings and playback defaults from the dashboard."
+      );
+      return;
+    }
+
+    if (isAuthenticated) {
+      document.title = "ISOBEL Dashboard | Discord Guild Settings";
+      setMetaContent("robots", "noindex, nofollow, noarchive");
+      setMetaContent(
+        "description",
+        "Sign in to manage ISOBEL settings for your Discord servers."
+      );
+      return;
+    }
+
+    document.title = DEFAULT_META_TITLE;
+    setMetaContent("robots", DEFAULT_ROBOTS_CONTENT);
+    setMetaContent("description", DEFAULT_META_DESCRIPTION);
+  }, [activeSelectedGuild, isAuthenticated]);
+
   const handleGuildSelect = (guild: DiscordGuild) => {
     setSelectedGuild(guild);
   };
@@ -111,6 +190,7 @@ function App() {
             <a href="#features">Features</a>
             <a href="#help">Help</a>
             <a href="#setup">Setup</a>
+            <a href="#faq">FAQ</a>
             <a href="#about">About</a>
             <a
               href="https://songbirdapi.com"
@@ -139,19 +219,24 @@ function App() {
               <div className="hero-title-section">
                 <img
                   src="/songbird.png"
-                  alt="ISOBEL Songbird"
+                  alt="ISOBEL songbird logo for the self-hosted Discord music bot"
                   className="songbird-img"
+                  width={400}
+                  height={400}
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
                 />
                 <h1 className="hero-title">
-                  A Discord Music Bot
-                  <span className="highlight"> That Doesn't Suck</span>
+                  Self-Hosted
+                  <span className="highlight"> Discord Music Bot</span>
                 </h1>
               </div>
               <p className="hero-subtitle">
-                High-quality audio streaming, smart caching, overall imo, a good
-                experience 10/10. Better than the majority of the other discord
-                music bots but with fewer features yet. Made with love, as is
-                the songbird api that enables the bot's capabilities.
+                ISOBEL is an open-source Discord music bot focused on clean
+                audio, predictable playback, and practical controls. Run it
+                yourself, tune settings per server, and keep full ownership of
+                your stack.
               </p>
               <div className="hero-buttons">
                 <a
@@ -230,7 +315,8 @@ function App() {
                 </div>
                 <h3 className="feature-title">Animated Progress Bar</h3>
                 <p className="feature-description">
-                  Real-time updating progress bar in discord embed lmao
+                  Real-time progress updates inside Discord embeds for clear
+                  playback visibility
                 </p>
               </div>
               <div className="feature-card">
@@ -285,7 +371,7 @@ function App() {
                 </div>
                 <h3 className="feature-title">Starchild Music API</h3>
                 <p className="feature-description">
-                  Streams directly from the Starchild Music API - no YouTube or
+                  Streams directly from the Starchild Music API, no YouTube or
                   Spotify required
                 </p>
               </div>
@@ -304,7 +390,8 @@ function App() {
                 </div>
                 <h3 className="feature-title">Direct MP3 Playback</h3>
                 <p className="feature-description">
-                  Play MP3 files directly when selected, bypassing unnecessary processing for optimal performance
+                  Play MP3 files directly when selected, bypassing unnecessary
+                  processing for optimal performance
                 </p>
               </div>
               <div className="feature-card">
@@ -313,7 +400,8 @@ function App() {
                 </div>
                 <h3 className="feature-title">YouTube URL Support</h3>
                 <p className="feature-description">
-                  Simply paste YouTube URLs to instantly queue and play your favorite tracks
+                  Paste YouTube URLs to instantly queue and play your favorite
+                  tracks
                 </p>
               </div>
               <div className="feature-card">
@@ -322,7 +410,8 @@ function App() {
                 </div>
                 <h3 className="feature-title">Smart Queue Management</h3>
                 <p className="feature-description">
-                  Intelligent queue system with shuffle, repeat, and priority controls for seamless playback
+                  Intelligent queue system with shuffle, repeat, and priority
+                  controls for seamless playback
                 </p>
               </div>
             </div>
@@ -433,6 +522,24 @@ npm run start:all:prod`}</code>
                   <li>Run <code>/help</code> in Discord to confirm command sync</li>
                 </ul>
               </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="faq" className="faq">
+          <div className="container">
+            <h2 className="section-title">Frequently Asked Questions</h2>
+            <p className="section-subtitle">
+              Quick answers for teams evaluating a self-hosted Discord music
+              bot.
+            </p>
+            <div className="faq-grid">
+              {faqItems.map((item) => (
+                <article key={item.question} className="faq-item">
+                  <h3 className="faq-question">{item.question}</h3>
+                  <p className="faq-answer">{item.answer}</p>
+                </article>
+              ))}
             </div>
           </div>
         </section>

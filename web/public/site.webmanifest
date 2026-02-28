@@ -1,0 +1,22 @@
+{
+  "name": "ISOBEL Discord Music Bot",
+  "short_name": "ISOBEL",
+  "description": "Open-source, self-hosted Discord music bot with high-quality audio and smart queue controls.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1e2124",
+  "theme_color": "#1e2124",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    },
+    {
+      "src": "/songbird.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}
