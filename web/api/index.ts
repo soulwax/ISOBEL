@@ -12,7 +12,8 @@ async function getApp() {
   }
   if (!app) {
     try {
-      const { createApp } = await import('../src/server/app');
+      // Vercel runs the compiled JS in Node ESM mode; keep the `.js` extension so runtime resolution works.
+      const { createApp } = await import('../src/server/app.js');
       app = createApp();
     } catch (error) {
       appError = error instanceof Error ? error : new Error(String(error));
