@@ -3,7 +3,7 @@
   "version": 2,
   "buildCommand": "pnpm run build",
   "outputDirectory": "build",
-  "installCommand": "pnpm install --no-frozen-lockfile",
+  "installCommand": "corepack enable && corepack prepare pnpm@10.30.2 --activate && pnpm install --no-frozen-lockfile",
   "framework": null,
   "rewrites": [
     {
