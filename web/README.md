@@ -6,19 +6,19 @@ A professional React web interface for the ISOBEL Discord music bot.
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Start development server (frontend only)
-npm run dev
+pnpm dev
 
 # Start development server (frontend + auth API)
-npm run dev:all
+pnpm dev:all
 
 # Build for production
-npm run build
+pnpm build
 
 # Preview production build
-npm run preview
+pnpm preview
 ```
 
 ## Features
@@ -37,7 +37,7 @@ npm run preview
 - TypeScript
 - Vite
 - Express (API server)
-- NextAuth.js (Discord OAuth)
+- Auth.js Core (Discord OAuth)
 - Drizzle ORM (PostgreSQL)
 - CSS3 (no external CSS frameworks)
 
@@ -58,7 +58,7 @@ Configure these in your Vercel project settings:
 | `DATABASE_URL` | Yes | PostgreSQL connection string (pooled) |
 | `DISCORD_CLIENT_ID` | Yes | Discord OAuth application client ID |
 | `DISCORD_CLIENT_SECRET` | Yes | Discord OAuth application client secret |
-| `NEXTAUTH_SECRET` | Yes | Random secret for NextAuth.js (`openssl rand -base64 32`) |
+| `NEXTAUTH_SECRET` | Yes | Random secret for Auth.js (`openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | Yes | Your Vercel deployment URL (e.g., `https://your-app.vercel.app`) |
 | `BOT_HEALTH_URL` | No | URL to bot's health endpoint for status checks |
 
@@ -68,7 +68,7 @@ Configure these in your Vercel project settings:
 
 ```bash
 cd web
-npx vercel
+pnpm dlx vercel
 ```
 
 #### Option 2: Git Integration
@@ -97,11 +97,11 @@ Run migrations after first deployment:
 
 ```bash
 cd web
-npm run db:push
+pnpm db:push
 ```
 
 Or use Drizzle Studio to manage your database:
 
 ```bash
-npm run db:studio
+pnpm db:studio
 ```

@@ -8,10 +8,10 @@
  *   - Staging: pm2 start ecosystem.config.cjs --env staging
  *   - Development: pm2 start ecosystem.config.cjs --env development
  *
- * Or use npm scripts:
- *   - npm run pm2:start:prod
- *   - npm run pm2:start:staging
- *   - npm run pm2:start:dev
+ * Or use pnpm scripts:
+ *   - pnpm pm2:start:prod
+ *   - pnpm pm2:start:staging
+ *   - pnpm pm2:start:dev
  */
 
 module.exports = {
@@ -94,7 +94,7 @@ module.exports = {
       ref: 'origin/main',
       repo: 'git@github.com:soulwax/ISOBEL.git',
       path: '/var/www/isobel',
-      'post-deploy': 'npm install && npm run build && pm2 reload ecosystem.config.cjs --env production',
+      'post-deploy': 'pnpm install -r --no-frozen-lockfile && pnpm build && pm2 reload ecosystem.config.cjs --env production',
       'pre-setup': '',
     },
   },

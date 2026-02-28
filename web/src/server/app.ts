@@ -148,7 +148,7 @@ export function createApp(options: CreateAppOptions = {}) {
     next();
   });
 
-  // NextAuth API routes - match all paths starting with /api/auth/
+  // Auth.js API routes - match all paths starting with /api/auth/
   app.all(/^\/api\/auth\/.*/, authLimiter, async (req, res): Promise<void> => {
     try {
       // Lazy import handlers to avoid initialization errors at module load time
@@ -190,7 +190,7 @@ export function createApp(options: CreateAppOptions = {}) {
       const host = req.get("x-forwarded-host") || req.get("host") || "localhost:3001";
       const fullUrl = `${protocol}://${host}${req.originalUrl}`;
 
-      // Convert Express req to Next.js Request
+      // Convert Express req to Web Request for Auth.js
       const headers = new Headers();
       Object.entries(req.headers).forEach(([key, value]) => {
         if (value) {
@@ -209,18 +209,15 @@ export function createApp(options: CreateAppOptions = {}) {
         }
       }
 
-      const nextReq = new Request(fullUrl, {
+      const authReq = new Request(fullUrl, {
         method: req.method,
         headers,
         body,
       }) as Parameters<typeof handler>[0];
 
-      // Auth.js expects a Next.js-style request carrying nextUrl.
-      (nextReq as unknown as { nextUrl: URL }).nextUrl = new URL(fullUrl);
+      const nextRes = await handler(authReq);
 
-      const nextRes = await handler(nextReq);
-
-      // Convert Next.js Response to Express response
+      // Convert Auth.js Web Response to Express response
       const bodyText = await nextRes.text();
       res.status(nextRes.status);
 

@@ -10,8 +10,8 @@ module.exports = {
   apps: [
     {
       name: 'isobel-web',
-      script: 'npx',
-      args: ['tsx', 'src/server/serve.ts'],
+      script: 'pnpm',
+      args: ['exec', 'tsx', 'src/server/serve.ts'],
       cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
@@ -26,7 +26,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: process.env.PORT || '3001',
       },
-      // Run 'npm run build' before starting in production (serves from ./build)
+      // Run 'pnpm build' before starting in production (serves from ./build)
       error_file: path.join(__dirname, 'logs', 'web-error.log'),
       out_file: path.join(__dirname, 'logs', 'web-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',

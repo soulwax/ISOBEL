@@ -2,8 +2,8 @@
 
 FROM node:25-bookworm-slim AS base
 
-# Update npm to latest; enable corepack if available (not in PATH in some node images)
-RUN npm install -g npm@latest && (corepack enable 2>/dev/null || true)
+# Enable pnpm via Corepack
+RUN corepack enable && corepack prepare pnpm@10.30.2 --activate
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
@@ -41,15 +41,14 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 
-# Install deps without lifecycle scripts to avoid postinstall-postinstall (which reads packageManager and can invoke yarn).
-# Then run the root postinstall (patch-package) explicitly.
-RUN npm ci --ignore-scripts && npm run postinstall
+# Install deps without lifecycle scripts, then run patch-package explicitly.
+RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm run postinstall
 
 # Create a production-only node_modules tree for runtime
 FROM dependencies AS prod-deps
-RUN npm ci --omit=dev --ignore-scripts && npm run postinstall
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts && pnpm run postinstall
 RUN cp -R node_modules /usr/app/prod_node_modules
 
 FROM dependencies AS builder
@@ -57,8 +56,8 @@ FROM dependencies AS builder
 COPY . .
 
 # Run tsc build
-RUN npm run prisma:generate
-RUN npm run build
+RUN pnpm run prisma:generate
+RUN pnpm run build
 
 # Only keep what's necessary to run
 FROM base AS runner

@@ -85,9 +85,9 @@ cp .env.example .env
 docker compose up -d --build
 
 # OR run with Node.js
-npm install
-npm run build
-npm start
+pnpm install
+pnpm build
+pnpm start
 ```
 
 **Access your bot:**
@@ -126,7 +126,7 @@ npm start
 ### Required for Node.js Deployment
 
 - Node.js 20.x or later (24.x recommended)
-- npm 9.x or later
+- pnpm 10.x or later (via Corepack)
 - ffmpeg 4.1 or later
 - PM2 (installed automatically)
 
@@ -204,13 +204,13 @@ Only needed if you want to use the web UI:
 DISCORD_CLIENT_ID=your-discord-oauth-client-id
 DISCORD_CLIENT_SECRET=your-discord-oauth-client-secret
 
-# NextAuth Configuration
+# Auth.js Configuration (NEXTAUTH_* env names)
 NEXTAUTH_SECRET=your-random-secret-here  # Generate with: openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3001       # Or your public domain
 
 # Web Service Ports
 WEB_PORT=3001        # Web interface
-# API_PORT=3003       # Dev only: API server when using npm run web:dev:all
+# API_PORT=3003       # Dev only: API server when using pnpm web:dev:all
 # Note: HEALTH_PORT (3002) is for bot health checks
 ```
 
@@ -220,13 +220,13 @@ Before starting ISOBEL, validate your environment:
 
 ```bash
 # Check environment variables
-npm run verify:env
+pnpm verify:env
 
 # Test database connection
-npm run verify:db
+pnpm verify:db
 
 # Check health (after starting)
-npm run health
+pnpm health
 ```
 
 ## 🐳 Running with Docker
@@ -270,7 +270,7 @@ docker run -d \
 
 **Prerequisites:**
 1. Create Discord OAuth Application ([guide](https://discord.com/developers/applications))
-2. Generate NextAuth secret: `openssl rand -base64 32`
+2. Generate Auth.js secret: `openssl rand -base64 32`
 3. Update `.env` with web variables (see [Environment Variables](#-environment-variables))
 
 **Start all services:**
@@ -338,18 +338,18 @@ git clone --recursive https://github.com/soulwax/ISOBEL.git
 cd ISOBEL
 
 # 2. Install dependencies
-npm install
+pnpm install
 
 # 3. Configure environment
 cp .env.example .env
 # Edit .env with your values
 
 # 4. Set up database (first time only)
-npm run prisma:migrate:deploy
+pnpm prisma:migrate:deploy
 
 # 5. Build and start
-npm run build
-npm start
+pnpm build
+pnpm start
 ```
 
 ### Running on the Same Machine (Bot + Web)
@@ -358,20 +358,19 @@ To run both bot and web interface on a single machine without Docker:
 
 ```bash
 # 1. Install all dependencies
-npm install
-cd web && npm install && cd ..
+pnpm install -r
 
 # 2. Build everything
-npm run build:all
+pnpm build:all
 
 # 3. Start all services with PM2
-npm run start:all:prod
+pnpm start:all:prod
 
 # 4. Check status
 pm2 status
 
 # 5. View logs
-npm run logs:all
+pnpm logs:all
 ```
 
 **Your services will be available at:**
@@ -383,57 +382,57 @@ npm run logs:all
 
 ```bash
 # Start services
-npm start                        # Bot only
-npm run pm2:start:prod          # Bot only (explicit)
-npm run web:pm2:start:prod      # Web only
-npm run start:all:prod          # Bot + Web + Auth
+pnpm start                       # Bot only
+pnpm pm2:start:prod          # Bot only (explicit)
+pnpm web:pm2:start:prod      # Web only
+pnpm start:all:prod          # Bot + Web + Auth
 
 # Stop services
-npm run pm2:stop                # Bot only
-npm run web:pm2:stop            # Web only
-npm run stop:all                # Everything
+pnpm pm2:stop                # Bot only
+pnpm web:pm2:stop            # Web only
+pnpm stop:all                # Everything
 
 # Restart services
-npm run pm2:restart             # Bot only
-npm run web:pm2:restart         # Web only
-npm run restart:all             # Everything
+pnpm pm2:restart             # Bot only
+pnpm web:pm2:restart         # Web only
+pnpm restart:all             # Everything
 
 # View logs
-npm run pm2:logs                # Bot logs
-npm run web:pm2:logs:web        # Web logs
-npm run web:pm2:logs:web        # Web logs
-npm run logs:all                # All logs
+pnpm pm2:logs                # Bot logs
+pnpm web:pm2:logs:web        # Web logs
+pnpm web:pm2:logs:web        # Web logs
+pnpm logs:all                # All logs
 
 # View status
 pm2 status                      # All PM2 processes
 pm2 monit                       # Real-time monitoring
 
 # Reset PM2 (nuclear option)
-npm run pm2:reset               # Stops and deletes all processes
+pnpm pm2:reset               # Stops and deletes all processes
 ```
 
 ### Development Mode
 
 ```bash
 # Bot only (with hot reload)
-npm run dev
+pnpm dev
 
 # Web only (with hot reload)
-npm run web:dev:all
+pnpm web:dev:all
 
 # Both bot and web (with hot reload)
-npm run dev:all
+pnpm dev:all
 ```
 
 ### Production Deployment
 
 ```bash
 # Quick deployment
-npm run deploy                  # Builds and starts everything
+pnpm deploy                  # Builds and starts everything
 
 # Or step by step
-npm run build:all              # Build bot and web
-npm run start:all:prod         # Start with PM2
+pnpm build:all              # Build bot and web
+pnpm start:all:prod         # Start with PM2
 pm2 save                       # Save PM2 process list
 pm2 startup                    # Enable PM2 on system boot
 ```
@@ -491,23 +490,23 @@ ISOBEL automatically runs migrations on startup, but you can run them manually:
 
 ```bash
 # Run pending migrations
-npm run prisma:migrate:deploy
+pnpm prisma:migrate:deploy
 
 # Check migration status
-npm run db:status
+pnpm db:status
 
 # Reset database (CAUTION: deletes all data!)
-npm run db:reset
+pnpm db:reset
 
 # Generate Prisma client after schema changes
-npm run prisma:generate
+pnpm prisma:generate
 ```
 
 ### Database Verification
 
 ```bash
 # Test database connection
-npm run verify:db
+pnpm verify:db
 
 # This checks:
 # - DATABASE_URL is valid
@@ -529,7 +528,7 @@ The web interface provides a modern UI for managing ISOBEL settings, favorites, 
 - Add redirect URL: `http://your-domain:3001/api/auth/callback/discord`
 - Copy Client ID and Client Secret
 
-**2. Generate NextAuth Secret:**
+**2. Generate Auth.js Secret:**
 ```bash
 openssl rand -base64 32
 ```
@@ -542,7 +541,7 @@ Add to your `.env` file:
 DISCORD_CLIENT_ID=your-client-id
 DISCORD_CLIENT_SECRET=your-client-secret
 
-# NextAuth
+# Auth.js
 NEXTAUTH_SECRET=your-generated-secret
 NEXTAUTH_URL=http://localhost:3001  # Or your public domain
 
@@ -560,9 +559,9 @@ docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
 
 **With Node.js:**
 ```bash
-cd web && npm install && cd ..
-npm run build:all
-npm run start:all:prod
+pnpm install -r
+pnpm build:all
+pnpm start:all:prod
 ```
 
 **5. Access:**
@@ -592,8 +591,8 @@ ISOBEL includes health check endpoints for monitoring:
 # Check bot health
 curl http://localhost:3002/health
 
-# Or use npm script
-npm run health
+# Or use pnpm script
+pnpm health
 ```
 
 **Response:**
@@ -614,8 +613,8 @@ npm run health
 # Check web health
 curl http://localhost:3001/health
 
-# Or use npm script
-npm run health:web
+# Or use pnpm script
+pnpm health:web
 ```
 
 ### Using Health Checks
@@ -668,8 +667,8 @@ cd ISOBEL
 
 **2. Install dependencies:**
 ```bash
-npm install              # Bot dependencies
-cd web && npm install    # Web dependencies (optional)
+pnpm install              # Bot dependencies
+pnpm --filter isobel-web install    # Web dependencies (optional)
 ```
 
 **3. Set up environment:**
@@ -680,44 +679,44 @@ cp .env.example .env
 
 **4. Run database migrations:**
 ```bash
-npm run prisma:migrate:dev
+pnpm prisma:migrate:dev
 ```
 
 **5. Start development server:**
 ```bash
 # Bot only
-npm run dev
+pnpm dev
 
 # Web only
-npm run web:dev:all
+pnpm web:dev:all
 
 # Both (recommended for full-stack development)
-npm run dev:all
+pnpm dev:all
 ```
 
 ### Development Commands
 
 ```bash
 # Code Quality
-npm run lint              # Lint bot code
-npm run lint:fix          # Auto-fix bot code
-npm run lint:all          # Lint bot + web
-npm run lint:fix:all      # Auto-fix bot + web
-npm run typecheck         # Type check bot
-npm run typecheck:all     # Type check bot + web
+pnpm lint              # Lint bot code
+pnpm lint:fix          # Auto-fix bot code
+pnpm lint:all          # Lint bot + web
+pnpm lint:fix:all      # Auto-fix bot + web
+pnpm typecheck         # Type check bot
+pnpm typecheck:all     # Type check bot + web
 
 # Database
-npm run prisma:studio     # Open Prisma Studio (database GUI)
-npm run prisma:migrate:dev  # Create new migration
-npm run prisma:generate   # Generate Prisma client
+pnpm prisma:studio     # Open Prisma Studio (database GUI)
+pnpm prisma:migrate:dev  # Create new migration
+pnpm prisma:generate   # Generate Prisma client
 
 # Building
-npm run build             # Build bot only
-npm run build:all         # Build bot + web
+pnpm build             # Build bot only
+pnpm build:all         # Build bot + web
 
 # Utilities
-npm run verify:env        # Validate environment variables
-npm run verify:db         # Test database connection
+pnpm verify:env        # Validate environment variables
+pnpm verify:db         # Test database connection
 ```
 
 ### Making Changes
@@ -730,9 +729,9 @@ npm run verify:db         # Test database connection
 
 **Modifying database schema:**
 1. Edit `prisma/schema.prisma`
-2. Run `npm run prisma:migrate:dev`
+2. Run `pnpm prisma:migrate:dev`
 3. Name your migration
-4. Run `npm run prisma:generate`
+4. Run `pnpm prisma:generate`
 
 **Working on web interface:**
 1. `cd web`
@@ -833,7 +832,7 @@ Configure automatic volume reduction when people speak:
 **Solution:**
 ```bash
 # Check what's missing
-npm run verify:env
+pnpm verify:env
 
 # Make sure these are in .env:
 # - DISCORD_TOKEN
@@ -849,7 +848,7 @@ npm run verify:env
 **Solution:**
 ```bash
 # Test database connection
-npm run verify:db
+pnpm verify:db
 
 # Common issues:
 # - Wrong DATABASE_URL format
@@ -868,7 +867,7 @@ postgresql://username:password@host:port/database?sslmode=require
 **Solution:**
 ```bash
 git submodule update --init --recursive
-cd web && npm install
+pnpm --filter isobel-web install
 ```
 
 #### "PM2 processes stuck"
@@ -878,10 +877,10 @@ cd web && npm install
 **Solution:**
 ```bash
 # Nuclear option - reset everything
-npm run pm2:reset
+pnpm pm2:reset
 
 # Then start fresh
-npm run start:all:prod
+pnpm start:all:prod
 ```
 
 #### "Discord bot not responding to commands"
@@ -892,7 +891,7 @@ npm run start:all:prod
 1. Check bot has proper permissions in Discord server
 2. Verify bot has "applications.commands" scope
 3. Re-invite bot with correct permissions
-4. Check logs: `docker compose logs bot` or `npm run pm2:logs`
+4. Check logs: `docker compose logs bot` or `pnpm pm2:logs`
 
 #### "Port already in use"
 
@@ -933,8 +932,8 @@ docker compose logs -f bot
 docker compose logs -f web
 
 # PM2
-npm run pm2:logs
-npm run logs:all
+pnpm pm2:logs
+pnpm logs:all
 ```
 
 **Enable debug mode:**

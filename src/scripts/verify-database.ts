@@ -4,7 +4,7 @@
  * Database Verification Script
  *
  * Tests PostgreSQL database connection and checks migration status.
- * Run with: npm run verify:db
+ * Run with: pnpm verify:db
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -56,7 +56,7 @@ async function verifyDatabase() {
       console.log('✅ Database schema appears to be set up correctly');
     } catch {
       console.warn('⚠️  Database tables may not exist yet');
-      console.warn('   Run migrations with: npm run prisma:migrate:deploy');
+      console.warn('   Run migrations with: pnpm prisma:migrate:deploy');
     }
 
     await prisma.$disconnect();
@@ -74,7 +74,7 @@ async function verifyDatabase() {
         console.error('   Check your DATABASE_URL username and password.');
       } else if (error.message.includes('database') && error.message.includes('does not exist')) {
         console.error('\n   The database does not exist.');
-        console.error('   Create it first, then run: npm run prisma:migrate:deploy');
+        console.error('   Create it first, then run: pnpm prisma:migrate:deploy');
       }
     } else {
       console.error('   Unknown error:', error);
