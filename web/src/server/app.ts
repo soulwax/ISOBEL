@@ -3,6 +3,7 @@
 import { loadEnvWithSafeguard } from '../lib/load-env.js';
 loadEnvWithSafeguard();
 
+import { join } from 'path';
 import { and, eq } from "drizzle-orm";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -36,8 +37,16 @@ if (process.env.VERCEL !== '1') {
   }
 }
 
-export function createApp() {
+export interface CreateAppOptions {
+  /** Serve static build and SPA fallback from this directory (single-process production). */
+  serveStatic?: boolean;
+  /** Directory containing the built frontend (default: process.cwd() + '/build'). */
+  buildDir?: string;
+}
+
+export function createApp(options: CreateAppOptions = {}) {
   const app = express();
+  const { serveStatic = false, buildDir = join(process.cwd(), 'build') } = options;
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
 
   // Trust proxy for Vercel (needed for correct protocol detection)
@@ -575,6 +584,14 @@ export function createApp() {
       service: "isobel-web",
     });
   });
+
+  // Optional: serve static build + SPA fallback (single-process deployment)
+  if (serveStatic) {
+    app.use(express.static(buildDir));
+    app.use((_req, res) => {
+      res.sendFile(join(buildDir, 'index.html'));
+    });
+  }
 
   // Error handler middleware (must be last)
   app.use(errorHandler);

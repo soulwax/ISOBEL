@@ -210,7 +210,7 @@ NEXTAUTH_URL=http://localhost:3001       # Or your public domain
 
 # Web Service Ports
 WEB_PORT=3001        # Web interface
-AUTH_PORT=3003       # Authentication server
+# API_PORT=3003       # Dev only: API server when using npm run web:dev:all
 # Note: HEALTH_PORT (3002) is for bot health checks
 ```
 
@@ -276,7 +276,7 @@ docker run -d \
 **Start all services:**
 
 ```bash
-# Start bot + web interface + auth server
+# Start bot + web interface (single web process: frontend + API + auth)
 docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
 
 # View logs for all services
@@ -285,7 +285,7 @@ docker compose -f docker-compose.yml -f docker-compose.web.yml logs -f
 # Check health
 curl http://localhost:3002/health  # Bot
 curl http://localhost:3001/health  # Web
-curl http://localhost:3003/health  # Auth
+curl http://localhost:3001/health  # Web (API + frontend)
 
 # Stop all services
 docker compose -f docker-compose.yml -f docker-compose.web.yml down
@@ -294,7 +294,7 @@ docker compose -f docker-compose.yml -f docker-compose.web.yml down
 **Services included:**
 - **bot** (port 3002) - Discord music bot
 - **web** (port 3001) - Web interface
-- **auth** (port 3003) - Authentication server
+- **web** (port 3001) - Web UI, API, and Discord auth (single process)
 
 ### Docker Management
 
@@ -377,7 +377,7 @@ npm run logs:all
 **Your services will be available at:**
 - Bot health: http://localhost:3002/health
 - Web interface: http://localhost:3001
-- Auth server: http://localhost:3003
+- Web (API + auth): http://localhost:3001
 
 ### PM2 Management Commands
 
@@ -401,7 +401,7 @@ npm run restart:all             # Everything
 # View logs
 npm run pm2:logs                # Bot logs
 npm run web:pm2:logs:web        # Web logs
-npm run web:pm2:logs:auth       # Auth logs
+npm run web:pm2:logs:web        # Web logs
 npm run logs:all                # All logs
 
 # View status
@@ -548,7 +548,7 @@ NEXTAUTH_URL=http://localhost:3001  # Or your public domain
 
 # Optional
 WEB_PORT=3001
-AUTH_PORT=3003
+API_PORT=3003
 ```
 
 **4. Start Web Interface:**
@@ -903,12 +903,12 @@ npm run start:all:prod
 # Find what's using the port
 lsof -i :3002  # Bot health
 lsof -i :3001  # Web
-lsof -i :3003  # Auth
+lsof -i :3003  # Dev API server (when using web:dev:all)
 
 # Change port in .env
 HEALTH_PORT=3012
 WEB_PORT=3011
-AUTH_PORT=3013
+API_PORT=3013
 ```
 
 #### "Docker build fails"

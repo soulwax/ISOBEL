@@ -1,6 +1,6 @@
 {
   "name": "isobel",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "description": "🎧 a self-hosted Discord music bot that doesn't suck ",
   "repository": "git@github.com:soulwax/ISOBEL.git",
   "author": "Max Isom <hi@maxisom.me>, Christian Kling <soulwax@madtec.org>",
@@ -86,7 +86,6 @@
     "web:pm2:delete": "test -d web && cd web && npm run pm2:delete || echo 'Web directory not found'",
     "web:pm2:logs": "test -d web && cd web && npm run pm2:logs || echo 'Web directory not found'",
     "web:pm2:logs:web": "test -d web && cd web && npm run pm2:logs:web || echo 'Web directory not found'",
-    "web:pm2:logs:auth": "test -d web && cd web && npm run pm2:logs:auth || echo 'Web directory not found'",
     "web:pm2:status": "test -d web && cd web && npm run pm2:status || echo 'Web directory not found'",
     "lint:all": "npm run lint && (test -d web && cd web && npm run lint || echo 'Web lint skipped - web directory may not exist')",
     "lint:fix:all": "npm run lint:fix && (test -d web && cd web && npm run lint -- --fix || echo 'Web lint:fix skipped - web directory may not exist')",

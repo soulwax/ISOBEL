@@ -4,31 +4,29 @@ This document explains how ISOBEL's Docker ecosystem is structured to support bo
 
 ## Architecture
 
-ISOBEL consists of **three separate services** that can be deployed together or independently:
+ISOBEL consists of **two services** that can be deployed together or independently:
 
 ```
 ┌─────────────────────────────────────────────────┐
 │              ISOBEL Ecosystem                   │
 ├─────────────────────────────────────────────────┤
 │                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────┐│
-│  │   Discord   │  │     Web     │  │  Auth   ││
-│  │     Bot     │  │  Interface  │  │ Server  ││
-│  │             │  │             │  │         ││
-│  │   (Always   │  │  (Optional) │  │(Optional)││
-│  │   Required) │  │  Port 3001  │  │Port 3003││
-│  └──────┬──────┘  └──────┬──────┘  └────┬────┘│
-│         │                │              │     │
-│         └────────────────┴──────────────┘     │
-│                      │                        │
-│              ┌───────▼────────┐               │
-│              │  Shared Volume │               │
-│              │   /data        │               │
-│              │                │               │
-│              │ • database.db  │               │
-│              │ • file-cache/  │               │
-│              │ • logs/        │               │
-│              └────────────────┘               │
+│  ┌─────────────┐       ┌─────────────────────┐ │
+│  │   Discord   │       │        Web           │ │
+│  │     Bot     │       │  UI + API + Auth     │ │
+│  │             │       │  (Optional)         │ │
+│  │   (Always   │       │  Port 3001           │ │
+│  │   Required) │       │                      │ │
+│  └──────┬──────┘       └──────────┬──────────┘ │
+│         │                         │            │
+│         └─────────────────────────┘            │
+│                      │                         │
+│              ┌───────▼────────┐                │
+│              │  Shared Volume │                │
+│              │   /data        │                │
+│              │ • file-cache/  │                │
+│              │ • logs/        │                │
+│              └────────────────┘                │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -43,17 +41,10 @@ ISOBEL consists of **three separate services** that can be deployed together or 
 
 ### 2. Web Interface (Optional)
 - **Build**: `./web/Dockerfile`
-- **Purpose**: Web UI for managing bot settings
+- **Purpose**: Web UI, API, and Discord auth (single process)
 - **Dependencies**: Requires bot (shares database)
 - **Ports**: 3001 (configurable via `WEB_PORT`)
 - **Data**: Reads from `/data` volume (shared with bot)
-
-### 3. Auth Server (Optional)
-- **Build**: `./web/Dockerfile.auth`
-- **Purpose**: NextAuth authentication for web interface
-- **Dependencies**: Requires bot
-- **Ports**: 3003 (configurable via `AUTH_PORT`)
-- **Data**: None
 
 ## Deployment Scenarios
 
@@ -79,7 +70,6 @@ docker-compose up -d
 **What runs:**
 - ✅ Discord Bot
 - ❌ Web Interface
-- ❌ Auth Server
 
 ### Scenario 2: Bot + Web Interface (Full Stack)
 
@@ -97,8 +87,7 @@ docker-compose --profile with-web up -d
 
 **What runs:**
 - ✅ Discord Bot
-- ✅ Web Interface (port 3001)
-- ✅ Auth Server (port 3003)
+- ✅ Web Interface (port 3001: UI + API + Discord auth)
 
 ## File Structure
 
@@ -111,9 +100,8 @@ ISOBEL/
 ├── .env                       # Your actual env vars (git-ignored)
 │
 ├── web/                       # Web interface submodule
-│   ├── Dockerfile            # Web interface image
-│   ├── Dockerfile.auth       # Auth server image
-│   └── ecosystem.config.cjs  # PM2 config for web + auth
+│   ├── Dockerfile            # Web image (UI + API + auth)
+│   └── ecosystem.config.cjs  # PM2 config for web
 │
 └── ecosystem.config.cjs       # PM2 config for bot
 ```
@@ -141,7 +129,7 @@ NEXTAUTH_URL=http://localhost:3001
 CACHE_LIMIT=2GB
 BOT_STATUS=online
 WEB_PORT=3001
-AUTH_PORT=3003
+# API_PORT=3003  # Dev only (when using npm run web:dev:all)
 HEALTH_PORT=3002
 SONGBIRD_NEXT_URL=https://songbirdapi.com
 ```
@@ -155,7 +143,7 @@ The `docker-compose.yml` uses **profiles** to control which services start:
 - Command: `docker-compose up -d`
 
 **with-web profile:**
-- Starts: Bot + Web + Auth
+- Starts: Bot + Web
 - Command: `docker-compose --profile with-web up -d`
 
 This allows the same `docker-compose.yml` to support both deployment scenarios!
@@ -184,7 +172,6 @@ All services share the `/data` volume:
 **Important:**
 - Bot: Read/Write access to `/data`
 - Web: Read-only access to `/data` (via `ro` mount)
-- Auth: No access to `/data`
 
 ## Common Commands
 
@@ -194,7 +181,7 @@ All services share the `/data` volume:
 # Bot only
 docker-compose up -d
 
-# Bot + Web + Auth
+# Bot + Web
 docker-compose --profile with-web up -d
 
 # Specific service
@@ -210,7 +197,6 @@ docker-compose logs -f
 # Specific service
 docker-compose logs -f bot
 docker-compose logs -f web
-docker-compose logs -f auth
 
 # Last 100 lines
 docker-compose logs --tail=100
@@ -266,9 +252,6 @@ test: ["CMD", "node", "-e", "process.exit(0)"]
 
 # Web health check
 test: ["CMD", "wget", "--spider", "http://localhost:3001/health"]
-
-# Auth health check
-test: ["CMD", "wget", "--spider", "http://localhost:3003/health"]
 ```
 
 **Check health status:**
@@ -283,12 +266,10 @@ All services are connected via the `isobel-network` bridge network:
 
 - **Internal communication:** Services can communicate using service names
   - Bot → Web: `http://web:3001`
-  - Web → Auth: `http://auth:3003`
 
 - **External access:**
   - Bot: No ports exposed (connects to Discord via WebSocket)
   - Web: Port 3001 → http://localhost:3001
-  - Auth: Port 3003 → http://localhost:3003
 
 ## Troubleshooting
 
@@ -344,17 +325,15 @@ cat .env | grep DISCORD_TOKEN
 
 **Symptom:** "Port already in use" error
 
-**Cause:** Another service using port 3001 or 3003
+**Cause:** Another service using port 3001
 
 **Fix:**
 ```bash
-# Check what's using the ports
+# Check what's using the port
 lsof -i :3001
-lsof -i :3003
 
-# Change ports in .env
+# Change port in .env
 WEB_PORT=3002
-AUTH_PORT=3004
 ```
 
 ## Security Considerations

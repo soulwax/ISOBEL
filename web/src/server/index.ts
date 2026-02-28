@@ -18,10 +18,10 @@ try {
 // Create Express app
 const app = createApp();
 
-// Auth server port (defaults to 3003, separate from Vite port 3001)
-const PORT = getEnv("AUTH_PORT", "3003");
+// API server port for dev (Vite proxies /api here; default 3003)
+const PORT = getEnv("PORT", getEnv("API_PORT", "3003"));
 
 // Start server
 app.listen(PORT, () => {
-  logger.info(`Auth server running on http://localhost:${PORT}`);
+  logger.info(`API server running on http://localhost:${PORT}`);
 });

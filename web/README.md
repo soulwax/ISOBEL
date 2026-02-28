@@ -81,6 +81,8 @@ npx vercel
 
 ### Discord OAuth Setup
 
+For a full description of how Discord authentication works (flow, config, protected routes, DB tables), see **[docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)**.
+
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Create or select your application
 3. Go to OAuth2 settings

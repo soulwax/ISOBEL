@@ -308,7 +308,7 @@ The `docker-compose.yml` orchestrates all services:
 **Services:**
 - **bot**: Discord music bot (always starts)
 - **web**: Web interface on port 3001 (requires `--profile with-web`)
-- **auth**: Auth server on port 3003 (requires `--profile with-web`)
+- **web**: Web UI + API + Discord auth on port 3001 (requires `--profile with-web`)
 
 **Usage:**
 ```bash
@@ -353,9 +353,9 @@ Separate git submodule at `./web`:
 Development workflow:
 - `npm run dev:all`: Run both bot and web in development mode (recommended)
 - `npm run web:dev`: Web dev server only (Vite)
-- `npm run web:dev:all`: Web dev server + auth server
+- `npm run web:dev:all`: Web dev server (Vite) + API server
 - `npm run web:pm2:logs:web`: View web server logs
-- `npm run web:pm2:logs:auth`: View auth server logs
+- `npm run web:pm2:logs:web`: View web (API + frontend) logs
 
 If web submodule is missing: `npm run submodule:init` or `git submodule update --init --recursive`
 
