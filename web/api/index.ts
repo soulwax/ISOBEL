@@ -22,6 +22,29 @@ async function getApp() {
   return app;
 }
 
+function sendError(res: VercelResponse, error: unknown, context: string) {
+  const err = error instanceof Error ? error : new Error(String(error));
+  const message = err.message;
+  const stack = err.stack;
+
+  console.error(`${context}:`, message);
+  if (stack) console.error(stack);
+
+  // In production on Vercel, surface the message so you can fix config (env vars, DB, etc.)
+  // without having to dig in function logs. Many failures are missing env vars.
+  const isVercel = process.env.VERCEL === '1';
+  const isDev = process.env.NODE_ENV === 'development';
+  const exposeMessage = isVercel || isDev;
+
+  res.status(500).json({
+    error: 'Internal server error',
+    message: exposeMessage ? message : 'Service unavailable',
+    ...(exposeMessage && message.includes('environment') && {
+      hint: 'Check Vercel project → Settings → Environment Variables (DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, NEXTAUTH_SECRET, NEXTAUTH_URL, DATABASE_URL or POSTGRES_URL).'
+    })
+  });
+}
+
 // Export Vercel serverless function handler
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -32,23 +55,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         expressApp(req as any, res as any, (err?: any) => {
           if (err) {
-            console.error('Express handler error:', err);
+            sendError(res, err, 'Express handler error');
             reject(err);
           } else {
             resolve();
           }
         });
       } catch (error) {
-        console.error('Handler execution error:', error);
+        sendError(res, error, 'Handler execution error');
         reject(error);
       }
     });
   } catch (error) {
-    console.error('App initialization error:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? errorMessage : 'Service unavailable'
-    });
+    sendError(res, error, 'App initialization error');
   }
 }

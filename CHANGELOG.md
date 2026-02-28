@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-02-28
+
+### Added
+- **Web: single-process deployment** – API and Discord auth run in the same process as the frontend. New `createApp({ serveStatic, buildDir })` option and `web/src/server/serve.ts` entry for production.
+- **Web:** `npm start` in `web/` runs the integrated server (API + auth + static) on `PORT` (default 3001).
+- **Auth docs:** `web/docs/AUTHENTICATION.md` with full Discord auth flow, config, and Vercel deployment notes.
+- **Vercel:** API handler now returns the real error message (e.g. missing env var) in the JSON response when app init fails, plus optional `hint` for env checks.
+
+### Changed
+- **Web:** Production (Docker, PM2) uses one web process on port 3001; no separate auth process.
+- **Web:** `dev:auth` renamed to `dev:server`; `dev:all` labels updated to `vite,api`.
+- **Web:** Vite proxy env `AUTH_PROXY_TARGET` → `API_PROXY_TARGET`; dev API port env `AUTH_PORT` → `API_PORT`.
+- **Docker:** `docker-compose.web.yml` has a single `web` service (UI + API + auth). Removed `auth` service.
+- **Docker:** `web/Dockerfile` serves the app via `npx tsx src/server/serve.ts` (build + src copied). Removed `web/Dockerfile.auth`.
+- **PM2:** `web/ecosystem.config.cjs` runs one app `isobel-web` (integrated server). Removed `isobel-auth`.
+- **PM2:** All web PM2 scripts reference only `isobel-web`; removed `web:pm2:logs:auth` from root and web.
+- **Docs:** README, `.github/docs` (SUMMARY, DOCKER_ECOSYSTEM, DOCKER_ENV_GUIDE), and AUTHENTICATION.md updated to describe single web process and drop “auth server” terminology.
+
+### Removed
+- **Web:** Separate auth server (Dockerfile.auth, docker-compose `auth` service, PM2 `isobel-auth`).
+- **Root:** `web:pm2:logs:auth` script.
+
 ## [3.0.2] - 2026-02-28
 
 ### Added

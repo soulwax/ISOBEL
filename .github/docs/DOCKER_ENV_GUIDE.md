@@ -154,7 +154,7 @@ NEXTAUTH_URL=http://localhost:3001
 
 # Web/Auth Ports
 WEB_PORT=3001
-AUTH_PORT=3003
+API_PORT=3003
 
 # ============================================
 # OPTIONAL: Docker Build Arguments

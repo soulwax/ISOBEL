@@ -29,13 +29,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Copy built application from builder
+# Copy built frontend and server source (API + auth run in same process)
 COPY --from=builder /app/build ./build
-COPY --from=builder /app/scripts ./scripts
-
-# Copy necessary config files
-COPY tsconfig.json ./
-COPY vite.config.ts ./
+COPY --from=builder /app/src ./src
 
 # Expose port
 EXPOSE 3001
@@ -48,5 +44,5 @@ ENV PORT=3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-# Start the production server
-CMD ["node", "scripts/serve-prod.js"]
+# Single process: API (including auth) + static frontend
+CMD ["npx", "tsx", "src/server/serve.ts"]

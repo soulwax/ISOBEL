@@ -2,9 +2,10 @@
 
 # Optional web interface services. Use with:
 # docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
+#
+# Single web service: frontend + API + Discord auth on port 3001.
 
 services:
-  # Web Interface Service (Optional - only needed if you want the web UI)
   web:
     build:
       context: ./web
@@ -16,14 +17,13 @@ services:
     volumes:
       - ./data:/data:de # Read-only access to bot data
     environment:
-      # Web server configuration
       - NODE_ENV=production
       - PORT=3001
 
-      # Database (required - must be PostgreSQL)
+      # Database (required - PostgreSQL for sessions and app data)
       - DATABASE_URL=${DATABASE_URL}
 
-      # Discord OAuth (required for web interface)
+      # Discord OAuth (web login)
       - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
       - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
@@ -38,40 +38,6 @@ services:
       - bot
     healthcheck:
       test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health", "||", "exit", "1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Auth Server Service (Optional - required by web interface)
-  auth:
-    build:
-      context: ./web
-      dockerfile: Dockerfile.auth
-    container_name: isobel-auth
-    restart: unless-stopped
-    ports:
-      - "${AUTH_PORT:-3003}:3003"
-    environment:
-      - NODE_ENV=production
-      - PORT=3003
-
-      # Database (required for NextAuth sessions)
-      - DATABASE_URL=${DATABASE_URL}
-
-      # NextAuth configuration
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3003}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-
-      # Discord OAuth
-      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
-      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
-    networks:
-      - isobel-network
-    depends_on:
-      - bot
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/health", "||", "exit", "1" ]
       interval: 30s
       timeout: 10s
       retries: 3
