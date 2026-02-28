@@ -40,6 +40,9 @@ function sendError(res: VercelResponse, error: unknown, context: string) {
   res.status(500).json({
     error: 'Internal server error',
     message: exposeMessage ? message : 'Service unavailable',
+    ...(exposeMessage && message.includes('next-auth/lib/env.js') && {
+      hint: 'Deployment still contains next-auth. Ensure Vercel uses pnpm, remove package-lock.json from web/, and redeploy with build cache cleared.'
+    }),
     ...(exposeMessage && message.includes('environment') && {
       hint: 'Check Vercel project → Settings → Environment Variables (DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, NEXTAUTH_SECRET, NEXTAUTH_URL, DATABASE_URL or POSTGRES_URL).'
     })
