@@ -55,7 +55,7 @@ export default class Bot {
     this.registerEventHandlers();
 
     // Start health server before Discord login so container platforms can detect open port immediately.
-    this.healthServer.start();
+    await this.healthServer.start();
 
     const spinner = ora('📡 connecting to Discord...').start();
     this.onceAsync('ready', async () => this.onReady(spinner));

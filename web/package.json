@@ -4,6 +4,9 @@
   "version": "1.1.0",
   "description": "Web interface for ISOBEL Discord music bot",
   "type": "module",
+  "exports": {
+    "./server": "./src/server/app.ts"
+  },
   "engines": {
     "node": ">=20.0.0"
   },

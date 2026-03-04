@@ -102,6 +102,7 @@
     "@release-it/keep-a-changelog": "^7.0.1",
     "@types/bluebird": "^3.5.42",
     "@types/debug": "^4.1.12",
+    "@types/express": "^5.0.6",
     "@types/ms": "2.1.0",
     "@types/node": "25.3.0",
     "@types/pg": "^8.16.0",
@@ -172,7 +173,9 @@
     "spotify-web-api-node": "^5.0.2",
     "sync-fetch": "^0.6.0",
     "tsx": "^4.21.0",
-    "xbytes": "^1.9.1"
+    "xbytes": "^1.9.1",
+    "express": "^5.2.1",
+    "isobel-web": "workspace:*"
   },
   "resolutions": {
     "@types/ws": "8.18.1"
