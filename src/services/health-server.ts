@@ -1,15 +1,11 @@
 // File: src/services/health-server.ts
 
 import { type Client } from 'discord.js';
-import http from 'http';
+import express, { type Express } from 'express';
+import type http from 'http';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
 import debug from '../utils/debug.js';
-
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
 
 interface HealthResponse {
   status: 'ok' | 'not_ready';
@@ -24,28 +20,12 @@ interface HealthResponse {
 export default class HealthServer {
   private readonly client: Client;
   private server: http.Server | null = null;
-  private cleanupInterval: NodeJS.Timeout | null = null;
-  private readonly rateLimitMap = new Map<string, RateLimitEntry>();
-  private readonly rateLimitPoints = 10; // 10 requests
-  private readonly rateLimitWindow = 60_000; // per 60 seconds
   private readonly defaultHealthPort = 3002;
-  private static readonly jsonContentType = {'Content-Type': 'application/json'};
 
   constructor(
     @inject(TYPES.Client) client: Client,
   ) {
     this.client = client;
-  }
-
-  private getClientIdentifier(req: http.IncomingMessage): string {
-    const forwarded = req.headers['x-forwarded-for'];
-
-    const forwardedHeader = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const ip = typeof forwardedHeader === 'string'
-      ? forwardedHeader.split(',')[0].trim()
-      : req.socket.remoteAddress ?? 'unknown';
-
-    return ip;
   }
 
   private resolvePort(): number {
@@ -54,106 +34,53 @@ export default class HealthServer {
     return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
   }
 
-  private setCorsHeaders(res: http.ServerResponse): void {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  }
-
-  private sendJson(res: http.ServerResponse, statusCode: number, payload: unknown): void {
-    res.writeHead(statusCode, HealthServer.jsonContentType);
-    res.end(JSON.stringify(payload));
-  }
-
-  private checkRateLimit(identifier: string): boolean {
-    const now = Date.now();
-    const entry = this.rateLimitMap.get(identifier);
-
-    if (!entry || now > entry.resetTime) {
-      // Create new entry or reset expired entry
-      this.rateLimitMap.set(identifier, {
-        count: 1,
-        resetTime: now + this.rateLimitWindow,
-      });
-      return true;
-    }
-
-    if (entry.count >= this.rateLimitPoints) {
-      return false;
-    }
-
-    entry.count++;
-    return true;
-  }
-
-  public start(): void {
+  public async start(): Promise<void> {
     const port = this.resolvePort();
 
     if (this.server) {
       this.stop();
     }
 
-    // Clear any existing interval before creating a new one
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
+    const app = express();
 
-    // Clean up old rate limit entries periodically
-    this.cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      for (const [key, entry] of this.rateLimitMap.entries()) {
-        if (now > entry.resetTime) {
-          this.rateLimitMap.delete(key);
-        }
-      }
-    }, this.rateLimitWindow);
-    this.cleanupInterval.unref();
-
-    this.server = http.createServer((req, res) => {
-      this.setCorsHeaders(res);
-
-      if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-      }
-
-      if (req.url !== '/health' || req.method !== 'GET') {
-        this.sendJson(res, 404, {error: 'Not found'});
-        return;
-      }
-
-      const identifier = this.getClientIdentifier(req);
-      if (!this.checkRateLimit(identifier)) {
-        this.sendJson(res, 429, {error: 'Too many requests'});
-        return;
-      }
-
-      const healthData = this.getHealthData();
-      this.sendJson(res, healthData.ready ? 200 : 503, healthData);
+    // Bot health route — mounted first so it takes priority
+    app.get('/health', (_req, res) => {
+      const data = this.getHealthData();
+      res.status(data.ready ? 200 : 503).json(data);
     });
 
-    this.server.on('error', error => {
+    // Try to mount the web app (auth + API routes).
+    // The web module is optional; if it isn't installed the bot still serves /health.
+    await this.mountWebApp(app);
+
+    const server = app.listen(port, () => {
+      debug(`🏥 HTTP server running on http://localhost:${port}`);
+    });
+
+    server.on('error', error => {
       debug(`health-server.error: ${this.normalizeError(error).message}`);
     });
 
-    this.server.listen(port, () => {
-      debug(`🏥 Health server running on http://localhost:${port}`);
-    });
+    this.server = server;
   }
 
   public stop(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-
     if (this.server) {
       this.server.close();
       this.server = null;
     }
+  }
 
-    this.rateLimitMap.clear();
+  private async mountWebApp(app: Express): Promise<void> {
+    try {
+      const { createApp } = await import('isobel-web/server') as { createApp: (options?: Record<string, unknown>) => Express };
+      const webApp = createApp();
+      app.use(webApp);
+      debug('📡 Web routes (auth + API) mounted');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      debug(`Web module not available, running health-only: ${message}`);
+    }
   }
 
   private getHealthData(): HealthResponse {
