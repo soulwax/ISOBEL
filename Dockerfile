@@ -2,8 +2,8 @@
 
 FROM node:25-bookworm-slim AS base
 
-# Enable pnpm via Corepack
-RUN corepack enable && corepack prepare pnpm@10.30.2 --activate
+# Install pnpm directly (avoids corepack integrity check failures in Docker)
+RUN npm install -g pnpm@10.30.2
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
