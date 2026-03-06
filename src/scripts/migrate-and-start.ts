@@ -3,7 +3,7 @@
 import './load-env.js';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { execa, type ExecaError } from 'execa';
 import { promises as fs } from 'fs';
 import ora from 'ora';
@@ -49,7 +49,7 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
   try {
     await client.$queryRaw`SELECT COUNT(id) FROM _prisma_migrations`;
   } catch (error: unknown) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2010') {
+    if (isPrismaErrorWithCode(error, 'P2010')) {
       // Table doesn't exist
       return false;
     }
@@ -58,6 +58,15 @@ const hasDatabaseBeenMigratedToPrisma = async () => {
   }
 
   return true;
+};
+
+const isPrismaErrorWithCode = (error: unknown, code: string): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeCode = (error as { code?: unknown }).code;
+  return typeof maybeCode === 'string' && maybeCode === code;
 };
 
 void (async () => {
