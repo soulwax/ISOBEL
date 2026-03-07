@@ -86,9 +86,6 @@ importers:
       iso8601-duration:
         specifier: ^2.1.3
         version: 2.1.3
-      isobel-web:
-        specifier: workspace:*
-        version: link:web
       libsodium-wrappers:
         specifier: ^0.8.2
         version: 0.8.2

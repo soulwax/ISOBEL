@@ -174,8 +174,7 @@
     "sync-fetch": "^0.6.0",
     "tsx": "^4.21.0",
     "xbytes": "^1.9.1",
-    "express": "^5.2.1",
-    "isobel-web": "workspace:*"
+    "express": "^5.2.1"
   },
   "resolutions": {
     "@types/ws": "8.18.1"
