@@ -1,7 +1,7 @@
 // File: src/services/health-server.ts
 
 import { type Client } from 'discord.js';
-import express, { type Express } from 'express';
+import express from 'express';
 import type http from 'http';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
@@ -49,10 +49,6 @@ export default class HealthServer {
       res.status(data.ready ? 200 : 503).json(data);
     });
 
-    // Try to mount the web app (auth + API routes).
-    // The web module is optional; if it isn't installed the bot still serves /health.
-    await this.mountWebApp(app);
-
     const server = app.listen(port, () => {
       debug(`🏥 HTTP server running on http://localhost:${port}`);
     });
@@ -68,18 +64,6 @@ export default class HealthServer {
     if (this.server) {
       this.server.close();
       this.server = null;
-    }
-  }
-
-  private async mountWebApp(app: Express): Promise<void> {
-    try {
-      const { createApp } = await import('isobel-web/server') as { createApp: (options?: Record<string, unknown>) => Express };
-      const webApp = createApp();
-      app.use(webApp);
-      debug('📡 Web routes (auth + API) mounted');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      debug(`Web module not available, running health-only: ${message}`);
     }
   }
 
