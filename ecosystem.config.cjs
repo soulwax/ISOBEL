@@ -18,6 +18,7 @@ module.exports = {
   apps: [
     {
       name: 'isobel',
+      cwd: __dirname,
       script: 'dist/scripts/migrate-and-start.js',
       interpreter: 'node',
       interpreter_args: '--enable-source-maps',

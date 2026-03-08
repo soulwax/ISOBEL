@@ -452,15 +452,19 @@ ISOBEL requires a PostgreSQL database. The database is used to store:
 **Neon (Free tier available):**
 1. Create account at [neon.tech](https://neon.tech)
 2. Create a new project
-3. Copy the connection string
-4. Add to `.env`: `DATABASE_URL=postgresql://...`
+3. Copy the pooled connection string for runtime traffic
+4. Copy the direct connection string for migrations
+5. Add to `.env`:
+   `DATABASE_URL=postgresql://...`
+   `DATABASE_URL_UNPOOLED=postgresql://...`
 
 **Supabase (Free tier available):**
 1. Create account at [supabase.com](https://supabase.com)
 2. Create a new project
 3. Go to Settings → Database → Connection String
-4. Copy the connection pooler URL
-5. Add to `.env`: `DATABASE_URL=postgresql://...`
+4. Copy the connection pooler URL for `DATABASE_URL`
+5. Copy the direct connection URL for `DATABASE_URL_UNPOOLED`
+6. Add both to `.env`
 
 **Railway:**
 1. Create account at [railway.app](https://railway.app)
@@ -501,6 +505,15 @@ pnpm db:reset
 # Generate Prisma client after schema changes
 pnpm prisma:generate
 ```
+
+If your provider gives you both pooled and direct PostgreSQL URLs, use:
+
+```env
+DATABASE_URL=postgresql://pooled-runtime-url
+DATABASE_URL_UNPOOLED=postgresql://direct-migrations-url
+```
+
+ISOBEL uses `DATABASE_URL_UNPOOLED` for Prisma CLI migrations and `DATABASE_URL` for the running bot.
 
 ### Database Verification
 

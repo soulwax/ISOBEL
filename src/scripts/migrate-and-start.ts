@@ -20,6 +20,7 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const migrationDatabaseUrl = process.env.DATABASE_URL_UNPOOLED ?? databaseUrl;
 const isFileDatabase = databaseUrl.startsWith('file:');
 if (isFileDatabase) {
   console.error('SQLite is not supported. Please set DATABASE_URL to a PostgreSQL connection string.');
@@ -30,9 +31,16 @@ if (isFileDatabase) {
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const client = new PrismaClient({ adapter });
+const prismaCliEnvironment = {
+  ...process.env,
+  DATABASE_URL: migrationDatabaseUrl,
+};
 
 const migrateFromSequelizeToPrisma = async () => {
-  await execa('prisma', ['migrate', 'resolve', '--applied', '20220101155430_migrate_from_sequelize'], {preferLocal: true});
+  await execa('prisma', ['migrate', 'resolve', '--applied', '20220101155430_migrate_from_sequelize'], {
+    preferLocal: true,
+    env: prismaCliEnvironment,
+  });
 };
 
 const doesUserHaveExistingDatabase = async () => {
@@ -92,7 +100,10 @@ void (async () => {
   }
 
   try {
-    await execa('prisma', ['migrate', 'deploy'], {preferLocal: true});
+    await execa('prisma', ['migrate', 'deploy'], {
+      preferLocal: true,
+      env: prismaCliEnvironment,
+    });
     spinner.succeed('Database migrations applied.');
   } catch (error: unknown) {
     if ((error as ExecaError).stderr) {
@@ -111,6 +122,23 @@ void (async () => {
         console.error('  3. Create a fresh baseline migration:');
         console.error('     docker compose exec bot pnpm exec prisma migrate diff --from-empty --to-schema-datamodel schema.prisma --script > baseline.sql');
         console.error('     # Then apply it manually to your database\n');
+        process.exit(1);
+      } else if (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('P3009')) {
+        spinner.fail('Prisma found a previously failed migration.');
+        console.error('\n❌ The database contains a failed migration record, so startup was stopped.');
+        console.error('📝 Resolve the failed migration first, then restart the bot.\n');
+        console.error('Typical fixes:');
+        console.error('  1. Inspect the failed migration in `_prisma_migrations` and your database logs');
+        console.error('  2. Mark it rolled back after fixing the underlying issue:');
+        console.error('     pnpm exec prisma migrate resolve --rolled-back "<migration_name>"');
+        console.error('  3. Re-run migrations:');
+        console.error('     pnpm exec prisma migrate deploy\n');
+        process.exit(1);
+      } else if (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('P1001')) {
+        spinner.fail('Could not reach the database server for migrations.');
+        console.error('\n❌ Prisma could not connect to the database during startup.');
+        console.error('📝 Verify `DATABASE_URL`, network access, and database firewall settings.');
+        console.error('If you are using a pooled provider URL for runtime traffic, set `DATABASE_URL_UNPOOLED` for migrations.\n');
         process.exit(1);
       } else {
         spinner.fail('Failed to apply database migrations:');
