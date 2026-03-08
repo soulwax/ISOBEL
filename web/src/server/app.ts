@@ -44,6 +44,37 @@ export interface CreateAppOptions {
   buildDir?: string;
 }
 
+interface BotHealthResponse {
+  status: "ok" | "not_ready" | "error";
+  ready: boolean;
+  guilds?: number;
+  uptime?: number;
+  uptimeFormatted?: string;
+  timestamp?: string;
+}
+
+function normalizeBotHealthUrl(value: string): string {
+  const trimmedUrl = value.trim();
+
+  if (trimmedUrl.endsWith("/health")) {
+    return trimmedUrl;
+  }
+
+  return trimmedUrl.endsWith("/")
+    ? `${trimmedUrl}health`
+    : `${trimmedUrl}/health`;
+}
+
+function getBotHealthUrl(): string | null {
+  const configuredUrl = process.env.BOT_HEALTH_URL ?? process.env.VITE_BOT_HEALTH_URL;
+
+  if (!configuredUrl?.trim()) {
+    return null;
+  }
+
+  return normalizeBotHealthUrl(configuredUrl);
+}
+
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
   const { serveStatic = false, buildDir = join(process.cwd(), 'build') } = options;
@@ -257,6 +288,41 @@ export function createApp(options: CreateAppOptions = {}) {
       } else {
         res.status(500).json({ error: "Internal server error" });
       }
+    }
+  });
+
+  app.get("/api/bot-health", apiLimiter, async (_req, res): Promise<void> => {
+    const botHealthUrl = getBotHealthUrl();
+
+    if (!botHealthUrl) {
+      logger.warn("Bot health URL is not configured");
+      res.status(503).json({
+        status: "error",
+        ready: false,
+      } satisfies BotHealthResponse);
+      return;
+    }
+
+    try {
+      const upstreamResponse = await fetch(botHealthUrl, {
+        headers: {
+          accept: "application/json",
+        },
+      });
+
+      const data = await upstreamResponse.json() as BotHealthResponse;
+
+      res.setHeader("Cache-Control", "no-store");
+      res.status(upstreamResponse.status).json(data);
+    } catch (error) {
+      logger.warn("Bot health proxy request failed", {
+        error: error instanceof Error ? error.message : String(error),
+        botHealthUrl,
+      });
+      res.status(503).json({
+        status: "error",
+        ready: false,
+      } satisfies BotHealthResponse);
     }
   });
 

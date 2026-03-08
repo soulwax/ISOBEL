@@ -13,41 +13,86 @@ interface HealthStatus {
   timestamp?: string;
 }
 
+const PROXIED_HEALTH_ENDPOINT = '/api/bot-health';
+
+function normalizeBotHealthUrl(value: string): string {
+  const trimmedUrl = value.trim();
+
+  if (trimmedUrl.endsWith('/health')) {
+    return trimmedUrl;
+  }
+
+  return trimmedUrl.endsWith('/')
+    ? `${trimmedUrl}health`
+    : `${trimmedUrl}/health`;
+}
+
+function getHealthUrls(): string[] {
+  const urls = [PROXIED_HEALTH_ENDPOINT];
+  const directHealthUrl = import.meta.env.VITE_BOT_HEALTH_URL;
+
+  if (directHealthUrl) {
+    urls.push(normalizeBotHealthUrl(directHealthUrl));
+  }
+
+  return [...new Set(urls)];
+}
+
 export default function HealthIndicator() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkHealth = async () => {
-    try {
-      // Call the bot health endpoint directly (CORS is now enabled on the bot side)
-      const botHealthUrl = import.meta.env.VITE_BOT_HEALTH_URL || 'https://isobelhealth.soulwax.dev';
-      const trimmedUrl = botHealthUrl.trim();
-      const healthUrl = trimmedUrl.endsWith('/health')
-        ? trimmedUrl
-        : trimmedUrl.endsWith('/')
-          ? `${trimmedUrl}health`
-          : `${trimmedUrl}/health`;
-      
-      // Simple GET request - no headers or credentials needed, avoids OPTIONS preflight
-      const response = await fetch(healthUrl);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Health check failed: ${response.status} ${response.statusText}`, errorText);
-        throw new Error(`Health check failed with status ${response.status}`);
+    const healthUrls = getHealthUrls();
+    let lastError: Error | null = null;
+
+    for (const healthUrl of healthUrls) {
+      try {
+        const response = await fetch(healthUrl, { cache: 'no-store' });
+        const responseText = await response.text();
+
+        let data: HealthStatus | null = null;
+        if (responseText !== '') {
+          try {
+            data = JSON.parse(responseText) as HealthStatus;
+          } catch (error) {
+            console.error(`Health check returned invalid JSON from ${healthUrl}`, error, responseText);
+          }
+        }
+
+        if (!response.ok) {
+          if (data?.status === 'not_ready') {
+            setHealth(data);
+            setIsLoading(false);
+            return;
+          }
+
+          console.error(`Health check failed: ${response.status} ${response.statusText}`, responseText);
+          throw new Error(`Health check failed with status ${response.status}`);
+        }
+
+        if (!data) {
+          throw new Error('Health check returned an empty response');
+        }
+
+        setHealth(data);
+        setIsLoading(false);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.error(`Health check error for ${healthUrl}:`, error);
       }
-      
-      const data = await response.json();
-      setHealth(data);
-      setIsLoading(false);
-    } catch (error) {
-      console.error('Health check error:', error);
-      setHealth({
-        status: 'error',
-        ready: false,
-      });
-      setIsLoading(false);
     }
+
+    if (lastError) {
+      console.error('All health checks failed', lastError);
+    }
+
+    setHealth({
+      status: 'error',
+      ready: false,
+    });
+    setIsLoading(false);
   };
 
   useEffect(() => {
