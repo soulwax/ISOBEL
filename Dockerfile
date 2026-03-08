@@ -41,7 +41,7 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 
 # Install deps without lifecycle scripts, then run patch-package explicitly.
 RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm run postinstall
