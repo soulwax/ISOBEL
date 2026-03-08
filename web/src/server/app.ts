@@ -80,9 +80,10 @@ export function createApp(options: CreateAppOptions = {}) {
   const { serveStatic = false, buildDir = join(process.cwd(), 'build') } = options;
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
 
-  // Trust proxy for Vercel (needed for correct protocol detection)
+  // Trust only the first proxy hop on Vercel so auth callbacks resolve the
+  // correct public URL without disabling IP-based rate-limit protections.
   if (process.env.VERCEL) {
-    app.set('trust proxy', true);
+    app.set('trust proxy', 1);
   }
 
   // Security headers
