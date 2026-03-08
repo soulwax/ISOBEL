@@ -4,7 +4,15 @@ import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import Discord from '@auth/core/providers/discord';
 import type { AuthConfig } from '@auth/core';
 import { db } from '../db/index.js';
-import { discordUsers, discordGuilds, guildMembers } from '../db/schema.js';
+import {
+  accounts,
+  discordGuilds,
+  discordUsers,
+  guildMembers,
+  sessions,
+  users,
+  verificationTokens,
+} from '../db/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import { requireEnv } from '../lib/env.js';
 import { logger } from '../lib/logger.js';
@@ -24,7 +32,12 @@ if (!process.env.NEXTAUTH_SECRET?.trim() && !process.env.AUTH_SECRET?.trim()) {
 }
 
 export const authConfig = {
-  adapter: DrizzleAdapter(db),
+  adapter: DrizzleAdapter(db, {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  }),
   trustHost: true, // Required for Auth.js core when running behind proxies/serverless
   basePath: '/api/auth', // Set the base path for auth routes
   ...(nextAuthUrl && { url: nextAuthUrl }), // Explicitly set URL if provided
