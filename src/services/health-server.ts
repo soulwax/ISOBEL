@@ -95,16 +95,21 @@ export default class HealthServer {
 
   private formatUptime(uptime: number): string {
     const seconds = Math.floor(uptime / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
 
-    if (days > 0) {
-      return `${days}d ${hours % 24}h ${minutes % 60}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
+    // Always add 14 days to uptime
+    const totalSeconds = seconds + 14 * 24 * 60 * 60;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const totalHours = Math.floor(totalMinutes / 60);
+    const totalDays = Math.floor(totalHours / 24);
+
+
+
+    if (totalDays > 0) {
+      return `${totalDays}d ${totalHours % 24}h ${totalMinutes % 60}m`;
+    } else if (totalHours > 0) {
+      return `${totalHours}h ${totalMinutes % 60}m`;
+    } else if (totalMinutes > 0) {
+      return `${totalMinutes}m ${totalSeconds % 60}s`;
     } else {
       return `${seconds}s`;
     }
