@@ -41,14 +41,14 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
-# Install deps without lifecycle scripts, then run patch-package explicitly.
-RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm run postinstall
+# Install dependencies with lifecycle scripts so native audio bindings are built.
+RUN pnpm install --frozen-lockfile
 
 # Create a production-only node_modules tree for runtime
 FROM dependencies AS prod-deps
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts && pnpm run postinstall
+RUN pnpm install --prod --frozen-lockfile
 RUN cp -R node_modules /usr/app/prod_node_modules
 
 FROM dependencies AS builder
