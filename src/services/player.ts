@@ -6,6 +6,7 @@ import {
   AudioPlayerStatus, type AudioResource,
   createAudioPlayer,
   createAudioResource, type DiscordGatewayAdapterCreator,
+  entersState,
   joinVoiceChannel,
   StreamType,
   type VoiceConnection,
@@ -150,6 +151,7 @@ export default class Player {
     const settings = await getGuildSettings(this.guildId);
     const {defaultVolume = DEFAULT_VOLUME} = settings;
     this.defaultVolume = defaultVolume;
+    this.currentChannel = channel;
 
     this.voiceConnection = joinVoiceChannel({
       channelId: channel.id,
@@ -181,12 +183,13 @@ export default class Player {
       newNetworking?.on('stateChange', networkStateChangeHandler);
       /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 
-      this.currentChannel = channel;
       if (newState.status === VoiceConnectionStatus.Ready) {
         this.reconnectAttempts = 0;
         this.registerVoiceActivityListener(guildSettings);
       }
     });
+
+    await entersState(this.voiceConnection, VoiceConnectionStatus.Ready, 20_000);
   }
 
   disconnect(): void {
