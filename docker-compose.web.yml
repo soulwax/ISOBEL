@@ -16,6 +16,7 @@ services:
       - "${WEB_PORT:-3001}:3001"
     volumes:
       - ./data:/data:ro
+      - ./.env:/config/.env:ro
     environment:
       - NODE_ENV=production
       - PORT=3001
