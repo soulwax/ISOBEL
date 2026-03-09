@@ -303,8 +303,8 @@ docker compose -f docker-compose.yml -f docker-compose.web.yml down
 docker compose pull
 docker compose up -d
 
-# Rebuild from source
-docker compose build --no-cache
+# Rebuild from source and replace containers
+docker compose up -d --build --force-recreate
 
 # View container status
 docker compose ps
@@ -318,6 +318,8 @@ docker compose down
 # Remove everything INCLUDING data (CAUTION!)
 docker compose down -v
 ```
+
+If you change `.env`, `docker compose build` by itself is not enough. It rebuilds the image, but it does not replace the running container. Use `docker compose restart` for runtime-only env changes, or `docker compose up -d --build --force-recreate` after changing ports or other Compose-level settings. Docker Compose reads `.env` automatically, not `.env.local`.
 
 ### Available Docker Images
 

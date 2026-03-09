@@ -92,7 +92,7 @@ ENV DATA_DIR=/data
 ENV NODE_ENV=production
 ENV COMMIT_HASH=$COMMIT_HASH
 ENV BUILD_DATE=$BUILD_DATE
-ENV ENV_FILE=/config
+ENV ENV_FILE=/config/.env
 
 # Use tini as entrypoint for proper signal handling
 ENTRYPOINT ["tini", "--"]

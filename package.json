@@ -15,6 +15,9 @@
     "src"
   ],
   "scripts": {
+    "docker:build:bot": "docker compose up -d --build",
+    "docker:build:web": "docker compose -f docker-compose.web.yml up -d --build",
+    "docker:all": "docker compose -f docker-compose.web.yml up -d --build && docker compose up -d --build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "typecheck": "tsc --noEmit",

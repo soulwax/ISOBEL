@@ -15,8 +15,7 @@ services:
       - "${HEALTH_PORT:-3002}:${HEALTH_PORT:-3002}"
     volumes:
       - ./data:/data
-      # Optional: Mount .env file if you prefer file-based config
-      # - ./.env:/config:ro
+      - ./.env:/config/.env:ro
     environment:
       # Required: Discord and Starchild API credentials
       - DISCORD_TOKEN=${DISCORD_TOKEN}
