@@ -200,6 +200,13 @@ function App() {
               API
             </a>
             <a
+              href="https://legal.bluesix.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Legal
+            </a>
+            <a
               href="https://github.com/soulwax/ISOBEL"
               target="_blank"
               rel="noopener noreferrer"
@@ -565,6 +572,13 @@ pnpm start:all:prod`}</code>
                 rel="noopener noreferrer"
               >
                 License
+              </a>
+              <a
+                href="https://legal.bluesix.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Legal
               </a>
             </div>
           </div>
