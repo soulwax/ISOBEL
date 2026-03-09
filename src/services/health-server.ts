@@ -96,7 +96,7 @@ export default class HealthServer {
   private formatUptime(uptime: number): string {
     const seconds = Math.floor(uptime / 1000);
 
-    const totalSeconds = seconds 24 * 60 * 60;
+    const totalSeconds = seconds * 24 * 60 * 60;
     const totalMinutes = Math.floor(totalSeconds / 60);
     const totalHours = Math.floor(totalMinutes / 60);
     const totalDays = Math.floor(totalHours / 24);
