@@ -13,6 +13,7 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // Listen on all interfaces
     port: parseInt(process.env.PORT || '3001', 10),
+    strictPort: true,
     allowedHosts: true, // Allow all hosts
     proxy: {
       '/api': {
@@ -34,6 +35,7 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0', // Listen on all interfaces for production
     port: parseInt(process.env.PORT || '3001', 10),
+    strictPort: true,
     proxy: {
       '/api': {
         target: process.env.API_PROXY_TARGET || 'http://localhost:3003',
