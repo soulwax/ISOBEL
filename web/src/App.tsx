@@ -183,7 +183,7 @@ function App() {
         <div className="nav-container">
           <div className="logo">
             <HiOutlineSpeakerphone className="logo-icon" />
-            <span className="logo-text">ISOBEL / (formerly ECHO)</span>
+            <span className="logo-text">ISOBEL</span>
           </div>
           <div className="nav-links">
             <HealthIndicator />

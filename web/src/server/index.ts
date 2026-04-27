@@ -18,8 +18,9 @@ try {
 // Create Express app
 const app = createApp();
 
-// API server port for dev (Vite proxies /api here; default 3003)
-const PORT = getEnv("PORT", getEnv("API_PORT", "3003"));
+// API server port for dev (Vite proxies /api here; default 3003).
+// Do not use PORT here: Vite uses PORT for the frontend dev server.
+const PORT = getEnv("API_PORT", "3003");
 
 // Start server
 app.listen(PORT, () => {

@@ -11,9 +11,10 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"pnpm run dev:client\" \"pnpm run dev:server\" --names \"vite,api\" --prefix-colors \"cyan,yellow\"",
+    "dev:client": "vite",
     "dev:server": "tsx watch src/server/index.ts",
-    "dev:all": "concurrently \"pnpm run dev\" \"pnpm run dev:server\" --names \"vite,api\" --prefix-colors \"cyan,yellow\"",
+    "dev:all": "pnpm run dev",
     "build": "tsc -b && vite build",
     "build:prod": "pnpm run build",
     "vercel-build": "pnpm run build",
