@@ -9,15 +9,18 @@ import './GuildSettings.css';
 interface GuildSettingsProps {
   guild: DiscordGuild | null;
   onBack: () => void;
+  onGuildLeave?: (guildId: string) => void;
 }
 
-export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
-  const { isAuthenticated } = useAuth();
+export default function GuildSettings({ guild, onBack, onGuildLeave }: GuildSettingsProps) {
+  const { session, isAuthenticated } = useAuth();
   const [settings, setSettings] = useState<GuildSettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [leaveMessage, setLeaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!guild || !isAuthenticated) {
@@ -110,6 +113,41 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
     });
   };
 
+  const handleLeaveGuild = async () => {
+    if (!guild || leaving) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Make ISOBEL leave ${guild.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setLeaving(true);
+      setError(null);
+      setLeaveMessage(null);
+
+      const response = await fetch(`${API_BASE_URL}/guilds/${guild.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? 'Failed to leave server');
+      }
+
+      setLeaveMessage('Server left. Removing it from your list...');
+      onGuildLeave?.(guild.id);
+    } catch (err) {
+      console.error('Error leaving server:', err);
+      setError(err instanceof Error ? err.message : 'Failed to leave server');
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   const getGuildIconUrl = (guildId: string, icon: string | null) => {
     if (!icon) return null;
     return `https://cdn.discordapp.com/icons/${guildId}/${icon}.png`;
@@ -176,6 +214,11 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
         {success && (
           <div className="settings-message success">
             Settings saved successfully!
+          </div>
+        )}
+        {leaveMessage && (
+          <div className="settings-message success">
+            {leaveMessage}
           </div>
         )}
 
@@ -353,6 +396,28 @@ export default function GuildSettings({ guild, onBack }: GuildSettingsProps) {
             </button>
           </div>
         </form>
+
+        {session?.user?.isSuperUser && (
+          <section className="settings-section danger-section">
+            <h3 className="section-title danger-title">Superuser Actions</h3>
+            <div className="danger-action-row">
+              <div>
+                <p className="danger-action-title">Leave Server</p>
+                <p className="field-description">
+                  Removes ISOBEL from this Discord server and hides it from the dashboard.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={leaving}
+                onClick={handleLeaveGuild}
+              >
+                {leaving ? 'Leaving...' : 'Leave Server'}
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

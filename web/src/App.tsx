@@ -181,7 +181,11 @@ function App() {
         />
       )}
       {activeSelectedGuild ? (
-        <GuildSettings guild={activeSelectedGuild} onBack={handleBack} />
+        <GuildSettings
+          guild={activeSelectedGuild}
+          onBack={handleBack}
+          onGuildLeave={handleGuildLeave}
+        />
       ) : (
         <>
       <nav className="nav">
