@@ -27,6 +27,8 @@ export interface GuildSettingsData {
   defaultQueuePageSize: number;
   turnDownVolumeWhenPeopleSpeak: boolean;
   turnDownVolumeWhenPeopleSpeakTarget: number;
+  maxQueueSize: number;
+  defaultLoopMode: number;
 }
 
 export interface AppSession {

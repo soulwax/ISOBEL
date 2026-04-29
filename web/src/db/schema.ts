@@ -200,6 +200,8 @@ export const settings = pgTable('setting', {
   defaultQueuePageSize: integer('defaultQueuePageSize').notNull().default(10),
   turnDownVolumeWhenPeopleSpeak: boolean('turnDownVolumeWhenPeopleSpeak').notNull().default(false),
   turnDownVolumeWhenPeopleSpeakTarget: integer('turnDownVolumeWhenPeopleSpeakTarget').notNull().default(20),
+  maxQueueSize: integer('maxQueueSize').notNull().default(0),
+  defaultLoopMode: integer('defaultLoopMode').notNull().default(0),
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
 });

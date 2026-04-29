@@ -1,12 +1,76 @@
 /* File: web/src/components/GuildSettings.css */
 
+/* ── layout ─────────────────────────────────────── */
+
 .guild-settings {
-  margin-left: 0;
+  display: flex;
   min-height: 100vh;
-  background-color: var(--discord-dark);
-  color: var(--text-primary);
-  padding: 2rem;
+  background: #313338;
+  color: #f2f3f5;
+  font-family: inherit;
 }
+
+.settings-nav {
+  width: 220px;
+  flex-shrink: 0;
+  background: #2b2d31;
+  padding: 60px 8px 24px;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.settings-nav-label {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #949ba4;
+  margin-bottom: 2px;
+}
+
+.settings-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #b5bac1;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.settings-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2f3f5;
+}
+
+.settings-nav-item.active {
+  background: rgba(88, 101, 242, 0.2);
+  color: #f2f3f5;
+}
+
+.settings-nav-divider {
+  height: 1px;
+  background: rgba(79, 84, 92, 0.48);
+  margin: 8px 10px;
+}
+
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  padding: 40px 40px 120px;
+  overflow-y: auto;
+  max-width: 740px;
+}
+
+/* ── loading / error states ─────────────────────── */
 
 .settings-loading,
 .settings-error {
@@ -16,327 +80,555 @@
   justify-content: center;
   min-height: 50vh;
   gap: 1rem;
-  color: var(--text-secondary);
+  color: #949ba4;
+  width: 100%;
 }
 
-.settings-error {
-  color: #f04747;
-}
+.settings-error { color: #f23f43; }
 
-.settings-header {
+/* ── page header ────────────────────────────────── */
+
+.settings-page-header {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
+  gap: 14px;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(79, 84, 92, 0.48);
 }
 
 .back-button {
-  padding: 0.5rem 1rem;
-  background-color: transparent;
-  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid rgba(79, 84, 92, 0.6);
   border-radius: 4px;
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s;
+  color: #b5bac1;
+  font-size: 0.875rem;
   font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
 }
 
 .back-button:hover {
-  background-color: var(--card-bg);
-  border-color: var(--text-muted);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #949ba4;
+  color: #f2f3f5;
 }
 
-.back-button:focus {
-  outline: 2px solid var(--discord-blurple);
+.back-button:focus-visible {
+  outline: 2px solid #5865f2;
   outline-offset: 2px;
 }
 
 .guild-header-info {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 14px;
+}
+
+.guild-header-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.guild-header-icon-placeholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5865f2, #eb459e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #fff;
+  flex-shrink: 0;
 }
 
 .guild-header-text {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-}
-
-.guild-header-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.guild-header-icon-placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  color: var(--text-primary);
-  flex-shrink: 0;
+  gap: 2px;
 }
 
 .guild-header-name {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f2f3f5;
+  line-height: 1.2;
 }
 
 .guild-header-id {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  letter-spacing: 0.01em;
+  font-size: 0.8125rem;
+  color: #949ba4;
+  font-family: 'Consolas', 'Menlo', monospace;
 }
 
-.settings-content {
-  max-width: 800px;
-}
+/* ── flash messages ─────────────────────────────── */
 
 .settings-message {
-  padding: 1rem;
+  padding: 12px 16px;
   border-radius: 4px;
-  margin-bottom: 1.5rem;
-  font-size: 0.9rem;
+  margin-bottom: 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .settings-message.error {
-  background-color: rgba(240, 71, 71, 0.1);
-  border: 1px solid #f04747;
-  color: #f04747;
+  background: rgba(242, 63, 67, 0.1);
+  border: 1px solid rgba(242, 63, 67, 0.4);
+  color: #f23f43;
 }
 
 .settings-message.success {
-  background-color: rgba(67, 181, 129, 0.1);
-  border: 1px solid #43b581;
-  color: #43b581;
+  background: rgba(35, 165, 90, 0.1);
+  border: 1px solid rgba(35, 165, 90, 0.4);
+  color: #23a55a;
 }
 
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
+/* ── sections ────────────────────────────────────── */
 
 .settings-section {
-  background-color: var(--card-bg);
-  border-radius: 8px;
-  padding: 1.5rem;
-  border: 1px solid var(--border-color);
-  transition: all 0.3s;
-}
-
-.settings-section:hover {
-  border-color: var(--discord-blurple);
-  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.1);
+  margin-bottom: 32px;
 }
 
 .section-title {
-  margin: 0 0 1.5rem 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.8px;
+  color: #949ba4;
 }
 
-.setting-field {
-  margin-bottom: 1.5rem;
+.section-divider {
+  height: 1px;
+  background: rgba(79, 84, 92, 0.48);
+  margin-bottom: 4px;
 }
 
-.setting-field:last-child {
-  margin-bottom: 0;
-}
+/* ── setting rows ────────────────────────────────── */
 
-.setting-field label {
+.setting-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(79, 84, 92, 0.32);
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+.setting-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-label {
+  font-size: 0.9375rem;
   font-weight: 500;
-  color: var(--text-primary);
-  cursor: pointer;
+  color: #f2f3f5;
+  line-height: 1.3;
 }
 
-.setting-field label input[type="checkbox"] {
-  margin-right: 0.5rem;
-  cursor: pointer;
-}
-
-.setting-field label:has(input[type="checkbox"]) {
-  flex-direction: row;
-  align-items: flex-start;
-}
-
-.setting-field label:has(input[type="checkbox"]) .field-description {
-  margin-left: 1.5rem;
-}
-
-.field-description {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 400;
-  margin-top: 0.25rem;
+.setting-desc {
+  font-size: 0.8125rem;
+  color: #949ba4;
   line-height: 1.5;
+  margin-top: 3px;
 }
 
-.setting-field input[type="number"],
-.setting-field input[type="text"] {
-  padding: 0.625rem;
-  background-color: var(--discord-dark);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-family: inherit;
-  width: 100%;
-  max-width: 200px;
-  transition: all 0.2s;
+.setting-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.setting-field input[type="number"]:hover,
-.setting-field input[type="text"]:hover {
-  border-color: var(--text-muted);
+/* ── toggle switch ───────────────────────────────── */
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 24px;
+  cursor: pointer;
 }
 
-.setting-field input[type="number"]:focus,
-.setting-field input[type="text"]:focus {
-  outline: none;
-  border-color: var(--discord-blurple);
-  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.1);
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
 }
 
-.setting-field input[type="checkbox"] {
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background: #4f545c;
+  transition: background 0.15s;
+}
+
+.toggle input:checked ~ .toggle-track {
+  background: #23a55a;
+}
+
+.toggle input:focus-visible ~ .toggle-track {
+  outline: 2px solid #5865f2;
+  outline-offset: 2px;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
   width: 18px;
   height: 18px;
-  accent-color: var(--discord-blurple);
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.toggle input:checked ~ .toggle-track .toggle-thumb {
+  transform: translateX(16px);
+}
+
+/* ── number input ────────────────────────────────── */
+
+.setting-input {
+  width: 80px;
+  padding: 8px 10px;
+  background: #1e1f22;
+  border: 1px solid rgba(79, 84, 92, 0.6);
+  border-radius: 4px;
+  color: #f2f3f5;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -moz-appearance: textfield;
+}
+
+.setting-input::-webkit-inner-spin-button,
+.setting-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
+.setting-input:hover {
+  border-color: #949ba4;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: #5865f2;
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.25);
+}
+
+.setting-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.input-unit {
+  font-size: 0.8125rem;
+  color: #949ba4;
+  white-space: nowrap;
+}
+
+/* ── range slider ────────────────────────────────── */
+
+.range-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.setting-range {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 4px;
+  background: #4f545c;
   cursor: pointer;
+  outline: none;
+}
+
+.setting-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #5865f2;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s, transform 0.1s;
+}
+
+.setting-range::-webkit-slider-thumb:hover {
+  background: #4752c4;
+  transform: scale(1.15);
+}
+
+.setting-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.4);
+}
+
+.setting-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: #5865f2;
+  cursor: pointer;
+}
+
+.range-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #f2f3f5;
+  min-width: 38px;
+  text-align: right;
+}
+
+/* ── select ──────────────────────────────────────── */
+
+.setting-select {
+  padding: 8px 28px 8px 10px;
+  background: #1e1f22;
+  border: 1px solid rgba(79, 84, 92, 0.6);
+  border-radius: 4px;
+  color: #f2f3f5;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23949ba4' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 160px;
+}
+
+.setting-select:hover {
+  border-color: #949ba4;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: #5865f2;
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.25);
+}
+
+/* ── danger zone ─────────────────────────────────── */
+
+.danger-section {
+  margin-top: 40px;
+  border-top: 1px solid rgba(242, 63, 67, 0.3);
+  padding-top: 20px;
+}
+
+.danger-title {
+  color: #f23f43;
+}
+
+.danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 16px;
+  background: rgba(242, 63, 67, 0.06);
+  border: 1px solid rgba(242, 63, 67, 0.25);
+  border-radius: 6px;
+}
+
+.danger-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #f2f3f5;
+  margin-bottom: 2px;
+}
+
+.danger-desc {
+  font-size: 0.8125rem;
+  color: #949ba4;
+}
+
+.danger-button {
+  padding: 8px 16px;
+  background: #da373c;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
-.settings-actions {
+.danger-button:hover:not(:disabled) {
+  background: #a12828;
+}
+
+.danger-button:focus-visible {
+  outline: 2px solid #f23f43;
+  outline-offset: 2px;
+}
+
+.danger-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── sticky unsaved-changes bar ──────────────────── */
+
+.unsaved-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
   display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-color);
-  margin-top: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+}
+
+.unsaved-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  max-width: 700px;
+  background: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 12px 20px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  animation: slide-up 0.2s ease;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.unsaved-text {
+  font-size: 0.875rem;
+  color: #b5bac1;
+}
+
+.unsaved-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.reset-button {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: #b5bac1;
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.reset-button:hover {
+  color: #f2f3f5;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .save-button {
-  padding: 0.75rem 2rem;
-  background-color: var(--discord-blurple);
+  padding: 8px 20px;
+  background: #23a55a;
   border: none;
   border-radius: 4px;
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 0.9rem;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s;
   font-family: inherit;
 }
 
 .save-button:hover:not(:disabled) {
-  background-color: var(--discord-blurple-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.4);
+  background: #1a7d44;
 }
 
-.save-button:focus:not(:disabled) {
-  outline: 2px solid var(--discord-blurple);
+.save-button:focus-visible {
+  outline: 2px solid #23a55a;
   outline-offset: 2px;
 }
 
 .save-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  transform: none;
 }
 
-.danger-section {
-  margin-top: 2rem;
-  border-color: rgba(240, 71, 71, 0.55);
-  background: rgba(240, 71, 71, 0.06);
-}
-
-.danger-section:hover {
-  border-color: #f04747;
-  box-shadow: 0 4px 12px rgba(240, 71, 71, 0.12);
-}
-
-.danger-title {
-  color: #f04747;
-}
-
-.danger-action-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.danger-action-title {
-  margin: 0 0 0.25rem;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.danger-button {
-  padding: 0.75rem 1rem;
-  background-color: #da373c;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-weight: 700;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-.danger-button:hover:not(:disabled) {
-  background-color: #a12828;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(240, 71, 71, 0.28);
-}
-
-.danger-button:focus:not(:disabled) {
-  outline: 2px solid #f04747;
-  outline-offset: 2px;
-}
-
-.danger-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+/* ── responsive ──────────────────────────────────── */
 
 @media (max-width: 768px) {
-  .guild-settings {
-    padding: 1rem;
+  .settings-nav {
+    display: none;
   }
 
-  .settings-header {
+  .settings-main {
+    padding: 24px 16px 120px;
+  }
+
+  .settings-page-header {
+    flex-wrap: wrap;
+  }
+
+  .setting-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .range-control {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .setting-select {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .danger-row {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .guild-header-info {
-    width: 100%;
-  }
-
-  .danger-action-row {
+  .unsaved-bar-inner {
     flex-direction: column;
+    gap: 10px;
     align-items: flex-start;
   }
 }
