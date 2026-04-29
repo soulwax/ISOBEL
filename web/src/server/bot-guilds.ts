@@ -13,6 +13,10 @@ interface BotHealthWithGuilds {
   guildList?: BotGuild[];
 }
 
+const GUILD_CACHE_TTL_MS = 60_000;
+let cachedBotGuilds: { value: BotGuild[]; expiresAt: number } | null = null;
+let pendingBotGuilds: Promise<BotGuild[] | null> | null = null;
+
 function normalizeBotHealthUrl(value: string): string {
   const trimmedUrl = value.trim();
 
@@ -72,7 +76,10 @@ async function getBotGuildsFromDiscord(): Promise<BotGuild[] | null> {
     });
 
     if (!response.ok) {
-      logger.warn('Discord bot guild fetch failed', { status: response.status });
+      logger.warn('Discord bot guild fetch failed', {
+        status: response.status,
+        retryAfter: response.headers.get('retry-after'),
+      });
       return null;
     }
 
@@ -120,5 +127,26 @@ async function getBotGuildsFromHealth(): Promise<BotGuild[] | null> {
 }
 
 export async function getBotGuilds(): Promise<BotGuild[] | null> {
-  return await getBotGuildsFromDiscord() ?? await getBotGuildsFromHealth();
+  const now = Date.now();
+
+  if (cachedBotGuilds && cachedBotGuilds.expiresAt > now) {
+    return cachedBotGuilds.value;
+  }
+
+  pendingBotGuilds ??= (async () => {
+    const guilds = await getBotGuildsFromDiscord() ?? await getBotGuildsFromHealth();
+
+    if (guilds) {
+      cachedBotGuilds = {
+        value: guilds,
+        expiresAt: Date.now() + GUILD_CACHE_TTL_MS,
+      };
+    }
+
+    return guilds;
+  })().finally(() => {
+    pendingBotGuilds = null;
+  });
+
+  return await pendingBotGuilds;
 }
