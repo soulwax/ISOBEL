@@ -220,7 +220,7 @@ If you end up at `https://your-domain/api/auth/signin?callbackUrl=...` and the r
 
 ## Development (two processes)
 
-Run `pnpm dev:all` in the web directory: Vite runs on port 3001 and the API server on port 3003. Vite proxies `/api` to `http://localhost:3003` (override with `API_PROXY_TARGET`). Same auth flow; the browser talks to the same origin (3001) and the proxy forwards API and auth requests to the API server.
+Run `pnpm dev:all` in the web directory: Vite runs on port 3001 and the API server on port 3003. Vite proxies `/api` to `http://localhost:3003` (override with `API_PROXY_TARGET`). Same auth flow; the browser talks to the same origin (3001) and the proxy forwards API and auth requests to the API server. Keep `TRUST_PROXY=1` in this setup so Express and `express-rate-limit` intentionally use the forwarded proxy headers.
 
 ---
 

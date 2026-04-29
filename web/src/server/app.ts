@@ -75,15 +75,36 @@ function getBotHealthUrl(): string | null {
   return normalizeBotHealthUrl(configuredUrl);
 }
 
+function getTrustProxySetting(): number | boolean {
+  if (process.env.VERCEL) {
+    return 1;
+  }
+
+  const configuredValue = process.env.TRUST_PROXY?.trim().toLowerCase();
+
+  if (!configuredValue || configuredValue === "false" || configuredValue === "0") {
+    return false;
+  }
+
+  if (configuredValue === "true") {
+    return 1;
+  }
+
+  const proxyHops = Number.parseInt(configuredValue, 10);
+  return Number.isNaN(proxyHops) ? 1 : proxyHops;
+}
+
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
   const { serveStatic = false, buildDir = join(process.cwd(), 'build') } = options;
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
 
-  // Trust only the first proxy hop on Vercel so auth callbacks resolve the
-  // correct public URL without disabling IP-based rate-limit protections.
-  if (process.env.VERCEL) {
-    app.set('trust proxy', 1);
+  // Trust only explicitly configured proxy hops so auth callbacks and
+  // rate-limiting use forwarded headers when running behind Vercel, Vite,
+  // nginx, or another reverse proxy.
+  const trustProxy = getTrustProxySetting();
+  if (trustProxy) {
+    app.set('trust proxy', trustProxy);
   }
 
   // Security headers
