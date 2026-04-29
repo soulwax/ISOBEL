@@ -24,6 +24,7 @@ import { AuthorizationError, NotFoundError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
+import { getBotGuilds } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
 import { ensureSuperUserTable, isSuperUserEmail } from "./superuser.js";
 
@@ -385,18 +386,27 @@ export function createApp(options: CreateAppOptions = {}) {
       }
 
       const isSuperUser = await isSuperUserEmail(session.user.email);
+      const botGuilds = await getBotGuilds();
+      const botGuildIds = botGuilds ? new Set(botGuilds.map((guild) => guild.id)) : null;
+      const botGuildById = botGuilds
+        ? new Map(botGuilds.map((guild) => [guild.id, guild]))
+        : null;
 
       if (isSuperUser) {
-        const allGuilds = await db
+        if (botGuilds) {
+          res.json({ guilds: botGuilds });
+          return;
+        }
+
+        const storedGuilds = await db
           .select({
             id: discordGuilds.id,
             name: discordGuilds.name,
             icon: discordGuilds.icon,
-            permissions: discordGuilds.permissions,
           })
           .from(discordGuilds);
 
-        res.json({ guilds: allGuilds });
+        res.json({ guilds: storedGuilds });
         return;
       }
 
@@ -460,8 +470,20 @@ export function createApp(options: CreateAppOptions = {}) {
         .innerJoin(discordGuilds, eq(guildMembers.guildId, discordGuilds.id))
         .where(eq(guildMembers.userId, discordUserId));
 
+      const manageableGuilds = userGuilds
+        .filter((guild) => hasAdministratorPermission(guild.permissions))
+        .filter((guild) => !botGuildIds || botGuildIds.has(guild.id))
+        .map((guild) => {
+          const botGuild = botGuildById?.get(guild.id);
+          return {
+            ...guild,
+            name: botGuild?.name ?? guild.name,
+            icon: botGuild?.icon ?? guild.icon,
+          };
+        });
+
       res.json({
-        guilds: userGuilds.filter((guild) => hasAdministratorPermission(guild.permissions)),
+        guilds: manageableGuilds,
       });
     } catch (error) {
       logger.error("Error fetching guilds", { error, userId: (req as AuthenticatedRequest).session?.user?.id });
@@ -486,6 +508,12 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
       const isSuperUser = await isSuperUserEmail(session.user.email);
+      const botGuilds = await getBotGuilds();
+
+      if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
 
       // Verify user is a member of this guild
       const discordUser = await db
@@ -578,6 +606,12 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
       const isSuperUser = await isSuperUserEmail(session.user.email);
+      const botGuilds = await getBotGuilds();
+
+      if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
 
       // Verify user is a member of this guild
       const discordUser = await db

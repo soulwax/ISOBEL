@@ -11,6 +11,11 @@ interface HealthResponse {
   status: 'ok' | 'not_ready';
   ready: boolean;
   guilds: number;
+  guildList: Array<{
+    id: string;
+    name: string;
+    icon: string | null;
+  }>;
   uptime: number;
   uptimeFormatted: string;
   timestamp: string;
@@ -75,6 +80,11 @@ export default class HealthServer {
       status: ready ? 'ok' : 'not_ready',
       ready,
       guilds: this.client.guilds.cache.size,
+      guildList: this.client.guilds.cache.map(guild => ({
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+      })),
       uptime,
       uptimeFormatted: this.formatUptime(uptime),
       timestamp: new Date().toISOString(),
