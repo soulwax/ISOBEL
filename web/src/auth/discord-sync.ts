@@ -9,6 +9,7 @@ interface DiscordProfile {
   discriminator?: unknown;
   global_name?: unknown;
   avatar?: unknown;
+  email?: unknown;
 }
 
 interface SyncDiscordDataOptions {
@@ -50,6 +51,7 @@ export async function syncDiscordData({
       discriminator: (discordProfile?.discriminator as string) || null,
       globalName: (discordProfile?.global_name as string) || null,
       avatar: (discordProfile?.avatar as string) || null,
+      email: (discordProfile?.email as string) || null,
       bot: false,
       system: false,
       mfaEnabled: false,
@@ -64,6 +66,7 @@ export async function syncDiscordData({
         discriminator: (discordProfile?.discriminator as string) || null,
         globalName: (discordProfile?.global_name as string) || null,
         avatar: (discordProfile?.avatar as string) || null,
+        email: (discordProfile?.email as string) || null,
         updatedAt,
       },
     });

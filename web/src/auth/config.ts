@@ -15,7 +15,7 @@ import { eq } from 'drizzle-orm';
 import { requireEnv } from '../lib/env.js';
 import { logger } from '../lib/logger.js';
 import { syncDiscordData } from './discord-sync.js';
-import { isSuperUserEmail } from '../server/superuser.js';
+import { isSuperUserIdentity } from '../server/superuser.js';
 
 // Get NEXTAUTH_URL from environment, fallback to auto-detection
 const nextAuthUrl = process.env.NEXTAUTH_URL;
@@ -63,6 +63,16 @@ export const authConfig = {
               accessToken: account.access_token,
               profile,
             });
+
+            if (typeof profile.email === 'string') {
+              await db
+                .update(users)
+                .set({
+                  email: profile.email,
+                  updatedAt: new Date(),
+                })
+                .where(eq(users.id, user.id));
+            }
           }
         } catch (error) {
           logger.error('Error saving Discord data', { error, userId: user.id });
@@ -79,7 +89,6 @@ export const authConfig = {
           isSuperUser?: boolean;
         };
         sessionUser.id = user.id;
-        sessionUser.isSuperUser = await isSuperUserEmail(session.user.email);
 
         // Get Discord ID from discordUsers table
         const discordUser = await db
@@ -90,7 +99,13 @@ export const authConfig = {
         
         if (discordUser.length > 0) {
           sessionUser.discordId = discordUser[0].id;
+          sessionUser.email = session.user.email ?? discordUser[0].email ?? undefined;
         }
+
+        sessionUser.isSuperUser = await isSuperUserIdentity({
+          email: sessionUser.email ?? session.user.email,
+          discordId: sessionUser.discordId,
+        });
 
         session.user = sessionUser;
       }

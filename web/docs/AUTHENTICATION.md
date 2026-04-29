@@ -28,7 +28,7 @@ The **Discord bot** (root of the repo) uses a **bot token** (`DISCORD_TOKEN`) an
 | `AUTH_SECRET` | Alternative | Same role as `NEXTAUTH_SECRET` (Auth.js accepts either). |
 | `NEXTAUTH_URL` | Yes in production | Full base URL of the web app (e.g. `https://your-domain.com` or `http://localhost:3001`). Used for redirects and callback URL. |
 | `SUPERUSER` | No | Discord account email address that should be seeded as a dashboard super admin. |
-| `SUPERUSER_PASSWORD` | No | Password seed stored as a salted hash in the `super_user` table for future password-based admin flows. |
+| `SUPERUSER_DISCORD_ID` | No | Discord user ID that should be seeded as a dashboard super admin. |
 
 Redirect URL that must be allowed in the Discord Developer Portal:
 

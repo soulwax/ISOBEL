@@ -26,7 +26,7 @@ import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
 import { getBotGuilds } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
-import { ensureSuperUserTable, isSuperUserEmail } from "./superuser.js";
+import { ensureSuperUserTable, isSuperUserIdentity } from "./superuser.js";
 
 // Validate environment variables at startup (only in non-Vercel environments)
 if (process.env.VERCEL !== '1') {
@@ -55,6 +55,26 @@ interface BotHealthResponse {
   uptime?: number;
   uptimeFormatted?: string;
   timestamp?: string;
+}
+
+async function isSessionSuperUser(session: AuthenticatedRequest["session"]): Promise<boolean> {
+  if (!session?.user?.id) {
+    return false;
+  }
+
+  const discordUser = await db
+    .select({
+      id: discordUsers.id,
+      email: discordUsers.email,
+    })
+    .from(discordUsers)
+    .where(eq(discordUsers.userId, session.user.id))
+    .limit(1);
+
+  return await isSuperUserIdentity({
+    email: session.user.email ?? discordUser[0]?.email,
+    discordId: session.user.discordId ?? discordUser[0]?.id,
+  });
 }
 
 function normalizeBotHealthUrl(value: string): string {
@@ -385,7 +405,7 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
-      const isSuperUser = await isSuperUserEmail(session.user.email);
+      const isSuperUser = await isSessionSuperUser(session);
       const botGuilds = await getBotGuilds();
       const botGuildIds = botGuilds ? new Set(botGuilds.map((guild) => guild.id)) : null;
       const botGuildById = botGuilds
@@ -507,7 +527,7 @@ export function createApp(options: CreateAppOptions = {}) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
-      const isSuperUser = await isSuperUserEmail(session.user.email);
+      const isSuperUser = await isSessionSuperUser(session);
       const botGuilds = await getBotGuilds();
 
       if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
@@ -605,7 +625,7 @@ export function createApp(options: CreateAppOptions = {}) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
-      const isSuperUser = await isSuperUserEmail(session.user.email);
+      const isSuperUser = await isSessionSuperUser(session);
       const botGuilds = await getBotGuilds();
 
       if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {

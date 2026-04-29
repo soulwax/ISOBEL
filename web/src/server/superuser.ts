@@ -1,11 +1,6 @@
-import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
-
-const PASSWORD_ITERATIONS = 310_000;
-const PASSWORD_KEY_LENGTH = 32;
-const PASSWORD_DIGEST = 'sha256';
 
 let setupPromise: Promise<void> | null = null;
 
@@ -14,46 +9,74 @@ function normalizeEmail(email: string | null | undefined): string | null {
   return normalized || null;
 }
 
-function hashPassword(password: string, salt = randomBytes(16).toString('hex')) {
-  const hash = pbkdf2Sync(
-    password,
-    salt,
-    PASSWORD_ITERATIONS,
-    PASSWORD_KEY_LENGTH,
-    PASSWORD_DIGEST
-  ).toString('hex');
+function getConfiguredSuperUserEmails(): string[] {
+  return (process.env.SUPERUSER ?? '')
+    .split(',')
+    .map((email) => normalizeEmail(email))
+    .filter((email): email is string => Boolean(email));
+}
 
-  return { hash, salt };
+function normalizeDiscordId(discordId: string | null | undefined): string | null {
+  const normalized = discordId?.trim();
+  return normalized || null;
+}
+
+function getConfiguredSuperUserDiscordIds(): string[] {
+  return (process.env.SUPERUSER_DISCORD_ID ?? '')
+    .split(',')
+    .map((discordId) => normalizeDiscordId(discordId))
+    .filter((discordId): discordId is string => Boolean(discordId));
 }
 
 async function setupSuperUserTable(): Promise<void> {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS "super_user" (
       "email" text PRIMARY KEY NOT NULL,
-      "passwordHash" text NOT NULL,
-      "passwordSalt" text NOT NULL,
+      "discordId" text,
       "createdAt" timestamp DEFAULT now() NOT NULL,
       "updatedAt" timestamp DEFAULT now() NOT NULL
     )
   `);
 
-  const email = normalizeEmail(process.env.SUPERUSER);
-  const password = process.env.SUPERUSER_PASSWORD?.trim();
-
-  if (!email || !password) {
-    return;
-  }
-
-  const { hash, salt } = hashPassword(password);
-
   await db.execute(sql`
-    INSERT INTO "super_user" ("email", "passwordHash", "passwordSalt", "updatedAt")
-    VALUES (${email}, ${hash}, ${salt}, now())
-    ON CONFLICT ("email") DO UPDATE SET
-      "passwordHash" = excluded."passwordHash",
-      "passwordSalt" = excluded."passwordSalt",
-      "updatedAt" = now()
+    DO $$
+    BEGIN
+      ALTER TABLE "super_user" ADD COLUMN IF NOT EXISTS "discordId" text;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'super_user'
+          AND column_name = 'passwordHash'
+      ) THEN
+        ALTER TABLE "super_user" ALTER COLUMN "passwordHash" DROP NOT NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'super_user'
+          AND column_name = 'passwordSalt'
+      ) THEN
+        ALTER TABLE "super_user" ALTER COLUMN "passwordSalt" DROP NOT NULL;
+      END IF;
+    END $$;
   `);
+
+  const emails = getConfiguredSuperUserEmails();
+  const discordIds = getConfiguredSuperUserDiscordIds();
+
+  for (const [index, email] of emails.entries()) {
+    const discordId = discordIds[index] ?? discordIds[0] ?? null;
+
+    await db.execute(sql`
+      INSERT INTO "super_user" ("email", "discordId", "updatedAt")
+      VALUES (${email}, ${discordId}, now())
+      ON CONFLICT ("email") DO UPDATE SET
+        "discordId" = excluded."discordId",
+        "updatedAt" = now()
+    `);
+  }
 }
 
 export async function ensureSuperUserTable(): Promise<void> {
@@ -66,10 +89,17 @@ export async function ensureSuperUserTable(): Promise<void> {
   return setupPromise;
 }
 
-export async function isSuperUserEmail(email: string | null | undefined): Promise<boolean> {
+export async function isSuperUserIdentity({
+  email,
+  discordId,
+}: {
+  email?: string | null;
+  discordId?: string | null;
+}): Promise<boolean> {
   const normalizedEmail = normalizeEmail(email);
+  const normalizedDiscordId = normalizeDiscordId(discordId);
 
-  if (!normalizedEmail) {
+  if (!normalizedEmail && !normalizedDiscordId) {
     return false;
   }
 
@@ -77,7 +107,9 @@ export async function isSuperUserEmail(email: string | null | undefined): Promis
 
   const rows = await db.execute<{ exists: boolean }>(sql`
     SELECT EXISTS (
-      SELECT 1 FROM "super_user" WHERE "email" = ${normalizedEmail}
+      SELECT 1 FROM "super_user"
+      WHERE (${normalizedEmail}::text IS NOT NULL AND "email" = ${normalizedEmail})
+        OR (${normalizedDiscordId}::text IS NOT NULL AND "discordId" = ${normalizedDiscordId})
     ) AS "exists"
   `);
 
