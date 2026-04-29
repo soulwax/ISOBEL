@@ -271,6 +271,15 @@ function App() {
                 >
                   View on GitHub
                 </a>
+                <a
+                  href="https://darkfloor.org"
+                  className="btn btn-secondary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="our inhouse music ecosystem"
+                >
+                  Visit Darkfloor
+                </a>
               </div>
             </div>
             <div className="hero-visual">
