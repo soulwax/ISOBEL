@@ -120,6 +120,7 @@ export const discordGuilds = pgTable('discord_guild', {
   approximatePresenceCount: integer('approximatePresenceCount'),
   nsfwLevel: integer('nsfwLevel'),
   joinedAt: timestamp('joinedAt', { mode: 'date' }), // When bot joined
+  deletedAt: timestamp('deletedAt', { mode: 'date' }), // When this guild was removed from bot management
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
 });
@@ -153,11 +154,21 @@ export const guildMembers = pgTable('guild_member', {
   compositeIdx: index('guild_member_composite_idx').on(table.guildId, table.userId),
 }));
 
+export const guildOrderPreferences = pgTable('guild_order_preference', {
+  userId: text('userId')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  guildOrder: text('guildOrder').notNull().default('[]'),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
   discordUser: one(discordUsers),
+  guildOrderPreference: one(guildOrderPreferences),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -196,6 +207,10 @@ export const settings = pgTable('setting', {
 export const guildMembersRelations = relations(guildMembers, ({ one }) => ({
   guild: one(discordGuilds, { fields: [guildMembers.guildId], references: [discordGuilds.id] }),
   user: one(discordUsers, { fields: [guildMembers.userId], references: [discordUsers.id] }),
+}));
+
+export const guildOrderPreferencesRelations = relations(guildOrderPreferences, ({ one }) => ({
+  user: one(users, { fields: [guildOrderPreferences.userId], references: [users.id] }),
 }));
 
 export const discordGuildsSettingsRelations = relations(discordGuilds, ({ one }) => ({

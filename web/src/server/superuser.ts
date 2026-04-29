@@ -29,39 +29,43 @@ function getConfiguredSuperUserDiscordIds(): string[] {
 }
 
 async function setupSuperUserTable(): Promise<void> {
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS "super_user" (
-      "email" text PRIMARY KEY NOT NULL,
-      "discordId" text,
-      "createdAt" timestamp DEFAULT now() NOT NULL,
-      "updatedAt" timestamp DEFAULT now() NOT NULL
-    )
+  const tableExists = await db.execute<{ exists: boolean }>(sql`
+    SELECT to_regclass('public.super_user') IS NOT NULL AS "exists"
   `);
 
-  await db.execute(sql`
-    DO $$
-    BEGIN
-      ALTER TABLE "super_user" ADD COLUMN IF NOT EXISTS "discordId" text;
+  if (!tableExists[0]?.exists) {
+    await db.execute(sql`
+      CREATE TABLE "super_user" (
+        "email" text PRIMARY KEY NOT NULL,
+        "discordId" text,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+  }
 
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'super_user'
-          AND column_name = 'passwordHash'
-      ) THEN
-        ALTER TABLE "super_user" ALTER COLUMN "passwordHash" DROP NOT NULL;
-      END IF;
-
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'super_user'
-          AND column_name = 'passwordSalt'
-      ) THEN
-        ALTER TABLE "super_user" ALTER COLUMN "passwordSalt" DROP NOT NULL;
-      END IF;
-    END $$;
+  const columns = await db.execute<{ columnName: string; isNullable: 'YES' | 'NO' }>(sql`
+    SELECT column_name AS "columnName", is_nullable AS "isNullable"
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'super_user'
   `);
+
+  const columnByName = new Map(columns.map((column) => [column.columnName, column]));
+
+  if (!columnByName.has('discordId')) {
+    await db.execute(sql`
+      ALTER TABLE "super_user" ADD COLUMN "discordId" text
+    `);
+  }
+
+  for (const legacyColumn of ['passwordHash', 'passwordSalt']) {
+    if (columnByName.get(legacyColumn)?.isNullable === 'NO') {
+      await db.execute(sql`
+        ALTER TABLE "super_user" ALTER COLUMN ${sql.identifier(legacyColumn)} DROP NOT NULL
+      `);
+    }
+  }
 
   const emails = getConfiguredSuperUserEmails();
   const discordIds = getConfiguredSuperUserDiscordIds();

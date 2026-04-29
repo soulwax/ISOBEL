@@ -4,7 +4,7 @@ import { loadEnvWithSafeguard } from '../lib/load-env.js';
 loadEnvWithSafeguard();
 
 import { join } from 'path';
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -16,6 +16,7 @@ import {
   accounts,
   discordGuilds,
   discordUsers,
+  guildOrderPreferences,
   guildMembers,
   settings,
 } from "../db/schema.js";
@@ -24,7 +25,7 @@ import { AuthorizationError, NotFoundError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
-import { getBotGuilds } from "./bot-guilds.js";
+import { getBotGuilds, leaveBotGuild, type BotGuild } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
 import { ensureSuperUserTable, isSuperUserIdentity } from "./superuser.js";
 
@@ -55,12 +56,6 @@ interface BotHealthResponse {
   uptime?: number;
   uptimeFormatted?: string;
   timestamp?: string;
-}
-
-interface BotGuild {
-  id: string;
-  name: string;
-  icon: string | null;
 }
 
 async function isSessionSuperUser(session: AuthenticatedRequest["session"]): Promise<boolean> {
@@ -124,6 +119,118 @@ function getTrustProxySetting(): number | boolean {
   return Number.isNaN(proxyHops) ? 1 : proxyHops;
 }
 
+async function ensureDiscordGuildDeletedAtColumn(): Promise<void> {
+  const columns = await db.execute<{ exists: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'discord_guild'
+        AND column_name = 'deletedAt'
+    ) AS "exists"
+  `);
+
+  if (!columns[0]?.exists) {
+    await db.execute(sql`
+      ALTER TABLE "discord_guild" ADD COLUMN "deletedAt" timestamp
+    `);
+  }
+}
+
+async function ensureGuildOrderPreferenceTable(): Promise<void> {
+  const tableExists = await db.execute<{ exists: boolean }>(sql`
+    SELECT to_regclass('public.guild_order_preference') IS NOT NULL AS "exists"
+  `);
+
+  if (!tableExists[0]?.exists) {
+    await db.execute(sql`
+      CREATE TABLE "guild_order_preference" (
+        "userId" text PRIMARY KEY NOT NULL,
+        "guildOrder" text DEFAULT '[]' NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+  }
+
+  const constraintExists = await db.execute<{ exists: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints
+      WHERE constraint_schema = 'public'
+        AND table_name = 'guild_order_preference'
+        AND constraint_name = 'guild_order_preference_userId_user_id_fk'
+    ) AS "exists"
+  `);
+
+  if (!constraintExists[0]?.exists) {
+    await db.execute(sql`
+      ALTER TABLE "guild_order_preference"
+      ADD CONSTRAINT "guild_order_preference_userId_user_id_fk"
+      FOREIGN KEY ("userId") REFERENCES "public"."user"("id")
+      ON DELETE cascade ON UPDATE no action
+    `);
+  }
+}
+
+function normalizeGuildOrder(guildOrder: unknown): string[] {
+  if (!Array.isArray(guildOrder)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of guildOrder) {
+    if (typeof value !== "string" || !validateGuildId(value) || seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  return normalized;
+}
+
+async function getGuildOrderPreference(userId: string): Promise<string[]> {
+  await ensureGuildOrderPreferenceTable();
+
+  const rows = await db
+    .select({ guildOrder: guildOrderPreferences.guildOrder })
+    .from(guildOrderPreferences)
+    .where(eq(guildOrderPreferences.userId, userId))
+    .limit(1);
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  try {
+    return normalizeGuildOrder(JSON.parse(rows[0].guildOrder));
+  } catch {
+    return [];
+  }
+}
+
+function applyGuildOrder<T extends { id: string }>(guilds: T[], guildOrder: string[]): T[] {
+  if (guildOrder.length === 0) {
+    return guilds;
+  }
+
+  const indexByGuildId = new Map(guildOrder.map((guildId, index) => [guildId, index]));
+
+  return [...guilds].sort((left, right) => {
+    const leftIndex = indexByGuildId.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = indexByGuildId.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+
+    return 0;
+  });
+}
+
 async function ensureDiscordGuildRow(guildId: string, botGuilds: BotGuild[] | null): Promise<boolean> {
   const existingGuild = await db
     .select({ id: discordGuilds.id })
@@ -156,11 +263,23 @@ async function ensureDiscordGuildRow(guildId: string, botGuilds: BotGuild[] | nu
       set: {
         name: botGuild.name,
         icon: botGuild.icon,
+        deletedAt: null,
         updatedAt: new Date(),
       },
     });
 
   return true;
+}
+
+async function getDeletedGuildIds(): Promise<Set<string>> {
+  await ensureDiscordGuildDeletedAtColumn();
+
+  const deletedGuilds = await db
+    .select({ id: discordGuilds.id })
+    .from(discordGuilds)
+    .where(sql`${discordGuilds.deletedAt} IS NOT NULL`);
+
+  return new Set(deletedGuilds.map((guild) => guild.id));
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -187,6 +306,8 @@ export function createApp(options: CreateAppOptions = {}) {
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
   const PUBLIC_AUTH_ORIGIN = getOrigin(FRONTEND_URL);
   void ensureSuperUserTable();
+  void ensureDiscordGuildDeletedAtColumn();
+  void ensureGuildOrderPreferenceTable();
 
   // Trust only explicitly configured proxy hops so auth callbacks and
   // rate-limiting use forwarded headers when running behind Vercel, Vite,
@@ -452,6 +573,8 @@ export function createApp(options: CreateAppOptions = {}) {
 
       const isSuperUser = await isSessionSuperUser(session);
       const botGuilds = await getBotGuilds();
+      const deletedGuildIds = await getDeletedGuildIds();
+      const guildOrder = await getGuildOrderPreference(session.user.id);
       const botGuildIds = botGuilds ? new Set(botGuilds.map((guild) => guild.id)) : null;
       const botGuildById = botGuilds
         ? new Map(botGuilds.map((guild) => [guild.id, guild]))
@@ -459,7 +582,12 @@ export function createApp(options: CreateAppOptions = {}) {
 
       if (isSuperUser) {
         if (botGuilds) {
-          res.json({ guilds: botGuilds });
+          res.json({
+            guilds: applyGuildOrder(
+              botGuilds.filter((guild) => !deletedGuildIds.has(guild.id)),
+              guildOrder
+            ),
+          });
           return;
         }
 
@@ -469,9 +597,10 @@ export function createApp(options: CreateAppOptions = {}) {
             name: discordGuilds.name,
             icon: discordGuilds.icon,
           })
-          .from(discordGuilds);
+          .from(discordGuilds)
+          .where(isNull(discordGuilds.deletedAt));
 
-        res.json({ guilds: storedGuilds });
+        res.json({ guilds: applyGuildOrder(storedGuilds, guildOrder) });
         return;
       }
 
@@ -537,6 +666,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
       const manageableGuilds = userGuilds
         .filter((guild) => hasAdministratorPermission(guild.permissions))
+        .filter((guild) => !deletedGuildIds.has(guild.id))
         .filter((guild) => !botGuildIds || botGuildIds.has(guild.id))
         .map((guild) => {
           const botGuild = botGuildById?.get(guild.id);
@@ -548,10 +678,107 @@ export function createApp(options: CreateAppOptions = {}) {
         });
 
       res.json({
-        guilds: manageableGuilds,
+        guilds: applyGuildOrder(manageableGuilds, guildOrder),
       });
     } catch (error) {
       logger.error("Error fetching guilds", { error, userId: (req as AuthenticatedRequest).session?.user?.id });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/guilds/:guildId", apiLimiter, requireAuth, async (req, res): Promise<void> => {
+    const guildId = req.params.guildId as string;
+
+    try {
+      if (!validateGuildId(guildId)) {
+        res.status(400).json({ error: "Invalid guild ID format" });
+        return;
+      }
+
+      const session = (req as AuthenticatedRequest).session;
+      if (!session?.user?.id) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const isSuperUser = await isSessionSuperUser(session);
+      if (!isSuperUser) {
+        throw new AuthorizationError("Only superusers can make the bot leave a server");
+      }
+
+      const botGuilds = await getBotGuilds();
+      await ensureDiscordGuildRow(guildId, botGuilds);
+
+      const leaveResult = await leaveBotGuild(guildId);
+      if (!leaveResult.ok) {
+        res.status(leaveResult.status).json({ error: leaveResult.message });
+        return;
+      }
+
+      const botGuild = botGuilds?.find((guild) => guild.id === guildId);
+      const deletedAt = new Date();
+      await db
+        .insert(discordGuilds)
+        .values({
+          id: guildId,
+          name: botGuild?.name ?? `Deleted server ${guildId}`,
+          icon: botGuild?.icon ?? null,
+          ownerId: "",
+          owner: false,
+          deletedAt,
+          updatedAt: deletedAt,
+        })
+        .onConflictDoUpdate({
+          target: discordGuilds.id,
+          set: {
+            name: botGuild?.name ?? sql`${discordGuilds.name}`,
+            icon: botGuild?.icon ?? sql`${discordGuilds.icon}`,
+            deletedAt,
+            updatedAt: deletedAt,
+          },
+        });
+
+      res.json({ ok: true });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        res.status(403).json({ error: error.message });
+        return;
+      }
+
+      logger.error("Error leaving guild", { error, guildId });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/guilds/order", apiLimiter, requireAuth, async (req, res): Promise<void> => {
+    try {
+      const session = (req as AuthenticatedRequest).session;
+      if (!session?.user?.id) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const guildOrder = normalizeGuildOrder((req.body as { guildOrder?: unknown }).guildOrder);
+      await ensureGuildOrderPreferenceTable();
+
+      await db
+        .insert(guildOrderPreferences)
+        .values({
+          userId: session.user.id,
+          guildOrder: JSON.stringify(guildOrder),
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: guildOrderPreferences.userId,
+          set: {
+            guildOrder: JSON.stringify(guildOrder),
+            updatedAt: new Date(),
+          },
+        });
+
+      res.json({ guildOrder });
+    } catch (error) {
+      logger.error("Error saving guild order", { error, userId: (req as AuthenticatedRequest).session?.user?.id });
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -576,6 +803,12 @@ export function createApp(options: CreateAppOptions = {}) {
       const botGuilds = await getBotGuilds();
 
       if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
+
+      const deletedGuildIds = await getDeletedGuildIds();
+      if (deletedGuildIds.has(guildId)) {
         res.status(404).json({ error: "Server is not managed by this bot" });
         return;
       }
@@ -684,6 +917,12 @@ export function createApp(options: CreateAppOptions = {}) {
       const botGuilds = await getBotGuilds();
 
       if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
+
+      const deletedGuildIds = await getDeletedGuildIds();
+      if (deletedGuildIds.has(guildId)) {
         res.status(404).json({ error: "Server is not managed by this bot" });
         return;
       }

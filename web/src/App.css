@@ -44,7 +44,7 @@ body {
 }
 
 .app.app-with-sidebar {
-  margin-left: 240px; /* Offset for sidebar when authenticated */
+  margin-left: 72px; /* Offset for guild rail when authenticated */
 }
 
 @media (max-width: 768px) {

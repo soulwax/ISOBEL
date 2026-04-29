@@ -163,6 +163,10 @@ function App() {
     setSelectedGuild(guild);
   };
 
+  const handleGuildLeave = (guildId: string) => {
+    setSelectedGuild((currentGuild) => currentGuild?.id === guildId ? null : currentGuild);
+  };
+
   const handleBack = () => {
     setSelectedGuild(null);
   };
@@ -172,6 +176,7 @@ function App() {
       {isAuthenticated && (
         <DiscordGuildsSidebar 
           onGuildSelect={handleGuildSelect}
+          onGuildLeave={handleGuildLeave}
           selectedGuildId={activeSelectedGuild?.id}
         />
       )}
