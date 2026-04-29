@@ -72,13 +72,35 @@ export default function GuildSettings({ guild, onBack, onGuildLeave }: GuildSett
       setError(null);
       setSuccess(false);
 
+      const {
+        playlistLimit,
+        secondsToWaitAfterQueueEmpties,
+        leaveIfNoListeners,
+        queueAddResponseEphemeral,
+        autoAnnounceNextSong,
+        defaultVolume,
+        defaultQueuePageSize,
+        turnDownVolumeWhenPeopleSpeak,
+        turnDownVolumeWhenPeopleSpeakTarget,
+      } = settings;
+
       const response = await fetch(`${API_BASE_URL}/guilds/${guild.id}/settings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          playlistLimit,
+          secondsToWaitAfterQueueEmpties,
+          leaveIfNoListeners,
+          queueAddResponseEphemeral,
+          autoAnnounceNextSong,
+          defaultVolume,
+          defaultQueuePageSize,
+          turnDownVolumeWhenPeopleSpeak,
+          turnDownVolumeWhenPeopleSpeakTarget,
+        }),
       });
 
       if (!response.ok) {

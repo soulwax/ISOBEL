@@ -13,7 +13,7 @@ interface BotHealthWithGuilds {
   guildList?: BotGuild[];
 }
 
-const GUILD_CACHE_TTL_MS = 60_000;
+const GUILD_CACHE_TTL_MS = 5 * 60_000; // 5 minutes — Discord rate-limits this endpoint aggressively
 let cachedBotGuilds: { value: BotGuild[]; expiresAt: number } | null = null;
 let pendingBotGuilds: Promise<BotGuild[] | null> | null = null;
 
