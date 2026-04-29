@@ -263,6 +263,64 @@
   transform: none;
 }
 
+.danger-section {
+  margin-top: 2rem;
+  border-color: rgba(240, 71, 71, 0.55);
+  background: rgba(240, 71, 71, 0.06);
+}
+
+.danger-section:hover {
+  border-color: #f04747;
+  box-shadow: 0 4px 12px rgba(240, 71, 71, 0.12);
+}
+
+.danger-title {
+  color: #f04747;
+}
+
+.danger-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.danger-action-title {
+  margin: 0 0 0.25rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.danger-button {
+  padding: 0.75rem 1rem;
+  background-color: #da373c;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.danger-button:hover:not(:disabled) {
+  background-color: #a12828;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(240, 71, 71, 0.28);
+}
+
+.danger-button:focus:not(:disabled) {
+  outline: 2px solid #f04747;
+  outline-offset: 2px;
+}
+
+.danger-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .guild-settings {
     padding: 1rem;
@@ -275,5 +333,10 @@
 
   .guild-header-info {
     width: 100%;
+  }
+
+  .danger-action-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

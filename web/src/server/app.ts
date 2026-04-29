@@ -282,6 +282,34 @@ async function getDeletedGuildIds(): Promise<Set<string>> {
   return new Set(deletedGuilds.map((guild) => guild.id));
 }
 
+async function reconcileDeletedBotGuilds(botGuilds: BotGuild[] | null): Promise<void> {
+  if (!botGuilds) {
+    return;
+  }
+
+  await ensureDiscordGuildDeletedAtColumn();
+
+  const liveGuildIds = botGuilds.map((guild) => guild.id);
+
+  if (liveGuildIds.length === 0) {
+    await db.execute(sql`
+      UPDATE "discord_guild"
+      SET "deletedAt" = COALESCE("deletedAt", now()),
+          "updatedAt" = now()
+      WHERE "deletedAt" IS NULL
+    `);
+    return;
+  }
+
+  await db.execute(sql`
+    UPDATE "discord_guild"
+    SET "deletedAt" = COALESCE("deletedAt", now()),
+        "updatedAt" = now()
+    WHERE "deletedAt" IS NULL
+      AND NOT ("id" = ANY(${liveGuildIds}::text[]))
+  `);
+}
+
 function isLocalHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
@@ -573,6 +601,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
       const isSuperUser = await isSessionSuperUser(session);
       const botGuilds = await getBotGuilds();
+      await reconcileDeletedBotGuilds(botGuilds);
       const deletedGuildIds = await getDeletedGuildIds();
       const guildOrder = await getGuildOrderPreference(session.user.id);
       const botGuildIds = botGuilds ? new Set(botGuilds.map((guild) => guild.id)) : null;
