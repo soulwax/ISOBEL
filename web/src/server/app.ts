@@ -57,6 +57,12 @@ interface BotHealthResponse {
   timestamp?: string;
 }
 
+interface BotGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
 async function isSessionSuperUser(session: AuthenticatedRequest["session"]): Promise<boolean> {
   if (!session?.user?.id) {
     return false;
@@ -116,6 +122,45 @@ function getTrustProxySetting(): number | boolean {
 
   const proxyHops = Number.parseInt(configuredValue, 10);
   return Number.isNaN(proxyHops) ? 1 : proxyHops;
+}
+
+async function ensureDiscordGuildRow(guildId: string, botGuilds: BotGuild[] | null): Promise<boolean> {
+  const existingGuild = await db
+    .select({ id: discordGuilds.id })
+    .from(discordGuilds)
+    .where(eq(discordGuilds.id, guildId))
+    .limit(1);
+
+  if (existingGuild.length > 0) {
+    return true;
+  }
+
+  const botGuild = botGuilds?.find((guild) => guild.id === guildId);
+
+  if (!botGuild) {
+    return false;
+  }
+
+  await db
+    .insert(discordGuilds)
+    .values({
+      id: botGuild.id,
+      name: botGuild.name,
+      icon: botGuild.icon,
+      ownerId: "",
+      owner: false,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: discordGuilds.id,
+      set: {
+        name: botGuild.name,
+        icon: botGuild.icon,
+        updatedAt: new Date(),
+      },
+    });
+
+  return true;
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -569,6 +614,16 @@ export function createApp(options: CreateAppOptions = {}) {
         }
       }
 
+      const guildRowExists = await ensureDiscordGuildRow(guildId, botGuilds);
+      if (!guildRowExists) {
+        res.status(botGuilds ? 404 : 503).json({
+          error: botGuilds
+            ? "Server is not managed by this bot"
+            : "Unable to verify this server with Discord right now",
+        });
+        return;
+      }
+
       // Get or create default settings
       let guildSettings = await db
         .select()
@@ -665,6 +720,16 @@ export function createApp(options: CreateAppOptions = {}) {
         if (!hasAdministratorPermission(member[0].permissions)) {
           throw new AuthorizationError("You must be a server administrator to modify settings");
         }
+      }
+
+      const guildRowExists = await ensureDiscordGuildRow(guildId, botGuilds);
+      if (!guildRowExists) {
+        res.status(botGuilds ? 404 : 503).json({
+          error: botGuilds
+            ? "Server is not managed by this bot"
+            : "Unable to verify this server with Discord right now",
+        });
+        return;
       }
 
       // Check if settings exist, create if not
