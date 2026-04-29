@@ -10,8 +10,10 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 // Lazy import handlers to avoid initialization errors at module load time
 // import { handlers } from "../auth/index.js";
+import { syncDiscordData } from "../auth/discord-sync.js";
 import { db } from "../db/index.js";
 import {
+  accounts,
   discordGuilds,
   discordUsers,
   guildMembers,
@@ -20,9 +22,10 @@ import {
 import { getEnv, validateEnv } from "../lib/env.js";
 import { AuthorizationError, NotFoundError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
-import { canManageGuildSettings, validateGuildId } from "../lib/utils.js";
+import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
+import { ensureSuperUserTable, isSuperUserEmail } from "./superuser.js";
 
 // Validate environment variables at startup (only in non-Vercel environments)
 if (process.env.VERCEL !== '1') {
@@ -94,10 +97,30 @@ function getTrustProxySetting(): number | boolean {
   return Number.isNaN(proxyHops) ? 1 : proxyHops;
 }
 
+function isLocalHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function getOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+
+    if (isLocalHostname(url.hostname)) {
+      url.protocol = "http:";
+    }
+
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
   const { serveStatic = false, buildDir = join(process.cwd(), 'build') } = options;
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
+  const PUBLIC_AUTH_ORIGIN = getOrigin(FRONTEND_URL);
+  void ensureSuperUserTable();
 
   // Trust only explicitly configured proxy hops so auth callbacks and
   // rate-limiting use forwarded headers when running behind Vercel, Vite,
@@ -237,11 +260,15 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
-      // Build full URL using originalUrl which contains the full path
-      // Check X-Forwarded-Proto for Vercel/proxy environments
-      const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+      // Build the public URL Auth.js should use for OAuth callbacks. The API
+      // may be reached through an internal port like localhost:3003, but
+      // Discord must receive the browser-facing origin from NEXTAUTH_URL.
       const host = req.get("x-forwarded-host") || req.get("host") || "localhost:3001";
-      const fullUrl = `${protocol}://${host}${req.originalUrl}`;
+      const forwardedProtocol = req.get("x-forwarded-proto") || req.protocol || "https";
+      const hostname = host.split(":")[0] ?? host;
+      const protocol = isLocalHostname(hostname) ? "http" : forwardedProtocol;
+      const requestOrigin = PUBLIC_AUTH_ORIGIN ?? `${protocol}://${host}`;
+      const fullUrl = `${requestOrigin}${req.originalUrl}`;
 
       // Convert Express req to Web Request for Auth.js
       const headers = new Headers();
@@ -357,12 +384,62 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
+      const isSuperUser = await isSuperUserEmail(session.user.email);
+
+      if (isSuperUser) {
+        const allGuilds = await db
+          .select({
+            id: discordGuilds.id,
+            name: discordGuilds.name,
+            icon: discordGuilds.icon,
+            permissions: discordGuilds.permissions,
+          })
+          .from(discordGuilds);
+
+        res.json({ guilds: allGuilds });
+        return;
+      }
+
       // Get Discord user ID
-      const discordUser = await db
+      let discordUser = await db
         .select()
         .from(discordUsers)
         .where(eq(discordUsers.userId, session.user.id))
         .limit(1);
+
+      if (discordUser.length === 0) {
+        const discordAccount = await db
+          .select()
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.userId, session.user.id),
+              eq(accounts.provider, 'discord')
+            )
+          )
+          .limit(1);
+
+        if (discordAccount.length > 0 && discordAccount[0].access_token) {
+          try {
+            await syncDiscordData({
+              authUserId: session.user.id,
+              discordUserId: discordAccount[0].providerAccountId,
+              accessToken: discordAccount[0].access_token,
+            });
+          } catch (error) {
+            logger.warn("Failed to refresh Discord guild cache", {
+              error: error instanceof Error ? error.message : String(error),
+              userId: session.user.id,
+            });
+          }
+
+          discordUser = await db
+            .select()
+            .from(discordUsers)
+            .where(eq(discordUsers.userId, session.user.id))
+            .limit(1);
+        }
+      }
 
       if (discordUser.length === 0) {
         res.json({ guilds: [] });
@@ -371,7 +448,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
       const discordUserId = discordUser[0].id;
 
-      // Get all guilds the user is a member of
+      // Get only guilds where the user has Discord's ADMINISTRATOR permission.
       const userGuilds = await db
         .select({
           id: discordGuilds.id,
@@ -383,7 +460,9 @@ export function createApp(options: CreateAppOptions = {}) {
         .innerJoin(discordGuilds, eq(guildMembers.guildId, discordGuilds.id))
         .where(eq(guildMembers.userId, discordUserId));
 
-      res.json({ guilds: userGuilds });
+      res.json({
+        guilds: userGuilds.filter((guild) => hasAdministratorPermission(guild.permissions)),
+      });
     } catch (error) {
       logger.error("Error fetching guilds", { error, userId: (req as AuthenticatedRequest).session?.user?.id });
       res.status(500).json({ error: "Internal server error" });
@@ -406,6 +485,7 @@ export function createApp(options: CreateAppOptions = {}) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
+      const isSuperUser = await isSuperUserEmail(session.user.email);
 
       // Verify user is a member of this guild
       const discordUser = await db
@@ -414,25 +494,31 @@ export function createApp(options: CreateAppOptions = {}) {
         .where(eq(discordUsers.userId, session.user.id))
         .limit(1);
 
-      if (discordUser.length === 0) {
+      if (!isSuperUser && discordUser.length === 0) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
 
-      const member = await db
-        .select()
-        .from(guildMembers)
-        .where(
-          and(
-            eq(guildMembers.guildId, guildId),
-            eq(guildMembers.userId, discordUser[0].id)
+      if (!isSuperUser) {
+        const member = await db
+          .select()
+          .from(guildMembers)
+          .where(
+            and(
+              eq(guildMembers.guildId, guildId),
+              eq(guildMembers.userId, discordUser[0].id)
+            )
           )
-        )
-        .limit(1);
+          .limit(1);
 
-      if (member.length === 0) {
-        res.status(403).json({ error: "You are not a member of this server" });
-        return;
+        if (member.length === 0) {
+          res.status(403).json({ error: "You are not a member of this server" });
+          return;
+        }
+
+        if (!hasAdministratorPermission(member[0].permissions)) {
+          throw new AuthorizationError("You must be a server administrator to view settings");
+        }
       }
 
       // Get or create default settings
@@ -491,6 +577,7 @@ export function createApp(options: CreateAppOptions = {}) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
+      const isSuperUser = await isSuperUserEmail(session.user.email);
 
       // Verify user is a member of this guild
       const discordUser = await db
@@ -499,30 +586,31 @@ export function createApp(options: CreateAppOptions = {}) {
         .where(eq(discordUsers.userId, session.user.id))
         .limit(1);
 
-      if (discordUser.length === 0) {
+      if (!isSuperUser && discordUser.length === 0) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
 
-      const member = await db
-        .select()
-        .from(guildMembers)
-        .where(
-          and(
-            eq(guildMembers.guildId, guildId),
-            eq(guildMembers.userId, discordUser[0].id)
+      if (!isSuperUser) {
+        const member = await db
+          .select()
+          .from(guildMembers)
+          .where(
+            and(
+              eq(guildMembers.guildId, guildId),
+              eq(guildMembers.userId, discordUser[0].id)
+            )
           )
-        )
-        .limit(1);
+          .limit(1);
 
-      if (member.length === 0) {
-        res.status(403).json({ error: "You are not a member of this server" });
-        return;
-      }
+        if (member.length === 0) {
+          res.status(403).json({ error: "You are not a member of this server" });
+          return;
+        }
 
-      // Check if user has permission to manage guild settings
-      if (!canManageGuildSettings(member[0].permissions)) {
-        throw new AuthorizationError("You do not have permission to modify settings");
+        if (!hasAdministratorPermission(member[0].permissions)) {
+          throw new AuthorizationError("You must be a server administrator to modify settings");
+        }
       }
 
       // Check if settings exist, create if not

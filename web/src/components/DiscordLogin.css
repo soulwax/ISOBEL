@@ -37,6 +37,18 @@
   font-size: 0.9rem;
 }
 
+.superuser-badge {
+  border: 1px solid rgba(88, 101, 242, 0.55);
+  border-radius: 4px;
+  color: var(--text-primary);
+  background: rgba(88, 101, 242, 0.18);
+  padding: 0.1875rem 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .login-button {
   padding: 0.5rem 1rem;
   border: none;
@@ -86,6 +98,10 @@
 
 @media (max-width: 768px) {
   .user-name {
+    display: none;
+  }
+
+  .superuser-badge {
     display: none;
   }
   

@@ -26,6 +26,9 @@ export default function DiscordLogin() {
             />
           )}
           <span className="user-name">{session.user.name || 'User'}</span>
+          {session.user.isSuperUser && (
+            <span className="superuser-badge">Super Admin</span>
+          )}
         </div>
         <button onClick={signOut} className="login-button logout-button">
           Logout

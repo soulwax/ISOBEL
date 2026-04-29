@@ -12,7 +12,7 @@ interface DiscordGuildsSidebarProps {
 }
 
 export default function DiscordGuildsSidebar({ onGuildSelect, selectedGuildId }: DiscordGuildsSidebarProps) {
-  const { isAuthenticated } = useAuth();
+  const { session, isAuthenticated } = useAuth();
   const [guilds, setGuilds] = useState<DiscordGuild[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +81,9 @@ export default function DiscordGuildsSidebar({ onGuildSelect, selectedGuildId }:
     <div className="discord-guilds-sidebar">
       <div className="sidebar-header">
         <h3 className="sidebar-title">Your Servers</h3>
+        {session?.user?.isSuperUser && (
+          <span className="sidebar-superuser-badge">Super Admin</span>
+        )}
       </div>
       <div className="sidebar-content">
         {loading ? (
@@ -93,7 +96,7 @@ export default function DiscordGuildsSidebar({ onGuildSelect, selectedGuildId }:
           </div>
         ) : guilds.length === 0 ? (
           <div className="sidebar-empty">
-            <span>No servers found</span>
+            <span>No admin servers found</span>
           </div>
         ) : (
           <div className="guilds-list">

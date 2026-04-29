@@ -27,11 +27,14 @@ The **Discord bot** (root of the repo) uses a **bot token** (`DISCORD_TOKEN`) an
 | `NEXTAUTH_SECRET` | Recommended | Secret for signing cookies/session. Generate with `openssl rand -base64 32`. If unset, the app falls back to `DISCORD_CLIENT_SECRET` (not ideal for production). |
 | `AUTH_SECRET` | Alternative | Same role as `NEXTAUTH_SECRET` (Auth.js accepts either). |
 | `NEXTAUTH_URL` | Yes in production | Full base URL of the web app (e.g. `https://your-domain.com` or `http://localhost:3001`). Used for redirects and callback URL. |
+| `SUPERUSER` | No | Discord account email address that should be seeded as a dashboard super admin. |
+| `SUPERUSER_PASSWORD` | No | Password seed stored as a salted hash in the `super_user` table for future password-based admin flows. |
 
 Redirect URL that must be allowed in the Discord Developer Portal:
 
 - **Callback URL**: `{NEXTAUTH_URL}/api/auth/callback/discord`  
-  Examples: `http://localhost:3001/api/auth/callback/discord`, `https://your-domain.com/api/auth/callback/discord`.
+  Examples: `http://localhost:3001/api/auth/callback/discord`, `http://127.0.0.1:3001/api/auth/callback/discord`, `https://your-domain.com/api/auth/callback/discord`.
+  Do not register the internal API port (`localhost:3003`) unless you are opening the API server directly in the browser.
 
 ### Discord Developer Portal
 
@@ -102,7 +105,7 @@ The **same Express app** serves `/api/guilds`, `/api/auth/*`, and the rest of th
 Important details:
 
 - **Adapter**: `DrizzleAdapter(db)` — users, accounts, sessions, verification tokens are stored in PostgreSQL.
-- **Provider**: `Discord` with `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`, and `scope: 'identify guilds'`.
+- **Provider**: `Discord` with `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`, and `scope: 'identify email guilds'`.
 - **basePath**: `'/api/auth'`; **url**: from `NEXTAUTH_URL` when set.
 - **session.strategy**: `'database'` (session stored in DB, not JWT).
 - **secret**: `NEXTAUTH_SECRET` or `AUTH_SECRET` or (fallback) `DISCORD_CLIENT_SECRET`.
@@ -228,5 +231,6 @@ Run `pnpm dev:all` in the web directory: Vite runs on port 3001 and the API serv
 
 - **Discord OAuth** is used only for the **web UI**: users log in with Discord; the app stores them in `user` + `account` and keeps Discord profile and guild list in `discordUsers` / `discordGuilds` / `guildMembers`.
 - **Auth.js core** with **Drizzle adapter** and **database sessions** handles the OAuth flow, callbacks, and session management under `/api/auth`.
-- **Protected routes** use `requireAuth`, which resolves the session via `GET /api/auth/session` and the same Auth.js handlers.  
+- **Protected routes** use `requireAuth`, which resolves the session via `GET /api/auth/session` and the same Auth.js handlers.
+- **Dashboard server access** is limited to guilds where the logged-in Discord user has the `ADMINISTRATOR` permission bit, unless the user's Discord email matches a seeded `super_user` row. Super admins can administer all stored servers.  
 - **Redirect URL** must be exactly `{NEXTAUTH_URL}/api/auth/callback/discord` in the Discord application’s OAuth2 settings, and `NEXTAUTH_URL` must match the URL the user sees in the browser.

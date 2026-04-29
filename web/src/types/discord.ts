@@ -6,6 +6,7 @@ export interface DiscordUser {
   email?: string;
   image?: string;
   discordId?: string;
+  isSuperUser?: boolean;
 }
 
 export interface DiscordGuild {
