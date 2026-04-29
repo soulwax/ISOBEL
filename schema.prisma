@@ -34,6 +34,8 @@ model Setting {
   defaultQueuePageSize                Int      @default(10)
   turnDownVolumeWhenPeopleSpeak       Boolean  @default(false)
   turnDownVolumeWhenPeopleSpeakTarget Int      @default(20)
+  maxQueueSize                        Int      @default(0)
+  defaultLoopMode                     Int      @default(0)
   createdAt                           DateTime @default(now())
   updatedAt                           DateTime @updatedAt
 }
