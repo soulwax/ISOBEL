@@ -8,6 +8,20 @@
       "when": 1768400263678,
       "tag": "0000_bored_swarm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772861112785,
+      "tag": "0001_add_discord_guild_deleted_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772862126433,
+      "tag": "0002_add_guild_order_preference",
+      "breakpoints": true
     }
   ]
 }
