@@ -6,7 +6,7 @@ import { type AutocompleteInteraction, type ButtonInteraction, type ChatInputCom
 import { inject, injectable } from 'inversify';
 import ora, { type Ora } from 'ora';
 import type Command from './commands/index.js';
-import handleGuildCreate from './events/guild-create.js';
+import handleGuildCreate, { registerGuildInDatabase } from './events/guild-create.js';
 import handleVoiceStateUpdate from './events/voice-state-update.js';
 import container from './inversify.config.js';
 import type PlayerManager from './managers/player.js';
@@ -123,6 +123,9 @@ export default class Bot {
     }
 
     debug(generateDependencyReport());
+
+    spinner.text = '📡 syncing guild database records...';
+    await Promise.all(this.client.guilds.cache.map(guild => registerGuildInDatabase(guild)));
 
     const rest = new REST({version: DISCORD_API_VERSION}).setToken(this.config.DISCORD_TOKEN);
     if (this.shouldRegisterCommandsOnBot) {

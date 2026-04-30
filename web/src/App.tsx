@@ -28,6 +28,20 @@ const DEFAULT_META_DESCRIPTION =
   "ISOBEL is an open-source, self-hosted Discord music bot with high-quality audio streaming, smart queue management, and a web dashboard for server settings.";
 const DEFAULT_ROBOTS_CONTENT =
   "index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1";
+const ISOBEL_AVATAR_URL = "/avatar.png";
+
+interface NowPlayingTrack {
+  title: string;
+  artist: string;
+  thumbnailUrl: string | null;
+  position: number;
+  length: number;
+  isLive: boolean;
+}
+
+interface BotHealthResponse {
+  nowPlaying?: NowPlayingTrack[];
+}
 
 function setMetaContent(name: string, content: string) {
   const meta = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
@@ -42,8 +56,17 @@ function setMetaContent(name: string, content: string) {
   document.head.appendChild(created);
 }
 
+function formatPlaybackTime(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
 function App() {
   const [selectedGuild, setSelectedGuild] = useState<DiscordGuild | null>(null);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack[]>([]);
   const { isAuthenticated } = useAuth();
   const activeSelectedGuild = isAuthenticated ? selectedGuild : null;
 
@@ -158,6 +181,37 @@ function App() {
     setMetaContent("robots", DEFAULT_ROBOTS_CONTENT);
     setMetaContent("description", DEFAULT_META_DESCRIPTION);
   }, [activeSelectedGuild, isAuthenticated]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchNowPlaying = async () => {
+      try {
+        const response = await fetch("/api/bot-health", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Bot health returned ${response.status}`);
+        }
+
+        const data = await response.json() as BotHealthResponse;
+        if (!cancelled) {
+          setNowPlaying(Array.isArray(data.nowPlaying) ? data.nowPlaying : []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch now playing data:", error);
+        if (!cancelled) {
+          setNowPlaying([]);
+        }
+      }
+    };
+
+    void fetchNowPlaying();
+    const interval = window.setInterval(fetchNowPlaying, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const handleGuildSelect = (guild: DiscordGuild) => {
     setSelectedGuild(guild);
@@ -289,28 +343,85 @@ function App() {
                   <div className="mockup-dot"></div>
                   <div className="mockup-dot"></div>
                 </div>
-                <div className="mockup-content">
-                  <div className="mockup-message">
-                    <div className="mockup-avatar"></div>
-                    <div className="mockup-text">
-                      <span className="mockup-username">ISOBEL</span>
-                      <span className="mockup-time">Today at 2:30 PM</span>
+                <div className="mockup-content now-playing-stack">
+                  {nowPlaying.length > 0 ? (
+                    nowPlaying.map((track, index) => {
+                      const progress = track.isLive || track.length <= 0
+                        ? 100
+                        : Math.min(100, Math.max(0, (track.position / track.length) * 100));
+                      const description = track.artist.trim().length > 0
+                        ? `${track.title} - ${track.artist}`
+                        : track.title;
+
+                      return (
+                        <div className="now-playing-item" key={`${track.title}-${track.artist}-${index}`}>
+                          <div className="mockup-message">
+                            <img
+                              src={ISOBEL_AVATAR_URL}
+                              alt="ISOBEL avatar"
+                              className="mockup-avatar"
+                              width={40}
+                              height={40}
+                            />
+                            <div className="mockup-text">
+                              <span className="mockup-username">ISOBEL</span>
+                              <span className="mockup-time">Now Playing</span>
+                            </div>
+                          </div>
+                          <div className="mockup-embed">
+                            <div className="embed-content">
+                              <div className="embed-title">
+                                <HiOutlineMusicNote className="inline-icon" /> Now Playing
+                              </div>
+                              <div className="embed-description live-track-title">
+                                {description}
+                              </div>
+                              <div className="embed-progress live-progress">
+                                <div
+                                  className="progress-bar live-progress-bar"
+                                  style={{ width: `${progress}%` }}
+                                ></div>
+                              </div>
+                              <div className="live-track-time">
+                                {track.isLive
+                                  ? "Live"
+                                  : `${formatPlaybackTime(track.position)} / ${formatPlaybackTime(track.length)}`}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="now-playing-item">
+                      <div className="mockup-message">
+                        <img
+                          src={ISOBEL_AVATAR_URL}
+                          alt="ISOBEL avatar"
+                          className="mockup-avatar"
+                          width={40}
+                          height={40}
+                        />
+                        <div className="mockup-text">
+                          <span className="mockup-username">ISOBEL</span>
+                          <span className="mockup-time">Today at 2:30 PM</span>
+                        </div>
+                      </div>
+                      <div className="mockup-embed">
+                        <div className="embed-content">
+                          <div className="embed-title">
+                            <HiOutlineMusicNote className="inline-icon" /> Now Playing
+                          </div>
+                          <div className="embed-description">
+                            High-quality audio streaming
+                          </div>
+                          <div className="embed-progress">
+                            <div className="progress-bar"></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mockup-embed">
-                    <div className="embed-content">
-                      <div className="embed-title">
-                        <HiOutlineMusicNote className="inline-icon" /> Now
-                        Playing
-                      </div>
-                      <div className="embed-description">
-                        High-quality audio streaming
-                      </div>
-                      <div className="embed-progress">
-                        <div className="progress-bar"></div>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>

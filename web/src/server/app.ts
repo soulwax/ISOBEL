@@ -79,6 +79,40 @@ async function isSessionSuperUser(session: AuthenticatedRequest["session"]): Pro
   });
 }
 
+async function refreshDiscordMemberships(session: AuthenticatedRequest["session"]): Promise<void> {
+  if (!session?.user?.id) {
+    return;
+  }
+
+  const discordAccount = await db
+    .select()
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, session.user.id),
+        eq(accounts.provider, 'discord')
+      )
+    )
+    .limit(1);
+
+  if (!discordAccount[0]?.access_token) {
+    return;
+  }
+
+  try {
+    await syncDiscordData({
+      authUserId: session.user.id,
+      discordUserId: discordAccount[0].providerAccountId,
+      accessToken: discordAccount[0].access_token,
+    });
+  } catch (error) {
+    logger.warn("Failed to refresh Discord guild cache", {
+      error: error instanceof Error ? error.message : String(error),
+      userId: session.user.id,
+    });
+  }
+}
+
 function getTrustProxySetting(): number | boolean {
   if (process.env.VERCEL) {
     return 1;
@@ -250,6 +284,36 @@ async function ensureDiscordGuildRow(guildId: string, botGuilds: BotGuild[] | nu
   return true;
 }
 
+async function upsertBotGuildRows(botGuilds: BotGuild[] | null): Promise<void> {
+  if (!botGuilds || botGuilds.length === 0) {
+    return;
+  }
+
+  await ensureDiscordGuildDeletedAtColumn();
+
+  const updatedAt = new Date();
+  await db
+    .insert(discordGuilds)
+    .values(botGuilds.map((guild) => ({
+      id: guild.id,
+      name: guild.name,
+      icon: guild.icon,
+      ownerId: "",
+      owner: false,
+      deletedAt: null,
+      updatedAt,
+    })))
+    .onConflictDoUpdate({
+      target: discordGuilds.id,
+      set: {
+        name: sql`excluded.name`,
+        icon: sql`excluded.icon`,
+        deletedAt: null,
+        updatedAt: sql`excluded."updatedAt"`,
+      },
+    });
+}
+
 async function getDeletedGuildIds(): Promise<Set<string>> {
   await ensureDiscordGuildDeletedAtColumn();
 
@@ -365,18 +429,18 @@ export function createApp(options: CreateAppOptions = {}) {
   // CORS middleware - improved security
   app.use((req, res, next): void => {
     const origin = req.headers.origin;
-    
+
     // Define allowed origins based on environment
     const allowedOrigins = process.env.NODE_ENV === 'production'
       ? [FRONTEND_URL] // Strict in production
       : [
-          FRONTEND_URL,
-          "http://localhost:3001",
-          "http://localhost:3000",
-          "http://127.0.0.1:3001",
-          "http://127.0.0.1:3000",
-        ];
-    
+        FRONTEND_URL,
+        "http://localhost:3001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3000",
+      ];
+
     // In development, be more permissive: allow any localhost origin or requests without origin
     if (process.env.NODE_ENV === "development") {
       if (origin) {
@@ -408,11 +472,11 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
     }
-    
+
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Credentials", "true");
-    
+
     if (req.method === "OPTIONS") {
       res.sendStatus(200);
       return;
@@ -431,11 +495,11 @@ export function createApp(options: CreateAppOptions = {}) {
       } catch (importError) {
         const errorMessage = importError instanceof Error ? importError.message : String(importError);
         const errorStack = importError instanceof Error ? importError.stack : undefined;
-        logger.error("Failed to import auth handlers", { 
+        logger.error("Failed to import auth handlers", {
           error: errorMessage,
           stack: errorStack,
         });
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Authentication service unavailable",
           ...(process.env.NODE_ENV === 'development' && { details: errorMessage })
         });
@@ -515,17 +579,17 @@ export function createApp(options: CreateAppOptions = {}) {
       // Enhanced error logging
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
-      logger.error("Auth handler error", { 
+      logger.error("Auth handler error", {
         error: errorMessage,
         stack: errorStack,
         path: req.path,
         method: req.method,
         url: req.originalUrl,
       });
-      
+
       // Send more detailed error in development
       if (process.env.NODE_ENV === 'development') {
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Internal server error",
           message: errorMessage,
           path: req.path,
@@ -573,6 +637,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
       const isSuperUser = await isSessionSuperUser(session);
       const botGuilds = await getBotGuilds();
+      await upsertBotGuildRows(botGuilds);
       await reconcileDeletedBotGuilds(botGuilds);
       const deletedGuildIds = await getDeletedGuildIds();
       const guildOrder = await getGuildOrderPreference(session.user.id);
@@ -604,6 +669,8 @@ export function createApp(options: CreateAppOptions = {}) {
         res.json({ guilds: applyGuildOrder(storedGuilds, guildOrder) });
         return;
       }
+
+      await refreshDiscordMemberships(session);
 
       // Get Discord user ID
       let discordUser = await db
@@ -900,9 +967,9 @@ export function createApp(options: CreateAppOptions = {}) {
       // Validate request body
       const validationResult = guildSettingsSchema.safeParse(req.body);
       if (!validationResult.success) {
-        res.status(400).json({ 
-          error: "Invalid settings data", 
-          details: validationResult.error.errors 
+        res.status(400).json({
+          error: "Invalid settings data",
+          details: validationResult.error.errors
         });
         return;
       }

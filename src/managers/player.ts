@@ -2,7 +2,7 @@
 
 import { inject, injectable } from 'inversify';
 import type FileCacheProvider from '../services/file-cache.js';
-import Player from '../services/player.js';
+import Player, { type NowPlayingSnapshot } from '../services/player.js';
 import type SongbirdNext from '../services/songbird-next.js';
 import type StarchildAPI from '../services/starchild-api.js';
 import { TYPES } from '../types.js';
@@ -35,6 +35,12 @@ export default class PlayerManager {
     }
 
     return player;
+  }
+
+  getNowPlayingSnapshots(): NowPlayingSnapshot[] {
+    return [...this.guildPlayers.values()]
+      .map(player => player.getNowPlayingSnapshot())
+      .filter((snapshot): snapshot is NowPlayingSnapshot => snapshot !== null);
   }
 
   /**
