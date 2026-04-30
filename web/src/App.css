@@ -902,6 +902,14 @@ body {
   font-size: 0.9rem;
 }
 
+.about-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 3rem;
+  flex-wrap: wrap;
+}
+
 /* Footer */
 .footer {
   background-color: var(--discord-darker);
