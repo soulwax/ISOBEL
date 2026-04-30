@@ -587,6 +587,14 @@ function App() {
                     <div className="stat-label">Open Source</div>
                   </div>
                 </div>
+                <div className="about-buttons">
+                  <a
+                    href="mailto:soulwax@cock.li"
+                    className="btn btn-secondary"
+                  >
+                    Contact
+                  </a>
+                </div>
               </div>
             </div>
           </div>
