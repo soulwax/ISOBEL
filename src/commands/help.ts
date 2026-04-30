@@ -39,7 +39,7 @@ export default class implements Command {
         },
         {
           name: 'Server Settings',
-          value: '• `/config get`\n• `/config set-default-volume`\n• `/config set-default-queue-page-size`\n• `/config set-playlist-limit`\n• `/config set-leave-if-no-listeners`',
+          value: '• `/config get`\n• `/config set-default-volume`\n• `/config set-default-loop-mode`\n• `/config set-max-queue-size`\n• `/config set-leave-if-no-listeners`',
           inline: false,
         },
       )

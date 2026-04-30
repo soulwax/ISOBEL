@@ -17,12 +17,13 @@ Settings are stored in a `setting` table. The bot reads them via Prisma every ti
 
 ## API validation rule
 
-`web/src/lib/validation.ts` uses a Zod schema with `.strict()`. The POST body for `POST /api/guilds/:id/settings` must contain **only** these nine fields — no extras:
+`web/src/lib/validation.ts` uses a Zod schema with `.strict()`. The POST body for `POST /api/guilds/:id/settings` must contain **only** these fields — no extras:
 
 ```
 playlistLimit, secondsToWaitAfterQueueEmpties, leaveIfNoListeners,
 queueAddResponseEphemeral, autoAnnounceNextSong, defaultVolume,
-defaultQueuePageSize, turnDownVolumeWhenPeopleSpeak, turnDownVolumeWhenPeopleSpeakTarget
+defaultQueuePageSize, turnDownVolumeWhenPeopleSpeak, turnDownVolumeWhenPeopleSpeakTarget,
+maxQueueSize, defaultLoopMode
 ```
 
 Do not send `guildId`, `createdAt`, or `updatedAt` in the body.

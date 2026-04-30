@@ -11,11 +11,11 @@ interface HealthResponse {
   status: 'ok' | 'not_ready';
   ready: boolean;
   guilds: number;
-  guildList: Array<{
+  guildList: {
     id: string;
     name: string;
     icon: string | null;
-  }>;
+  }[];
   uptime: number;
   uptimeFormatted: string;
   timestamp: string;
@@ -39,7 +39,7 @@ export default class HealthServer {
     return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
   }
 
-  public async start(): Promise<void> {
+  public start(): void {
     const port = this.resolvePort();
 
     if (this.server) {
