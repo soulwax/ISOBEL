@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parse } from 'dotenv';
 import { logger } from '../lib/logger.js';
+import { getBotHealthUrl } from './bot-health-url.js';
 
 export interface BotGuild {
   id: string;
@@ -16,23 +17,6 @@ interface BotHealthWithGuilds {
 const GUILD_CACHE_TTL_MS = 5 * 60_000; // 5 minutes — Discord rate-limits this endpoint aggressively
 let cachedBotGuilds: { value: BotGuild[]; expiresAt: number } | null = null;
 let pendingBotGuilds: Promise<BotGuild[] | null> | null = null;
-
-function normalizeBotHealthUrl(value: string): string {
-  const trimmedUrl = value.trim();
-
-  if (trimmedUrl.endsWith('/health')) {
-    return trimmedUrl;
-  }
-
-  return trimmedUrl.endsWith('/')
-    ? `${trimmedUrl}health`
-    : `${trimmedUrl}/health`;
-}
-
-function getBotHealthUrl(): string | null {
-  const configuredUrl = process.env.BOT_HEALTH_URL ?? process.env.VITE_BOT_HEALTH_URL;
-  return configuredUrl?.trim() ? normalizeBotHealthUrl(configuredUrl) : null;
-}
 
 function getDiscordTokenFromEnvFiles(): string | null {
   const envPaths = [
@@ -110,10 +94,6 @@ async function getBotGuildsFromDiscord(): Promise<BotGuild[] | null> {
 
 async function getBotGuildsFromHealth(): Promise<BotGuild[] | null> {
   const botHealthUrl = getBotHealthUrl();
-
-  if (!botHealthUrl) {
-    return null;
-  }
 
   try {
     const response = await fetch(botHealthUrl, {

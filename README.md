@@ -339,8 +339,8 @@ For running ISOBEL directly with Node.js on your host machine.
 git clone --recursive https://github.com/soulwax/ISOBEL.git
 cd ISOBEL
 
-# 2. Install dependencies
-pnpm install
+# 2. Install bot dependencies
+pnpm run install:bot
 
 # 3. Configure environment
 cp .env.example .env
@@ -349,9 +349,9 @@ cp .env.example .env
 # 4. Set up database (first time only)
 pnpm prisma:migrate:deploy
 
-# 5. Build and start
+# 5. Build and start the bot
 pnpm build
-pnpm start
+pnpm pm2:start:prod
 ```
 
 ### Running on the Same Machine (Bot + Web)
@@ -359,10 +359,10 @@ pnpm start
 To run both bot and web interface on a single machine without Docker:
 
 ```bash
-# 1. Install all dependencies
+# 1. Install all dependencies explicitly
 pnpm install -r
 
-# 2. Build everything
+# 2. Build everything explicitly
 pnpm build:all
 
 # 3. Start all services with PM2
@@ -387,7 +387,7 @@ pnpm logs:all
 pnpm start                       # Bot only
 pnpm pm2:start:prod          # Bot only (explicit)
 pnpm web:pm2:start:prod      # Web only
-pnpm start:all:prod          # Bot + Web + Auth
+pnpm start:all:prod          # Bot + Web
 
 # Stop services
 pnpm pm2:stop                # Bot only
@@ -401,8 +401,7 @@ pnpm restart:all             # Everything
 
 # View logs
 pnpm pm2:logs                # Bot logs
-pnpm web:pm2:logs:web        # Web logs
-pnpm web:pm2:logs:web        # Web logs
+pnpm web:pm2:logs            # Web logs
 pnpm logs:all                # All logs
 
 # View status
@@ -430,11 +429,16 @@ pnpm dev:all
 
 ```bash
 # Quick deployment
-pnpm deploy                  # Builds and starts everything
+pnpm deploy                  # Build and start bot only
+pnpm deploy:all              # Build and start bot + web
 
 # Or step by step
-pnpm build:all              # Build bot and web
-pnpm start:all:prod         # Start with PM2
+pnpm build                  # Build bot only
+pnpm web:build              # Build web only
+pnpm build:all              # Build bot + web
+pnpm pm2:start:prod         # Start bot only
+pnpm web:pm2:start:prod     # Start web only
+pnpm start:all:prod         # Start bot + web
 pm2 save                       # Save PM2 process list
 pm2 startup                    # Enable PM2 on system boot
 ```
@@ -727,6 +731,7 @@ pnpm prisma:generate   # Generate Prisma client
 
 # Building
 pnpm build             # Build bot only
+pnpm web:build         # Build web only
 pnpm build:all         # Build bot + web
 
 # Utilities
