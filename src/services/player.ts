@@ -99,6 +99,12 @@ export interface PlayerEvents {
 
 export const DEFAULT_VOLUME = VOLUME_DEFAULT;
 
+export const LoopMode = {
+  Off: 0,
+  Track: 1,
+  Queue: 2,
+} as const;
+
 export default class Player {
   public voiceConnection: VoiceConnection | null = null;
   public status = STATUS.PAUSED;
@@ -165,6 +171,7 @@ export default class Player {
     this.clearReconnectTimer();
 
     const guildSettings = await getGuildSettings(this.guildId);
+    this.applyDefaultLoopMode(guildSettings.defaultLoopMode);
 
     // Workaround to disable keepAlive
     this.voiceConnection.on('stateChange', (oldState, newState) => {
@@ -489,6 +496,10 @@ export default class Player {
    */
   getQueue(): QueuedSong[] {
     return this.queue.slice(this.queuePosition + 1);
+  }
+
+  getActiveQueueSize(): number {
+    return Math.max(0, this.queue.length - this.queuePosition);
   }
 
   add(song: QueuedSong, {immediate = false} = {}): void {
@@ -897,6 +908,11 @@ export default class Player {
     });
 
     return this.audioPlayer;
+  }
+
+  private applyDefaultLoopMode(defaultLoopMode: number): void {
+    this.loopCurrentSong = defaultLoopMode === LoopMode.Track;
+    this.loopCurrentQueue = defaultLoopMode === LoopMode.Queue;
   }
 
   private async onAudioPlayerIdle(_oldState: AudioPlayerState, newState: AudioPlayerState): Promise<void> {

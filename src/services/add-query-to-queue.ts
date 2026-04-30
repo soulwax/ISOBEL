@@ -76,7 +76,7 @@ export default class AddQueryToQueue {
 
     const settings = await getGuildSettings(guildId);
 
-    const { queueAddResponseEphemeral } = settings;
+    const { maxQueueSize, queueAddResponseEphemeral } = settings;
 
     await interaction.deferReply({ flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined });
 
@@ -117,6 +117,22 @@ export default class AddQueryToQueue {
 
     if (newSongs.length === 0) {
       throw new Error('no songs found');
+    }
+
+    const originalSongCount = newSongs.length;
+    if (maxQueueSize > 0) {
+      const remainingQueueSlots = maxQueueSize - player.getActiveQueueSize();
+
+      if (remainingQueueSlots <= 0) {
+        throw new Error(`queue limit reached (${maxQueueSize} tracks)`);
+      }
+
+      if (newSongs.length > remainingQueueSlots) {
+        newSongs = newSongs.slice(0, remainingQueueSlots);
+        extraMsg = extraMsg === ''
+          ? `queue limit: added ${newSongs.length} of ${originalSongCount}`
+          : `${extraMsg}, queue limit: added ${newSongs.length} of ${originalSongCount}`;
+      }
     }
 
     if (shuffleAdditions && newSongs.length > 1) {
