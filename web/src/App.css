@@ -355,6 +355,17 @@ body {
   padding: 1rem;
 }
 
+.now-playing-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.now-playing-item + .now-playing-item {
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(64, 68, 75, 0.7);
+}
+
 .mockup-message {
   display: flex;
   gap: 0.75rem;
@@ -366,6 +377,7 @@ body {
   height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  object-fit: cover;
   flex-shrink: 0;
 }
 
@@ -421,6 +433,10 @@ body {
   margin-bottom: 0.75rem;
 }
 
+.live-track-title {
+  overflow-wrap: anywhere;
+}
+
 .embed-progress {
   margin-top: 0.75rem;
 }
@@ -433,6 +449,23 @@ body {
   animation: progress 2s ease-in-out infinite;
   position: relative;
   overflow: hidden;
+}
+
+.live-progress {
+  background-color: rgba(114, 118, 125, 0.22);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.live-progress-bar {
+  min-width: 4px;
+  animation: none;
+}
+
+.live-track-time {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .progress-bar::after {

@@ -103,6 +103,7 @@ export async function syncDiscordData({
           ownerId: guild.owner_id || '',
           owner: guild.owner || false,
           permissions,
+          deletedAt: null,
           updatedAt,
         })
         .onConflictDoUpdate({
@@ -111,6 +112,7 @@ export async function syncDiscordData({
             name: sql`excluded.name`,
             icon: sql`excluded.icon`,
             permissions: sql`excluded.permissions`,
+            deletedAt: null,
             updatedAt: sql`excluded."updatedAt"`,
           },
         });

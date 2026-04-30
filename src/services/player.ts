@@ -96,6 +96,15 @@ export interface PlayerEvents {
   statusChange: (oldStatus: STATUS, newStatus: STATUS) => void;
 }
 
+export interface NowPlayingSnapshot {
+  title: string;
+  artist: string;
+  thumbnailUrl: string | null;
+  position: number;
+  length: number;
+  isLive: boolean;
+}
+
 
 export const DEFAULT_VOLUME = VOLUME_DEFAULT;
 
@@ -259,6 +268,22 @@ export default class Player {
 
   getPosition(): number {
     return this.positionInSeconds;
+  }
+
+  getNowPlayingSnapshot(): NowPlayingSnapshot | null {
+    const song = this.getCurrent();
+    if (!song || this.status !== STATUS.PLAYING) {
+      return null;
+    }
+
+    return {
+      title: song.title,
+      artist: song.artist,
+      thumbnailUrl: song.thumbnailUrl,
+      position: this.positionInSeconds,
+      length: song.length,
+      isLive: song.isLive,
+    };
   }
 
   async play(): Promise<void> {

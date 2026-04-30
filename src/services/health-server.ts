@@ -6,6 +6,8 @@ import type http from 'http';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
 import debug from '../utils/debug.js';
+import type PlayerManager from '../managers/player.js';
+import type { NowPlayingSnapshot } from './player.js';
 
 interface HealthResponse {
   status: 'ok' | 'not_ready';
@@ -16,6 +18,7 @@ interface HealthResponse {
     name: string;
     icon: string | null;
   }[];
+  nowPlaying: NowPlayingSnapshot[];
   uptime: number;
   uptimeFormatted: string;
   timestamp: string;
@@ -24,13 +27,16 @@ interface HealthResponse {
 @injectable()
 export default class HealthServer {
   private readonly client: Client;
+  private readonly playerManager: PlayerManager;
   private server: http.Server | null = null;
   private readonly defaultHealthPort = 3002;
 
   constructor(
     @inject(TYPES.Client) client: Client,
+    @inject(TYPES.Managers.Player) playerManager: PlayerManager,
   ) {
     this.client = client;
+    this.playerManager = playerManager;
   }
 
   private resolvePort(): number {
@@ -85,6 +91,7 @@ export default class HealthServer {
         name: guild.name,
         icon: guild.icon,
       })),
+      nowPlaying: this.playerManager.getNowPlayingSnapshots(),
       uptime,
       uptimeFormatted: this.formatUptime(uptime),
       timestamp: new Date().toISOString(),

@@ -125,7 +125,7 @@ export async function getBotGuilds(): Promise<BotGuild[] | null> {
   }
 
   pendingBotGuilds ??= (async () => {
-    const guilds = await getBotGuildsFromDiscord() ?? await getBotGuildsFromHealth();
+    const guilds = await getBotGuildsFromHealth() ?? await getBotGuildsFromDiscord();
 
     if (guilds) {
       cachedBotGuilds = {
