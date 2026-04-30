@@ -60,8 +60,7 @@ Configure these in your Vercel project settings:
 | `DISCORD_CLIENT_SECRET` | Yes | Discord OAuth application client secret |
 | `NEXTAUTH_SECRET` | Yes | Random secret for Auth.js (`openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | Yes | Your Vercel deployment URL (e.g., `https://your-app.vercel.app`) |
-| `BOT_HEALTH_URL` | No | Recommended. Server-side URL to the bot's health endpoint, used by `/api/bot-health` |
-| `VITE_BOT_HEALTH_URL` | No | Optional browser-side fallback for local development |
+| `BOT_HEALTH_URL` | No | Optional server-side override for the bot health endpoint. Defaults to `http://127.0.0.1:3002/health` |
 
 ### Deploy to Vercel
 

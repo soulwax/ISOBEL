@@ -29,7 +29,7 @@ Do not send `guildId`, `createdAt`, or `updatedAt` in the body.
 
 ## Discord API rate limits
 
-`web/src/server/bot-guilds.ts` caches the bot's guild list for 5 minutes. Do not reduce this TTL. Set `BOT_HEALTH_URL` in `web/.env` so the guild list is fetched from the local bot health endpoint instead of Discord's API directly.
+`web/src/server/bot-guilds.ts` caches the bot's guild list for 5 minutes. Do not reduce this TTL. `BOT_HEALTH_URL` is optional and only needed when the bot is not reachable at `127.0.0.1` on `HEALTH_PORT` or `3002`.
 
 ## Schema sync requirement
 

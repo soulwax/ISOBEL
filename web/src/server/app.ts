@@ -25,6 +25,7 @@ import { AuthorizationError, NotFoundError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
+import { getBotHealthUrl } from "./bot-health-url.js";
 import { getBotGuilds, leaveBotGuild, type BotGuild } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
 import { ensureSuperUserTable, isSuperUserIdentity } from "./superuser.js";
@@ -76,28 +77,6 @@ async function isSessionSuperUser(session: AuthenticatedRequest["session"]): Pro
     email: session.user.email ?? discordUser[0]?.email,
     discordId: session.user.discordId ?? discordUser[0]?.id,
   });
-}
-
-function normalizeBotHealthUrl(value: string): string {
-  const trimmedUrl = value.trim();
-
-  if (trimmedUrl.endsWith("/health")) {
-    return trimmedUrl;
-  }
-
-  return trimmedUrl.endsWith("/")
-    ? `${trimmedUrl}health`
-    : `${trimmedUrl}/health`;
-}
-
-function getBotHealthUrl(): string | null {
-  const configuredUrl = process.env.BOT_HEALTH_URL ?? process.env.VITE_BOT_HEALTH_URL;
-
-  if (!configuredUrl?.trim()) {
-    return null;
-  }
-
-  return normalizeBotHealthUrl(configuredUrl);
 }
 
 function getTrustProxySetting(): number | boolean {
@@ -301,12 +280,14 @@ async function reconcileDeletedBotGuilds(botGuilds: BotGuild[] | null): Promise<
     return;
   }
 
+  const liveGuildIdValues = sql.join(liveGuildIds.map((guildId) => sql`${guildId}`), sql`, `);
+
   await db.execute(sql`
     UPDATE "discord_guild"
     SET "deletedAt" = COALESCE("deletedAt", now()),
         "updatedAt" = now()
     WHERE "deletedAt" IS NULL
-      AND NOT ("id" = ANY(${liveGuildIds}::text[]))
+      AND "id" NOT IN (${liveGuildIdValues})
   `);
 }
 
@@ -557,15 +538,6 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.get("/api/bot-health", apiLimiter, async (_req, res): Promise<void> => {
     const botHealthUrl = getBotHealthUrl();
-
-    if (!botHealthUrl) {
-      logger.warn("Bot health URL is not configured");
-      res.status(503).json({
-        status: "error",
-        ready: false,
-      } satisfies BotHealthResponse);
-      return;
-    }
 
     try {
       const upstreamResponse = await fetch(botHealthUrl, {

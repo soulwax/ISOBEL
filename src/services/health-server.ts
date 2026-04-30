@@ -34,7 +34,7 @@ export default class HealthServer {
   }
 
   private resolvePort(): number {
-    const configuredPort = process.env.HEALTH_PORT ?? process.env.PORT ?? String(this.defaultHealthPort);
+    const configuredPort = process.env.HEALTH_PORT ?? String(this.defaultHealthPort);
     const parsedPort = Number.parseInt(configuredPort, 10);
     return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
   }
