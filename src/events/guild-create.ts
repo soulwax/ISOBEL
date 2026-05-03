@@ -145,30 +145,4 @@ export default async (guild: Guild): Promise<void> => {
       commands: container.getAll<Command>(TYPES.Command).map(command => command.slashCommand),
     });
   }
-
-  const owner = await guild.fetchOwner();
-  await owner.send(`👋 Hi! Someone (probably you) just invited me to a server you own.
-
-I'm ISOBEL, a Discord music bot that streams high-quality audio from the Starchild Music API. Here's what I can do:
-
-🎵 **Music Playback**
-• Play songs with \`/play\` - search for tracks or use HLS stream URLs
-• Play uploads with \`/file\` - attach an mp3 directly from Discord
-• Queue management - view, shuffle, remove, and move songs in the queue
-• Favorites system - save and quickly access your favorite tracks
-• Looping - loop the current song or entire queue
-• Seeking - jump to any position in a track
-
-🎛️ **Controls**
-• Play, pause, resume, skip, and stop playback
-• Volume control with automatic ducking when people speak
-• Smart queue management with pagination
-
-⚙️ **Configuration**
-• Customize playlist limits, auto-announcements, and more with \`/config\`
-• Set default volume, queue page size, and voice activity settings
-
-By default, I'm usable by all guild members in all guild channels. To change this, check out the wiki page on permissions: https://github.com/soulwax/ISOBEL/wiki/Configuring-Bot-Permissions
-
-For more information, visit my homepage: https://echo.soulwax.dev`);
 };

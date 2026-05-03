@@ -18,6 +18,7 @@ import { DISCORD_API_VERSION } from './utils/constants.js';
 import debug from './utils/debug.js';
 import errorMsg from './utils/error-msg.js';
 import registerCommandsOnGuild from './utils/register-commands-on-guild.js';
+import { serializeGlobalCommand } from './utils/serialize-command.js';
 
 /**
  * Bot permissions constant (required permissions for the bot)
@@ -132,7 +133,7 @@ export default class Bot {
       spinner.text = '📡 updating commands on bot...';
       await rest.put(
         applicationCommandsRoute(user.id),
-        {body: this.commandsByName.map(command => command.slashCommand.toJSON())},
+        {body: this.commandsByName.map(command => serializeGlobalCommand(command.slashCommand))},
       );
     } else {
       spinner.text = '📡 updating commands in all guilds...';
@@ -170,6 +171,11 @@ export default class Bot {
    */
   private async handleInteraction(interaction: Interaction): Promise<void> {
     try {
+      if (!interaction.inGuild()) {
+        debug('Ignoring interaction outside a guild to avoid sending direct messages');
+        return;
+      }
+
       if (interaction.isChatInputCommand()) {
         await this.handleCommandInteraction(interaction);
       } else if (interaction.isButton()) {
@@ -198,7 +204,6 @@ export default class Bot {
     }
 
     if (!interaction.guild) {
-      await interaction.reply(errorMsg('you can\'t use this bot in a DM'));
       return;
     }
 
@@ -285,6 +290,10 @@ export default class Bot {
   private async handleInteractionError(interaction: Interaction, error: unknown): Promise<void> {
     const normalizedError = this.normalizeError(error);
     debug(normalizedError);
+
+    if (!interaction.inGuild()) {
+      return;
+    }
 
     // This can fail if the message was deleted, and we don't want to crash the whole bot
     try {
