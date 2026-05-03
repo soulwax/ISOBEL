@@ -125,7 +125,7 @@
     "eslint-config-xo-typescript": "^9.0.0",
     "eslint-plugin-import": "^2.32.0",
     "husky": "^9.1.7",
-    "pm2": "^6.0.14",
+    "pm2": "^7.0.1",
     "prisma": "^7.8.0",
     "release-it": "^19.2.4",
     "type-fest": "^5.4.4",
