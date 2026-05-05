@@ -47,6 +47,71 @@ body {
   margin-left: 72px; /* Offset for guild rail when authenticated */
 }
 
+.legal-corner-link {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 200;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background-color: rgba(47, 49, 54, 0.92);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  text-decoration: none;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.legal-corner-link svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+.legal-corner-link::before {
+  content: attr(aria-label);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.625rem);
+  max-width: min(240px, calc(100vw - 2rem));
+  padding: 0.4rem 0.55rem;
+  color: var(--text-primary);
+  background-color: var(--discord-darker);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.legal-corner-link:hover,
+.legal-corner-link:focus-visible {
+  color: var(--text-primary);
+  background-color: rgba(35, 39, 42, 0.96);
+  border-color: var(--discord-blurple);
+  transform: translateY(-1px);
+}
+
+.legal-corner-link:hover::before,
+.legal-corner-link:focus-visible::before {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.legal-corner-link:focus-visible {
+  outline: 2px solid var(--discord-blurple);
+  outline-offset: 3px;
+}
+
 @media (max-width: 768px) {
   .app.app-with-sidebar {
     margin-left: 0; /* No offset on mobile */
