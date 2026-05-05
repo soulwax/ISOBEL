@@ -1,12 +1,16 @@
 // File: web/api/index.ts
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { NextFunction, Request, Response } from 'express';
+import type { createApp } from '../src/server/app.js';
 
 // Create Express app instance (singleton for warm starts)
-let app: any = null;
+type ServerApp = ReturnType<typeof createApp>;
+
+let app: ServerApp | null = null;
 let appError: Error | null = null;
 
-async function getApp() {
+async function getApp(): Promise<ServerApp> {
   if (appError) {
     throw appError;
   }
@@ -54,14 +58,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Convert Vercel request/response to Express format
     return new Promise<void>((resolve, reject) => {
       try {
-        expressApp(req as any, res as any, (err?: any) => {
-          if (err) {
-            sendError(res, err, 'Express handler error');
-            reject(err);
-          } else {
-            resolve();
+        expressApp(
+          req as unknown as Request,
+          res as unknown as Response,
+          (err?: Parameters<NextFunction>[0]) => {
+            if (err) {
+              sendError(res, err, 'Express handler error');
+              reject(err);
+            } else {
+              resolve();
+            }
           }
-        });
+        );
       } catch (error) {
         sendError(res, error, 'Handler execution error');
         reject(error);
