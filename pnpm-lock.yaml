@@ -249,6 +249,9 @@ importers:
       helmet:
         specifier: ^7.2.0
         version: 7.2.0
+      lucide-react:
+        specifier: ^1.14.0
+        version: 1.14.0(react@19.2.4)
       postgres:
         specifier: ^3.4.8
         version: 3.4.8
@@ -3828,6 +3831,11 @@ packages:
   lru.min@1.1.4:
     resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
     engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
+
+  lucide-react@1.14.0:
+    resolution: {integrity: sha512-+1mdWcfSJVUsaTIjN9zoezmUhfXo5l0vP7ekBMPo3jcS/aIkxHnXqAPsByszMZx/Y8oQBRJxJx5xg+RH3urzxA==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   m3u8stream@0.8.6:
     resolution: {integrity: sha512-LZj8kIVf9KCphiHmH7sbFQTVe4tOemb202fWwvJwR9W5ENW/1hxJN6ksAWGhQgSBSa3jyWhnjKU1Fw1GaOdbyA==}
@@ -8848,6 +8856,10 @@ snapshots:
   lru-cache@7.18.3: {}
 
   lru.min@1.1.4: {}
+
+  lucide-react@1.14.0(react@19.2.4):
+    dependencies:
+      react: 19.2.4
 
   m3u8stream@0.8.6:
     dependencies:

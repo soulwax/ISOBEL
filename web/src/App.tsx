@@ -14,6 +14,7 @@ import {
   HiOutlineLink,
   HiOutlineCollection,
 } from "react-icons/hi";
+import { Scale } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./App.css";
 import HealthIndicator from "./components/HealthIndicator";
@@ -227,6 +228,15 @@ function App() {
 
   return (
     <div className={`app ${isAuthenticated ? 'app-with-sidebar' : ''}`}>
+      <a
+        className="legal-corner-link"
+        href="https://legal.bluesix.dev/en"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Legal notice and privacy policy"
+      >
+        <Scale aria-hidden="true" />
+      </a>
       {isAuthenticated && (
         <DiscordGuildsSidebar 
           onGuildSelect={handleGuildSelect}
@@ -263,7 +273,7 @@ function App() {
               API
             </a>
             <a
-              href="https://legal.bluesix.dev"
+              href="https://legal.bluesix.dev/en"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -711,7 +721,7 @@ pnpm start:all:prod`}</code>
                 License
               </a>
               <a
-                href="https://legal.bluesix.dev"
+                href="https://legal.bluesix.dev/en"
                 target="_blank"
                 rel="noopener noreferrer"
               >
