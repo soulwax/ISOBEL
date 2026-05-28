@@ -1,37 +1,68 @@
 // File: src/services/player.ts
 
 import {
-  AudioPlayer,
-  AudioPlayerState,
-  AudioPlayerStatus, AudioResource,
+  type AudioPlayer,
+  type AudioPlayerState,
+  AudioPlayerStatus, type AudioResource,
   createAudioPlayer,
-  createAudioResource, DiscordGatewayAdapterCreator,
+  createAudioResource, type DiscordGatewayAdapterCreator,
+  entersState,
   joinVoiceChannel,
   StreamType,
-  VoiceConnection,
+  type VoiceConnection,
   VoiceConnectionStatus,
 } from '@discordjs/voice';
 import type { Setting } from '@prisma/client';
 import shuffle from 'array-shuffle';
-import { Message, Snowflake, VoiceChannel } from 'discord.js';
-import ffmpeg from 'fluent-ffmpeg';
+import { type Message, type Snowflake, type VoiceChannel } from 'discord.js';
+import { FFmpeggy } from 'ffmpeggy';
 import { WriteStream } from 'fs-capacitor';
-import got from 'got';
 import { hashSync } from 'hasha';
 import { inject } from 'inversify';
 import { pipeline } from 'node:stream/promises';
-import { Readable } from 'stream';
+import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
-import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import debug from '../utils/debug.js';
+import { formatError } from '../utils/error-msg.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
-import FileCacheProvider from './file-cache.js';
-import StarchildAPI from './starchild-api.js';
+import type FileCacheProvider from './file-cache.js';
+import type SongbirdNext from './songbird-next.js';
+import type StarchildAPI from './starchild-api.js';
+
+const configureFfmpeggy = (): void => {
+  const ffmpeggy = FFmpeggy as unknown as {
+    DefaultConfig?: {
+      ffmpegBin?: string;
+      ffprobeBin?: string;
+    };
+  };
+  const defaultConfig = ffmpeggy.DefaultConfig;
+
+  if (!defaultConfig) {
+    return;
+  }
+
+  const ffmpegPath = process.env.FFMPEG_PATH?.trim();
+  const ffprobePath = process.env.FFPROBE_PATH?.trim();
+
+  if (!defaultConfig.ffmpegBin || defaultConfig.ffmpegBin.trim() === '') {
+    defaultConfig.ffmpegBin = ffmpegPath && ffmpegPath.length > 0 ? ffmpegPath : 'ffmpeg';
+  }
+
+  if (!defaultConfig.ffprobeBin || defaultConfig.ffprobeBin.trim() === '') {
+    defaultConfig.ffprobeBin = ffprobePath && ffprobePath.length > 0 ? ffprobePath : 'ffprobe';
+  }
+};
+
+configureFfmpeggy();
 
 export enum MediaSource {
   Starchild,
   HLS,
+  YouTube,
+  DiscordAttachment,
 }
 
 export interface QueuedPlaylist {
@@ -65,10 +96,25 @@ export interface PlayerEvents {
   statusChange: (oldStatus: STATUS, newStatus: STATUS) => void;
 }
 
+export interface NowPlayingSnapshot {
+  title: string;
+  artist: string;
+  thumbnailUrl: string | null;
+  position: number;
+  length: number;
+  isLive: boolean;
+}
+
 
 export const DEFAULT_VOLUME = VOLUME_DEFAULT;
 
-export default class {
+export const LoopMode = {
+  Off: 0,
+  Track: 1,
+  Queue: 2,
+} as const;
+
+export default class Player {
   public voiceConnection: VoiceConnection | null = null;
   public status = STATUS.PAUSED;
   public guildId: string;
@@ -83,21 +129,36 @@ export default class {
   private defaultVolume: number = DEFAULT_VOLUME;
   private nowPlaying: QueuedSong | null = null;
   private playPositionInterval: NodeJS.Timeout | undefined;
-  private lastSongURL = '';
 
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
   private readonly starchildAPI: StarchildAPI;
+  private readonly songbirdNext: SongbirdNext;
   private disconnectTimer: NodeJS.Timeout | null = null;
   private nowPlayingMessage: Message | null = null;
   private embedUpdateInterval: NodeJS.Timeout | undefined;
 
   private readonly channelToSpeakingUsers = new Map<string, Set<string>>();
+  private readonly mp3CacheInFlight = new Map<string, Promise<string>>();
+  private audioPlayerIdleHandler?: (oldState: AudioPlayerState, newState: AudioPlayerState) => void;
+  private audioPlayerErrorHandler?: (error: Error) => void;
+  private readonly preloadedStreamPaths = new Map<string, string>();
+  private aiSuggestions: string[] = [];
+  private playbackErrorAttempts = 0;
+  private reconnectAttempts = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private allowReconnect = false;
 
-  constructor(fileCache: FileCacheProvider, guildId: string, @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI) {
+  constructor(
+    fileCache: FileCacheProvider,
+    guildId: string,
+    @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI,
+    @inject(TYPES.Services.SongbirdNext) songbirdNext: SongbirdNext
+  ) {
     this.fileCache = fileCache;
     this.guildId = guildId;
     this.starchildAPI = starchildAPI;
+    this.songbirdNext = songbirdNext;
   }
 
   async connect(channel: VoiceChannel): Promise<void> {
@@ -105,6 +166,7 @@ export default class {
     const settings = await getGuildSettings(this.guildId);
     const {defaultVolume = DEFAULT_VOLUME} = settings;
     this.defaultVolume = defaultVolume;
+    this.currentChannel = channel;
 
     this.voiceConnection = joinVoiceChannel({
       channelId: channel.id,
@@ -113,7 +175,12 @@ export default class {
       adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
     });
 
+    this.allowReconnect = true;
+    this.reconnectAttempts = 0;
+    this.clearReconnectTimer();
+
     const guildSettings = await getGuildSettings(this.guildId);
+    this.applyDefaultLoopMode(guildSettings.defaultLoopMode);
 
     // Workaround to disable keepAlive
     this.voiceConnection.on('stateChange', (oldState, newState) => {
@@ -132,14 +199,19 @@ export default class {
       newNetworking?.on('stateChange', networkStateChangeHandler);
       /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 
-      this.currentChannel = channel;
       if (newState.status === VoiceConnectionStatus.Ready) {
+        this.reconnectAttempts = 0;
         this.registerVoiceActivityListener(guildSettings);
       }
     });
+
+    await entersState(this.voiceConnection, VoiceConnectionStatus.Ready, 20_000);
   }
 
   disconnect(): void {
+    this.allowReconnect = false;
+    this.clearReconnectTimer();
+    this.reconnectAttempts = 0;
     if (this.voiceConnection) {
       if (this.status === STATUS.PLAYING) {
         this.pause();
@@ -181,13 +253,8 @@ export default class {
     }
 
     const stream = await this.getStream(currentSong, {seek: realPositionSeconds, to});
-    this.audioPlayer = createAudioPlayer({
-      behaviors: {
-        // Needs to be somewhat high for livestreams
-        maxMissedFrames: AUDIO_PLAYER_MAX_MISSED_FRAMES,
-      },
-    });
-    this.voiceConnection.subscribe(this.audioPlayer);
+    const audioPlayer = this.getOrCreateAudioPlayer();
+    this.voiceConnection.subscribe(audioPlayer);
     this.playAudioPlayerResource(this.createAudioStream(stream));
     this.attachListeners();
     this.startTrackingPosition(positionSeconds);
@@ -203,6 +270,22 @@ export default class {
     return this.positionInSeconds;
   }
 
+  getNowPlayingSnapshot(): NowPlayingSnapshot | null {
+    const song = this.getCurrent();
+    if (!song || this.status !== STATUS.PLAYING) {
+      return null;
+    }
+
+    return {
+      title: song.title,
+      artist: song.artist,
+      thumbnailUrl: song.thumbnailUrl,
+      position: this.positionInSeconds,
+      length: song.length,
+      isLive: song.isLive,
+    };
+  }
+
   async play(): Promise<void> {
     if (this.voiceConnection === null) {
       throw new Error('Not connected to a voice channel.');
@@ -216,7 +299,7 @@ export default class {
 
     // Cancel any pending idle disconnection
     if (this.disconnectTimer) {
-      clearInterval(this.disconnectTimer);
+      clearTimeout(this.disconnectTimer);
       this.disconnectTimer = null;
     }
 
@@ -244,34 +327,36 @@ export default class {
       }
 
       const stream = await this.getStream(currentSong, {seek: positionSeconds, to});
-      this.audioPlayer = createAudioPlayer({
-        behaviors: {
-          // Needs to be somewhat high for livestreams
-          maxMissedFrames: AUDIO_PLAYER_MAX_MISSED_FRAMES,
-        },
-      });
-      this.voiceConnection.subscribe(this.audioPlayer);
+      const audioPlayer = this.getOrCreateAudioPlayer();
+      this.voiceConnection.subscribe(audioPlayer);
       this.playAudioPlayerResource(this.createAudioStream(stream));
 
       this.attachListeners();
 
+      const previousSong = this.nowPlaying;
       this.status = STATUS.PLAYING;
       this.nowPlaying = currentSong;
+      this.playbackErrorAttempts = 0;
 
-      // Always reset position when starting a new song
-      // If it's the same URL, we're seeking/resuming, so preserve position
-      // Otherwise, start from the beginning (or offset)
-      if (currentSong.url === this.lastSongURL) {
+      const isNewSong = previousSong !== currentSong;
+
+      // Always reset position when starting a different queued song.
+      // If it's the same queue item, we're seeking/resuming, so preserve position.
+      if (!isNewSong) {
         // Same song - preserve position (for seeking/resuming)
         this.startTrackingPosition(this.positionInSeconds);
       } else {
         // New song - reset position to start (or offset)
         this.startTrackingPosition(positionSeconds ?? 0);
-        this.lastSongURL = currentSong.url;
+        await this.rotateNowPlayingMessage();
       }
 
       // Start updating the embed periodically
       this.startEmbedUpdates();
+      this.prefetchNextSong();
+      if (isNewSong) {
+        this.safeAsync(this.refreshAiSuggestions(currentSong));
+      }
     } catch (error: unknown) {
       await this.forward(1);
 
@@ -339,41 +424,42 @@ export default class {
     }
 
     this.voiceConnection.receiver.speaking.on('start', (userId: string) => {
-      if (!this.currentChannel) {
-        return;
-      }
-
-      const member = this.currentChannel.members.get(userId);
-      const channelId = this.currentChannel?.id;
-
-      if (member) {
-        if (!this.channelToSpeakingUsers.has(channelId)) {
-          this.channelToSpeakingUsers.set(channelId, new Set());
-        }
-
-        this.channelToSpeakingUsers.get(channelId)?.add(member.id);
-      }
-
+      this.updateSpeakingUser(userId, 'add');
       this.suppressVoiceWhenPeopleAreSpeaking(turnDownVolumeWhenPeopleSpeakTarget);
     });
 
     this.voiceConnection.receiver.speaking.on('end', (userId: string) => {
-      if (!this.currentChannel) {
-        return;
-      }
-
-      const member = this.currentChannel.members.get(userId);
-      const channelId = this.currentChannel.id;
-      if (member) {
-        if (!this.channelToSpeakingUsers.has(channelId)) {
-          this.channelToSpeakingUsers.set(channelId, new Set());
-        }
-
-        this.channelToSpeakingUsers.get(channelId)?.delete(member.id);
-      }
-
+      this.updateSpeakingUser(userId, 'remove');
       this.suppressVoiceWhenPeopleAreSpeaking(turnDownVolumeWhenPeopleSpeakTarget);
     });
+  }
+
+  /**
+   * Updates the speaking users set for the current channel.
+   * @param userId - The Discord user ID
+   * @param action - Whether to 'add' or 'remove' the user from the speaking set
+   */
+  private updateSpeakingUser(userId: string, action: 'add' | 'remove'): void {
+    if (!this.currentChannel) {
+      return;
+    }
+
+    const member = this.currentChannel.members.get(userId);
+    if (!member) {
+      return;
+    }
+
+    const channelId = this.currentChannel.id;
+    if (!this.channelToSpeakingUsers.has(channelId)) {
+      this.channelToSpeakingUsers.set(channelId, new Set());
+    }
+
+    const speakingSet = this.channelToSpeakingUsers.get(channelId)!;
+    if (action === 'add') {
+      speakingSet.add(member.id);
+    } else {
+      speakingSet.delete(member.id);
+    }
   }
 
   suppressVoiceWhenPeopleAreSpeaking(turnDownVolumeWhenPeopleSpeakTarget: number): void {
@@ -435,6 +521,10 @@ export default class {
    */
   getQueue(): QueuedSong[] {
     return this.queue.slice(this.queuePosition + 1);
+  }
+
+  getActiveQueueSize(): number {
+    return Math.max(0, this.queue.length - this.queuePosition);
   }
 
   add(song: QueuedSong, {immediate = false} = {}): void {
@@ -525,6 +615,11 @@ export default class {
     const cacheKey = `mp3:${song.url}:${AUDIO_BITRATE_KBPS}`;
     const hash = this.getHashForCache(cacheKey);
 
+    const inFlight = this.mp3CacheInFlight.get(hash);
+    if (inFlight) {
+      return inFlight;
+    }
+
     // Check if already cached
     const cachedPath = await this.fileCache.getPathFor(hash);
     if (cachedPath) {
@@ -532,71 +627,38 @@ export default class {
       return cachedPath;
     }
 
-    // Download MP3 file
-    debug(`Downloading MP3 for ${song.title} at ${AUDIO_BITRATE_KBPS}kbps...`);
-    const streamUrl = this.starchildAPI.getStreamUrl(song.url, {
-      kbps: AUDIO_BITRATE_KBPS as number,
-    });
+    const downloadPromise = (async () => {
+      // Download MP3 file
+      debug(`Downloading MP3 for ${song.title} at ${AUDIO_BITRATE_KBPS}kbps...`);
 
-    try {
-      const writeStream = this.fileCache.createWriteStream(hash);
-      const downloadStream = got.stream(streamUrl);
+      try {
+        const { stream: writeStream, committed } = this.fileCache.createWriteStream(hash);
+        const downloadStream = this.starchildAPI.getStream(song.url, {
+          kbps: AUDIO_BITRATE_KBPS as number,
+        });
 
-      // Wait for pipeline to complete
-      await pipeline(downloadStream, writeStream);
+        // Wait for pipeline to complete
+        await pipeline(downloadStream, writeStream);
 
-      // In production, the async close handler might take longer
-      // Wait for the file cache write stream's async close handler to complete
-      await new Promise<void>((resolve, reject) => {
-        const checkCache = async () => {
-          try {
-            let finalPath = await this.fileCache.getPathFor(hash);
-            let retries = 10; // Increased retries for production
-            while (!finalPath && retries > 0) {
-              debug(`Waiting for MP3 cache to complete for ${song.title}... (${retries} retries left)`);
-              await new Promise(r => setTimeout(r, 500)); // Increased delay
-              finalPath = await this.fileCache.getPathFor(hash);
-              retries--;
-            }
-            if (finalPath) {
-              debug(`MP3 cache completed for ${song.title}`);
-              resolve();
-            } else {
-              debug(`MP3 cache failed for ${song.title} - no path found after retries`);
-              reject(new Error(`Failed to cache MP3 file - file may not have been written correctly for ${song.title}`));
-            }
-          } catch (error: unknown) {
-            debug(`Error checking MP3 cache for ${song.title}: ${String(error)}`);
-            reject(error instanceof Error ? error : new Error(String(error)));
-          }
-        };
-
-        if (writeStream.closed) {
-          // Stream already closed, wait for async handler
-          debug(`Write stream already closed for ${String(song.title)}, checking cache...`);
-          void checkCache();
-        } else {
-          writeStream.once('close', () => {
-            debug(`Write stream closed for ${String(song.title)}, checking cache...`);
-            void checkCache();
-          });
-          writeStream.once('error', (error) => {
-            debug(`Write stream error for ${song.title}: ${error}`);
-            reject(error);
-          });
+        // Wait for the file to be moved from tmp and recorded in the database
+        const finalPath = await committed;
+        if (!finalPath) {
+          throw new Error(`Failed to cache MP3 file - empty write for ${song.title}`);
         }
-      });
 
-      const finalPath = await this.fileCache.getPathFor(hash);
-      if (!finalPath) {
-        throw new Error(`Failed to cache MP3 file - final path not found for ${song.title}`);
+        debug(`Cached MP3 for ${song.title}`);
+        return finalPath;
+      } catch (error) {
+        debug(`Error downloading/caching MP3 for ${String(song.title)}: ${formatError(error)}`);
+        throw error;
       }
+    })();
 
-      debug(`Cached MP3 for ${song.title}`);
-      return finalPath;
-    } catch (error) {
-      debug(`Error downloading/caching MP3 for ${String(song.title)}: ${String(error)}`);
-      throw error;
+    this.mp3CacheInFlight.set(hash, downloadPromise);
+    try {
+      return await downloadPromise;
+    } finally {
+      this.mp3CacheInFlight.delete(hash);
     }
   }
 
@@ -608,28 +670,77 @@ export default class {
     }
 
     if (song.source === MediaSource.HLS) {
-      return this.createReadStream({url: song.url, cacheKey: song.url});
+      return this.createReadStreamWithRetry({url: song.url, cacheKey: song.url});
+    }
+    if (song.source === MediaSource.YouTube || song.source === MediaSource.DiscordAttachment) {
+      const ffmpegInputOptions: string[] = [];
+      if (options.seek) {
+        ffmpegInputOptions.push('-ss', options.seek.toString());
+      }
+      if (options.to) {
+        ffmpegInputOptions.push('-to', options.to.toString());
+      }
+      return this.createReadStreamWithRetry({
+        url: song.url,
+        cacheKey: song.url,
+        ffmpegInputOptions,
+        cache: false,
+      });
     }
 
-    // Download and cache MP3 file for higher fidelity
-    const mp3Path = await this.downloadAndCacheMP3(song);
+    // If we need to seek, we must have a local file first.
+    if (options.seek || options.to) {
+      const mp3Path = await this.downloadAndCacheMP3(song);
 
-    const ffmpegInputOptions: string[] = [];
+      const ffmpegInputOptions: string[] = [];
 
-    if (options.seek) {
-      ffmpegInputOptions.push('-ss', options.seek.toString());
+      if (options.seek) {
+        ffmpegInputOptions.push('-ss', options.seek.toString());
+      }
+
+      if (options.to) {
+        ffmpegInputOptions.push('-to', options.to.toString());
+      }
+
+      // Use cached MP3 file as input
+      return this.createReadStream({
+        url: mp3Path,
+        cacheKey: song.url,
+        ffmpegInputOptions,
+        cache: false, // Already cached as MP3
+      });
     }
 
-    if (options.to) {
-      ffmpegInputOptions.push('-to', options.to.toString());
+    const preloadedPath = this.preloadedStreamPaths.get(song.url);
+    if (preloadedPath) {
+      this.preloadedStreamPaths.delete(song.url);
+      return this.createReadStream({
+        url: preloadedPath,
+        cacheKey: song.url,
+        cache: false,
+      });
     }
 
-    // Use cached MP3 file as input
-    return this.createReadStream({
-      url: mp3Path,
+    // If cached, use it immediately.
+    const cacheKey = `mp3:${song.url}:${AUDIO_BITRATE_KBPS}`;
+    const cachedPath = await this.fileCache.getPathFor(this.getHashForCache(cacheKey));
+    if (cachedPath) {
+      return this.createReadStream({
+        url: cachedPath,
+        cacheKey: song.url,
+        cache: false,
+      });
+    }
+
+    // Start caching in the background and stream directly for faster start.
+    this.safeAsync(this.downloadAndCacheMP3(song));
+    const streamUrl = this.starchildAPI.getStreamUrl(song.url, {
+      kbps: AUDIO_BITRATE_KBPS as number,
+    });
+    return this.createReadStreamWithRetry({
+      url: streamUrl,
       cacheKey: song.url,
-      ffmpegInputOptions,
-      cache: false, // Already cached as MP3
+      cache: false,
     });
   }
 
@@ -669,6 +780,19 @@ export default class {
     this.nowPlayingMessage = message;
   }
 
+  getAiSuggestions(): string[] {
+    return this.aiSuggestions;
+  }
+
+  /**
+   * Safely executes an async operation, logging errors without throwing
+   */
+  private safeAsync<T>(promise: Promise<T>): void {
+    promise.catch(error => {
+      debug(`Unhandled error in async operation: ${formatError(error)}`);
+    });
+  }
+
   /**
    * Starts periodically updating the now-playing embed
    */
@@ -677,23 +801,23 @@ export default class {
 
     this.embedUpdateInterval = setInterval(() => {
       if (this.status === STATUS.PLAYING && this.nowPlayingMessage && this.getCurrent()) {
-        // Use void to explicitly discard the promise - we handle errors internally
-        void (async () => {
+        // Use safeAsync to handle errors without throwing
+        this.safeAsync((async () => {
           try {
             await this.nowPlayingMessage!.edit({
               embeds: [buildPlayingMessageEmbed(this)],
+              components: buildPlaybackControls(this),
             });
           } catch (error: unknown) {
             // Message might have been deleted or bot lost permissions
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            debug(`Failed to update now-playing embed: ${errorMessage}`);
+            debug(`Failed to update now-playing embed: ${formatError(error)}`);
             // Clear the message reference if we can't update it
             if (this.isHttpError(error, 10008)) { // Unknown Message
               this.nowPlayingMessage = null;
               this.stopEmbedUpdates();
             }
           }
-        })();
+        })());
       }
     }, NOW_PLAYING_UPDATE_INTERVAL_MS);
   }
@@ -705,6 +829,38 @@ export default class {
     if (this.embedUpdateInterval) {
       clearInterval(this.embedUpdateInterval);
       this.embedUpdateInterval = undefined;
+    }
+  }
+
+  /**
+   * Sends a fresh now-playing post for the current song and deletes the previous post.
+   * Falls back silently if the message cannot be sent/deleted (missing permissions, deleted message, etc.).
+   */
+  private async rotateNowPlayingMessage(): Promise<void> {
+    const previousMessage = this.nowPlayingMessage;
+    if (!previousMessage) {
+      return;
+    }
+    const channel = previousMessage.channel;
+    if (!('send' in channel) || typeof channel.send !== 'function') {
+      return;
+    }
+
+    try {
+      const newMessage = await channel.send({
+        embeds: [buildPlayingMessageEmbed(this)],
+        components: buildPlaybackControls(this),
+      });
+      this.nowPlayingMessage = newMessage;
+    } catch (error) {
+      debug(`Failed to create new now-playing message: ${formatError(error)}`);
+      return;
+    }
+
+    try {
+      await previousMessage.delete();
+    } catch (error) {
+      debug(`Failed to delete previous now-playing message: ${formatError(error)}`);
     }
   }
 
@@ -723,15 +879,65 @@ export default class {
 
     // Remove any existing listeners before adding new ones to prevent duplicates
     // Wrap async handler to avoid Promise return type error - event listeners expect void
-    const idleHandler = (_oldState: AudioPlayerState, newState: AudioPlayerState) => {
+    this.audioPlayerIdleHandler ??= (_oldState: AudioPlayerState, newState: AudioPlayerState) => {
       void this.onAudioPlayerIdle(_oldState, newState);
     };
+
+    const idleHandler = this.audioPlayerIdleHandler;
     this.audioPlayer.removeListener(AudioPlayerStatus.Idle, idleHandler);
     this.audioPlayer.on(AudioPlayerStatus.Idle, idleHandler);
+
+    this.audioPlayerErrorHandler ??= (error: Error) => {
+      void this.onAudioPlayerError(error);
+    };
+
+    const errorHandler = this.audioPlayerErrorHandler;
+    this.audioPlayer.removeListener('error', errorHandler);
+    this.audioPlayer.on('error', errorHandler);
   }
 
   private onVoiceConnectionDisconnect(): void {
-    this.disconnect();
+    if (!this.allowReconnect || !this.currentChannel) {
+      this.disconnect();
+      return;
+    }
+
+    this.scheduleReconnect();
+  }
+
+  private async refreshAiSuggestions(song: QueuedSong): Promise<void> {
+    const recommendations = await this.songbirdNext.getRecommendations({
+      title: song.title,
+      artist: song.artist,
+    });
+    this.aiSuggestions = recommendations;
+
+    if (this.nowPlayingMessage) {
+      try {
+        await this.nowPlayingMessage.edit({
+          embeds: [buildPlayingMessageEmbed(this)],
+          components: buildPlaybackControls(this),
+        });
+      } catch (error) {
+        debug(`Failed to update AI suggestions: ${formatError(error)}`);
+      }
+    }
+  }
+
+  private getOrCreateAudioPlayer(): AudioPlayer {
+    this.audioPlayer ??= createAudioPlayer({
+      behaviors: {
+        // Needs to be somewhat high for livestreams
+        maxMissedFrames: AUDIO_PLAYER_MAX_MISSED_FRAMES,
+      },
+    });
+
+    return this.audioPlayer;
+  }
+
+  private applyDefaultLoopMode(defaultLoopMode: number): void {
+    this.loopCurrentSong = defaultLoopMode === LoopMode.Track;
+    this.loopCurrentQueue = defaultLoopMode === LoopMode.Queue;
   }
 
   private async onAudioPlayerIdle(_oldState: AudioPlayerState, newState: AudioPlayerState): Promise<void> {
@@ -770,44 +976,78 @@ export default class {
       const capacitor = new WriteStream();
 
       if (options?.cache) {
-        const cacheStream = this.fileCache.createWriteStream(this.getHashForCache(options.cacheKey));
+        const { stream: cacheStream } = this.fileCache.createWriteStream(this.getHashForCache(options.cacheKey));
         capacitor.createReadStream().pipe(cacheStream as unknown as NodeJS.WritableStream);
       }
 
       const returnedStream = capacitor.createReadStream();
       let hasReturnedStreamClosed = false;
+      let hasResolved = false;
 
       // Determine if input is a file path or URL
       const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
       const inputOptions = options?.ffmpegInputOptions ?? (isFile ? [] : ['-re']);
 
-      const stream = ffmpeg(options.url)
-        .inputOptions(inputOptions)
-        .noVideo()
-        .audioCodec('libopus')
-        .outputFormat('webm')
-        .audioBitrate(OPUS_OUTPUT_BITRATE_KBPS as number)
-        .addOutputOption(['-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`])
-        .on('error', error => {
-          if (!hasReturnedStreamClosed) {
+      const ff = new FFmpeggy({
+        input: options.url,
+        inputOptions,
+        pipe: true,
+        outputOptions: [
+          '-vn',
+          '-c:a', 'libopus',
+          '-b:a', `${OPUS_OUTPUT_BITRATE_KBPS}k`,
+          '-f', 'webm',
+          '-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`,
+        ],
+        overwriteExisting: true,
+      });
+      ff.toStream().pipe(capacitor as unknown as NodeJS.WritableStream);
+
+      ff
+        .on('error', (error: Error) => {
+          if (!hasReturnedStreamClosed && !hasResolved) {
+            hasResolved = true;
+            clearTimeout(startTimeout);
             reject(error);
+          } else {
+            debug(`ffmpeg stream error after start: ${error.message}`);
           }
         })
-        .on('start', command => {
-          debug(`Spawned ffmpeg with ${command}`);
+        .on('start', (args: readonly string[]) => {
+          debug(`Spawned ffmpeg with ${args.join(' ')}`);
+          if (!hasResolved) {
+            hasResolved = true;
+            clearTimeout(startTimeout);
+            resolve(returnedStream);
+          }
         });
 
-      stream.pipe(capacitor);
+      const startTimeout = setTimeout(() => {
+        if (!hasResolved) {
+          hasResolved = true;
+          void ff.stop();
+          reject(new Error('ffmpeg start timeout'));
+        }
+      }, FFMPEG_START_TIMEOUT_MS);
+
+      void ff.run().catch((error: unknown) => {
+        if (hasResolved) {
+          return;
+        }
+
+        hasResolved = true;
+        clearTimeout(startTimeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
 
       returnedStream.on('close', () => {
         if (!options.cache) {
-          stream.kill('SIGKILL');
+          void ff.stop();
         }
 
         hasReturnedStreamClosed = true;
+        clearTimeout(startTimeout);
       });
-
-      resolve(returnedStream);
     });
   }
 
@@ -840,5 +1080,123 @@ export default class {
    */
   private isHttpError(error: unknown, statusCode: number): error is {statusCode: number} {
     return typeof error === 'object' && error !== null && 'statusCode' in error && (error as {statusCode: number}).statusCode === statusCode;
+  }
+
+  private prefetchNextSong(): void {
+    const nextSong = this.queue[this.queuePosition + 1];
+    if (!nextSong || nextSong.isLive || nextSong.source !== MediaSource.Starchild) {
+      return;
+    }
+
+    this.safeAsync((async () => {
+      const path = await this.downloadAndCacheMP3(nextSong);
+      this.preloadedStreamPaths.set(nextSong.url, path);
+    })());
+  }
+
+  private async onAudioPlayerError(error: Error): Promise<void> {
+    debug(`Audio player error: ${error.message}`);
+    if (this.status !== STATUS.PLAYING) {
+      return;
+    }
+
+    const currentSong = this.getCurrent();
+    if (!currentSong) {
+      return;
+    }
+
+    if (this.playbackErrorAttempts >= PLAYBACK_ERROR_MAX_RETRIES) {
+      debug('Audio player error retries exhausted, skipping track.');
+      await this.forward(1);
+      return;
+    }
+
+    const delayMs = PLAYBACK_ERROR_BACKOFF_BASE_MS * 2 ** this.playbackErrorAttempts;
+    this.playbackErrorAttempts++;
+    await this.delay(delayMs);
+
+    if (currentSong.isLive) {
+      await this.play();
+    } else {
+      await this.seek(this.positionInSeconds);
+    }
+  }
+
+  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+    const maxRetries = STREAM_CREATE_MAX_RETRIES;
+    let attempt = 0;
+    let lastError: unknown;
+
+    while (attempt <= maxRetries) {
+      try {
+        return await this.createReadStream(options);
+      } catch (error) {
+        lastError = error;
+        if (attempt === maxRetries) {
+          break;
+        }
+        const delayMs = STREAM_CREATE_BACKOFF_BASE_MS * 2 ** attempt;
+        await this.delay(delayMs);
+        attempt++;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || !this.currentChannel) {
+      return;
+    }
+
+    if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+      debug('Reconnect attempts exhausted, disconnecting.');
+      this.disconnect();
+      return;
+    }
+
+    const delayMs = Math.min(RECONNECT_BACKOFF_BASE_MS * 2 ** this.reconnectAttempts, RECONNECT_MAX_DELAY_MS);
+    this.reconnectAttempts++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.safeAsync(this.attemptReconnect());
+    }, delayMs);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (!this.currentChannel) {
+      return;
+    }
+
+    try {
+      this.voiceConnection?.destroy();
+      this.voiceConnection = null;
+      await this.connect(this.currentChannel);
+
+      if (this.status === STATUS.PLAYING) {
+        const currentSong = this.getCurrent();
+        if (currentSong) {
+          if (currentSong.isLive) {
+            await this.play();
+          } else {
+            await this.seek(this.positionInSeconds);
+          }
+        }
+      }
+    } catch (error) {
+      debug(`Reconnect attempt failed: ${formatError(error)}`);
+      this.scheduleReconnect();
+    }
   }
 }

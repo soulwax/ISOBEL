@@ -1,65 +1,74 @@
 // File: src/services/health-server.ts
 
-import http from 'http';
-import { injectable, inject } from 'inversify';
-import { Client } from 'discord.js';
+import { type Client } from 'discord.js';
+import express from 'express';
+import type http from 'http';
+import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
-import Config from './config.js';
+import debug from '../utils/debug.js';
+import type PlayerManager from '../managers/player.js';
+import type { NowPlayingSnapshot } from './player.js';
+
+interface HealthResponse {
+  status: 'ok' | 'not_ready';
+  ready: boolean;
+  guilds: number;
+  guildList: {
+    id: string;
+    name: string;
+    icon: string | null;
+  }[];
+  nowPlaying: NowPlayingSnapshot[];
+  uptime: number;
+  uptimeFormatted: string;
+  timestamp: string;
+}
 
 @injectable()
 export default class HealthServer {
   private readonly client: Client;
-  private readonly config: Config;
+  private readonly playerManager: PlayerManager;
   private server: http.Server | null = null;
+  private readonly defaultHealthPort = 3002;
 
   constructor(
     @inject(TYPES.Client) client: Client,
-    @inject(TYPES.Config) config: Config
+    @inject(TYPES.Managers.Player) playerManager: PlayerManager,
   ) {
     this.client = client;
-    this.config = config;
+    this.playerManager = playerManager;
+  }
+
+  private resolvePort(): number {
+    const configuredPort = process.env.HEALTH_PORT ?? String(this.defaultHealthPort);
+    const parsedPort = Number.parseInt(configuredPort, 10);
+    return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
   }
 
   public start(): void {
-    const port = process.env.HEALTH_PORT ? parseInt(process.env.HEALTH_PORT, 10) : 3002;
+    const port = this.resolvePort();
 
-    this.server = http.createServer((req, res) => {
-      // Set CORS headers
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (this.server) {
+      this.stop();
+    }
 
-      if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-      }
+    const app = express();
 
-      if (req.url === '/health' && req.method === 'GET') {
-        const isReady = this.client.isReady();
-        const guildsCount = this.client.guilds.cache.size;
-        const uptime = this.client.uptime || 0;
-
-        const healthData = {
-          status: isReady ? 'ok' : 'not_ready',
-          ready: isReady,
-          guilds: guildsCount,
-          uptime: uptime,
-          uptimeFormatted: this.formatUptime(uptime),
-          timestamp: new Date().toISOString(),
-        };
-
-        res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(healthData));
-      } else {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Not found' }));
-      }
+    // Bot health route — mounted first so it takes priority
+    app.get('/health', (_req, res) => {
+      const data = this.getHealthData();
+      res.status(data.ready ? 200 : 503).json(data);
     });
 
-    this.server.listen(port, () => {
-      console.log(`🏥 Health server running on http://localhost:${port}`);
+    const server = app.listen(port, () => {
+      debug(`🏥 HTTP server running on http://localhost:${port}`);
     });
+
+    server.on('error', error => {
+      debug(`health-server.error: ${this.normalizeError(error).message}`);
+    });
+
+    this.server = server;
   }
 
   public stop(): void {
@@ -69,18 +78,53 @@ export default class HealthServer {
     }
   }
 
+  private getHealthData(): HealthResponse {
+    const ready = this.client.isReady();
+    const uptime = this.client.uptime ?? 0;
+
+    return {
+      status: ready ? 'ok' : 'not_ready',
+      ready,
+      guilds: this.client.guilds.cache.size,
+      guildList: this.client.guilds.cache.map(guild => ({
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+      })),
+      nowPlaying: this.playerManager.getNowPlayingSnapshots(),
+      uptime,
+      uptimeFormatted: this.formatUptime(uptime),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  private normalizeError(error: unknown): Error {
+    if (error instanceof Error) {
+      return error;
+    }
+
+    if (typeof error === 'string') {
+      return new Error(error);
+    }
+
+    return new Error('Unknown error occurred');
+  }
+
   private formatUptime(uptime: number): string {
     const seconds = Math.floor(uptime / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
 
-    if (days > 0) {
-      return `${days}d ${hours % 24}h ${minutes % 60}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
+    const totalMinutes = Math.floor(seconds / 60);
+    const totalHours = Math.floor(totalMinutes / 60);
+    const totalDays = Math.floor(totalHours / 24);
+
+
+
+    if (totalDays > 0) {
+      return `${totalDays}d ${totalHours % 24}h ${totalMinutes % 60}m`;
+    } else if (totalHours > 0) {
+      return `${totalHours}h ${totalMinutes % 60}m`;
+    } else if (totalMinutes > 0) {
+      return `${totalMinutes}m ${seconds % 60}s`;
     } else {
       return `${seconds}s`;
     }

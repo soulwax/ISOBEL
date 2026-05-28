@@ -1,7 +1,8 @@
 // File: src/utils/build-embed.ts
 
-import { EmbedBuilder } from 'discord.js';
-import Player, { MediaSource, QueuedSong, STATUS } from '../services/player.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import type Player from '../services/player.js';
+import { STATUS, type QueuedSong } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
 import { truncate } from './string.js';
@@ -13,19 +14,49 @@ const getMaxSongTitleLength = (title: string) => {
   return nonASCII.test(title) ? 28 : 48;
 };
 
-const getSongTitle = ({title, url, offset, source}: QueuedSong, shouldTruncate = false) => {
-  if (source === MediaSource.HLS) {
-    return `[${title}](${url})`;
+const EXTERNAL_PLAYER_URL = process.env.EXTERNAL_PLAYER_URL?.trim() ?? '';
+const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() ?? '';
+const AI_SUGGESTION_VALUE_PREFIX = 'ai-suggest:';
+
+const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
+const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
+  .replaceAll('{artist}', encodedArtist)
+  .replaceAll('{title}', encodedTitle)
+  .replaceAll('{query}', encodedQuery);
+
+const buildSongLink = (artist: string, title: string): string | null => {
+  if (EXTERNAL_PLAYER_URL === '' && SONG_LINK_TEMPLATE === '') {
+    return null;
   }
 
-  const cleanSongTitle = title.replace(/\[.*\]/, '').trim();
+  const encodedArtist = encodeDarkfloorPart(artist);
+  const encodedTitle = encodeDarkfloorPart(title);
+  const encodedQuery = `${encodedArtist}+${encodedTitle}`;
 
-  const songTitle = shouldTruncate ? truncate(cleanSongTitle, getMaxSongTitleLength(cleanSongTitle)) : cleanSongTitle;
-  
-  // For Starchild, url is the Deezer track ID
-  const deezerUrl = `https://www.deezer.com/track/${url}`;
+  if (EXTERNAL_PLAYER_URL !== '') {
+    if (EXTERNAL_PLAYER_URL.includes('{')) {
+      return buildSongLinkFromTemplate(EXTERNAL_PLAYER_URL, encodedArtist, encodedTitle, encodedQuery);
+    }
 
-  return `[${songTitle}](${deezerUrl})`;
+    return `${EXTERNAL_PLAYER_URL}${encodedQuery}`;
+  }
+
+  return buildSongLinkFromTemplate(SONG_LINK_TEMPLATE, encodedArtist, encodedTitle, encodedQuery);
+};
+
+const getSongTitle = ({title, artist}: QueuedSong, shouldTruncate = false) => {
+  const cleanSongTitle = title.replace(/\[.*\]/, '').trim() || 'Unknown title';
+  const cleanArtist = artist.trim() || 'Unknown artist';
+
+  const linkText = `${cleanSongTitle} - ${cleanArtist}`;
+  const songTitle = shouldTruncate ? truncate(linkText, getMaxSongTitleLength(linkText)) : linkText;
+  const songUrl = buildSongLink(cleanArtist, cleanSongTitle);
+
+  if (!songUrl) {
+    return songTitle;
+  }
+
+  return `[${songTitle}](${songUrl})`;
 };
 
 const getQueueInfo = (player: Player) => {
@@ -49,7 +80,8 @@ const getPlayerUI = (player: Player) => {
   const progressBar = getProgressBar(PROGRESS_BAR_SEGMENTS, position / song.length);
   const elapsedTime = song.isLive ? 'live' : `${prettyTime(position)}/${prettyTime(song.length)}`;
   const loop = player.loopCurrentSong ? '🔂' : player.loopCurrentQueue ? '🔁' : '';
-  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()!}%` : '';
+  const volume = player.getVolume();
+  const vol = Number.isFinite(volume) ? `${volume}%` : '-';
   return `${button} ${progressBar} \`[${elapsedTime}]\`🔉 ${vol} ${loop}`;
 };
 
@@ -85,6 +117,77 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   return message;
 };
 
+export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {
+  const isPlaying = player.status === STATUS.PLAYING;
+  const canBack = player.canGoBack();
+  const canSkip = player.canGoForward(1);
+
+  const toggleButton = new ButtonBuilder()
+    .setCustomId('playback:toggle')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel(isPlaying ? 'Pause' : 'Resume')
+    .setEmoji(isPlaying ? '⏸️' : '▶️');
+
+  const prevButton = new ButtonBuilder()
+    .setCustomId('playback:prev')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Previous')
+    .setEmoji('⏮️')
+    .setDisabled(!canBack);
+
+  const nextButton = new ButtonBuilder()
+    .setCustomId('playback:next')
+    .setStyle(ButtonStyle.Primary)
+    .setLabel('Next')
+    .setEmoji('⏭️')
+    .setDisabled(!canSkip);
+
+  const searchButton = new ButtonBuilder()
+    .setCustomId('playback:search')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Search')
+    .setEmoji('🔎');
+
+  const stopButton = new ButtonBuilder()
+    .setCustomId('playback:stop')
+    .setStyle(ButtonStyle.Danger)
+    .setLabel('Stop')
+    .setEmoji('⏹️');
+
+  const primaryRow = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(toggleButton, prevButton, nextButton, searchButton, stopButton);
+
+  const seekButton = new ButtonBuilder()
+    .setCustomId('playback:seek')
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Seek')
+    .setEmoji('⏩');
+
+  const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(seekButton);
+
+  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [primaryRow, secondaryRow];
+  const suggestions = player.getAiSuggestions();
+  if (suggestions.length > 0) {
+    const options = suggestions.slice(0, 5).map((value, index) => ({
+      label: truncate(value, 100),
+      value: `${AI_SUGGESTION_VALUE_PREFIX}${index}`,
+    }));
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('playback:suggest')
+      .setPlaceholder('Suggested by AI')
+      .addOptions(options);
+
+    rows.push(
+      new ActionRowBuilder<StringSelectMenuBuilder>()
+        .addComponents(selectMenu)
+    );
+  }
+
+  return rows;
+};
+
 /**
  * Builds a Discord embed showing the queue with pagination
  * @param player - The player instance containing the queue
@@ -101,9 +204,13 @@ export const buildQueueEmbed = (player: Player, page: number, pageSize: number):
   }
 
   const queueSize = player.queueSize();
-  const maxQueuePage = Math.ceil((queueSize + 1) / pageSize);
+  if (pageSize < 1) {
+    throw new Error('page size must be at least 1');
+  }
 
-  if (page > maxQueuePage) {
+  const maxQueuePage = Math.max(1, Math.ceil(queueSize / pageSize));
+
+  if (page < 1 || page > maxQueuePage) {
     throw new Error('the queue isn\'t that big');
   }
 

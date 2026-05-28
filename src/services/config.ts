@@ -1,20 +1,22 @@
 // File: src/services/config.ts
 
-import { ActivityType, PresenceStatusData } from 'discord.js';
-import dotenv from 'dotenv';
+import { ActivityType, type PresenceStatusData } from 'discord.js';
 import { injectable } from 'inversify';
 import path from 'path';
 import 'reflect-metadata';
-import { ConditionalKeys } from 'type-fest';
+import { type ConditionalKeys } from 'type-fest';
 import xbytes from 'xbytes';
-dotenv.config({path: process.env.ENV_FILE ?? path.resolve(process.cwd(), '.env')});
+import { loadEnvFiles } from '../utils/load-env.js';
+
+loadEnvFiles();
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR ?? './data');
 
 const CONFIG_MAP = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
-  STARCHILD_API_KEY: process.env.STARCHILD_API_KEY,
-  STARCHILD_BASE_URL: process.env.STARCHILD_BASE_URL,
+  SONGBIRD_API_KEY: process.env.SONGBIRD_API_KEY,
+  SONGBIRD_BASE_URL: process.env.SONGBIRD_BASE_URL,
+  SONGBIRD_NEXT_URL: process.env.SONGBIRD_NEXT_URL ?? '',
   REGISTER_COMMANDS_ON_BOT: process.env.REGISTER_COMMANDS_ON_BOT === 'true',
   DATA_DIR,
   CACHE_DIR: path.join(DATA_DIR, 'cache'),
@@ -24,7 +26,7 @@ const CONFIG_MAP = {
   BOT_ACTIVITY_URL: process.env.BOT_ACTIVITY_URL ?? '',
   BOT_ACTIVITY: process.env.BOT_ACTIVITY ?? 'music',
   ENABLE_SPONSORBLOCK: process.env.ENABLE_SPONSORBLOCK === 'true',
-  SPONSORBLOCK_TIMEOUT: process.env.ENABLE_SPONSORBLOCK ?? 5,
+  SPONSORBLOCK_TIMEOUT: parseInt(process.env.SPONSORBLOCK_TIMEOUT ?? '5', 10),
 } as const;
 
 const BOT_ACTIVITY_TYPE_MAP = {
@@ -37,8 +39,9 @@ const BOT_ACTIVITY_TYPE_MAP = {
 @injectable()
 export default class Config {
   readonly DISCORD_TOKEN!: string;
-  readonly STARCHILD_API_KEY!: string;
-  readonly STARCHILD_BASE_URL!: string;
+  readonly SONGBIRD_API_KEY!: string;
+  readonly SONGBIRD_BASE_URL!: string;
+  readonly SONGBIRD_NEXT_URL!: string;
   readonly REGISTER_COMMANDS_ON_BOT!: boolean;
   readonly DATA_DIR!: string;
   readonly CACHE_DIR!: string;

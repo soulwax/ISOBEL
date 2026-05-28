@@ -6,6 +6,300 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-02-28
+
+### Added
+- **Web: single-process deployment** – API and Discord auth run in the same process as the frontend. New `createApp({ serveStatic, buildDir })` option and `web/src/server/serve.ts` entry for production.
+- **Web:** `npm start` in `web/` runs the integrated server (API + auth + static) on `PORT` (default 3001).
+- **Auth docs:** `web/docs/AUTHENTICATION.md` with full Discord auth flow, config, and Vercel deployment notes.
+- **Vercel:** API handler now returns the real error message (e.g. missing env var) in the JSON response when app init fails, plus optional `hint` for env checks.
+
+### Changed
+- **Web:** Production (Docker, PM2) uses one web process on port 3001; no separate auth process.
+- **Web:** `dev:auth` renamed to `dev:server`; `dev:all` labels updated to `vite,api`.
+- **Web:** Vite proxy env `AUTH_PROXY_TARGET` → `API_PROXY_TARGET`; dev API port env `AUTH_PORT` → `API_PORT`.
+- **Docker:** `docker-compose.web.yml` has a single `web` service (UI + API + auth). Removed `auth` service.
+- **Docker:** `web/Dockerfile` serves the app via `npx tsx src/server/serve.ts` (build + src copied). Removed `web/Dockerfile.auth`.
+- **PM2:** `web/ecosystem.config.cjs` runs one app `isobel-web` (integrated server). Removed `isobel-auth`.
+- **PM2:** All web PM2 scripts reference only `isobel-web`; removed `web:pm2:logs:auth` from root and web.
+- **Docs:** README, `.github/docs` (SUMMARY, DOCKER_ECOSYSTEM, DOCKER_ENV_GUIDE), and AUTHENTICATION.md updated to describe single web process and drop “auth server” terminology.
+
+### Removed
+- **Web:** Separate auth server (Dockerfile.auth, docker-compose `auth` service, PM2 `isobel-auth`).
+- **Root:** `web:pm2:logs:auth` script.
+
+## [3.0.2] - 2026-02-28
+
+### Added
+- Added crawl discovery files for the web app: `web/public/robots.txt`, `web/public/sitemap.xml`, and `web/public/site.webmanifest`.
+- Added structured data in `web/index.html` for `WebSite`, `SoftwareApplication`, and `FAQPage`.
+- Added a dedicated FAQ section on the landing page to expand search-intent coverage for self-hosted Discord music bot queries.
+
+### Changed
+- Upgraded web page metadata with canonical URL, richer description/keywords, Open Graph tags, and Twitter card tags.
+- Added static fallback HTML content in `web/index.html` so crawlers can index meaningful content before client-side hydration.
+- Updated landing copy and image metadata to better target discoverability for ISOBEL as a self-hosted Discord music bot.
+- Added dynamic `robots` handling in `web/src/App.tsx` to keep authenticated dashboard views out of search indexes (`noindex, nofollow`).
+
+### Fixed
+- Fixed `web` TypeScript/Vite env typing by adding `vite/client` references in `web/env.d.ts`, restoring successful `npm --prefix web run build`.
+
+## [3.0.1] - 2026-02-22
+
+### Fixed
+- Prevented select menu payload validation failures by replacing long AI suggestion option values with short identifiers and resolving them safely on interaction.
+- Corrected `/queue` pagination math so exact page-size queue lengths no longer expose an extra empty page.
+- Enforced valid queue page bounds by requiring `page >= 1` in the slash command and validating both `page` and `pageSize` defensively at embed-build time.
+
+### Added
+- Added unit tests for queue pagination boundaries (`page < 1`, `pageSize < 1`, and exact page-size behavior).
+- Added `npm run test:unit` to run Node.js unit tests in `test/**/*.test.ts`.
+
+## [3.0.0] - 2026-02-07
+
+### Fixed
+- Fixed Auth.js request handling in the Express bridge by attaching `nextUrl` to auth requests, resolving `500` errors on `/api/auth/*` endpoints
+- Fixed Discord sign-in flow by switching from direct GET navigation to CSRF-backed form POST for provider login
+- Fixed session resolution in protected API middleware by applying the same Auth.js request bridging behavior used by auth routes
+- We fixed shit and complicated more, but also some things were streamlined 
+
+### Changed
+- Updated web auth client flow to use browser-native form submission for OAuth handoff reliability
+- Validated auth flow endpoints (`session`, `providers`, `signin`, `signout`) and kept guild endpoints protected for unauthenticated users
+
+## [2.18.1] - 2026-02-07
+
+### Changed
+- Dockerfile: use npm instead of yarn (COPY package-lock.json, npm ci)
+- Dockerfile: set packageManager to npm before install to avoid postinstall-postinstall invoking yarn
+- Replaced deprecated fluent-ffmpeg with ffmpeggy for audio transcoding in player
+- HLS stream probe in get-songs now uses execFile ffprobe instead of fluent-ffmpeg
+
+### Removed
+- Deprecated direct dependencies: ytsr, fluent-ffmpeg, @types/fs-capacitor, @types/node-emoji
+
+## [2.18.0] - 2026-02-07
+
+### Fixed
+- Improved Discord web authentication reliability by preventing frequent `/api/auth/session` and `/api/auth/csrf` checks from being rate-limited during login flows
+- Fixed guild settings page layout alignment when the authenticated server sidebar is visible
+- Fixed authenticated guild selection handling so server settings only render when the user is logged in
+- Fixed guild settings fetch/update requests to consistently use the shared API base path
+
+### Changed
+- Increased auth endpoint rate limits to better support Discord OAuth callback/session traffic
+- Updated server management UX so the left sidebar server list and per-server settings navigation behave more consistently
+
+## [2.17.3] - 2026-01-22
+
+### Fixed
+- Fixed Docker container startup failure by replacing PM2 with direct Node execution
+- Fixed Discord login functionality in web interface - login now properly redirects to Discord OAuth and back
+- Fixed missing `DATABASE_URL` environment variable in docker-compose.yml
+- Fixed Prisma client initialization to require `DATABASE_URL` and fail fast with clear error messages
+- Fixed `migrate-and-start.ts` to properly handle PostgreSQL-only setup (removed SQLite fallback)
+
+### Changed
+- Updated Dockerfile to use `node` directly instead of `pm2-runtime` (Docker handles process management)
+- Added `apt-utils` to Dockerfile to suppress debconf warnings during package installation
+- Added `DEBIAN_FRONTEND=noninteractive` to Dockerfile for non-interactive package installation
+- Updated Discord login signIn function to use `/api/auth/signin/discord` endpoint directly
+- Updated Discord login callback URL to use full current page URL instead of just origin
+- Added redirect callback to NextAuth config to properly handle post-login redirects using `NEXTAUTH_URL`
+- Updated `migrate-and-start.ts` to require PostgreSQL and reject SQLite database URLs
+
+## [2.17.2] - 2026-01-22
+
+### Fixed
+- Fixed Prisma client engine type error by adding PostgreSQL adapter support (`@prisma/adapter-pg`)
+- Updated migration system to support PostgreSQL by updating `migration_lock.toml` provider
+- Created baseline PostgreSQL migration to align with existing database schema
+- Fixed `yarn prisma:migrate:deploy` command to work with PostgreSQL migrations
+
+### Changed
+- Added `@prisma/adapter-pg` and `pg` dependencies for PostgreSQL driver adapter support
+- Updated Prisma client initialization to use PostgreSQL adapter instead of default engine
+- Migration history now properly tracks PostgreSQL migrations alongside legacy SQLite migrations
+
+## [2.17.1] - 2026-01-18
+
+### Changed
+- Docker now builds the bot without the web interface by default
+- Added a separate `docker-compose.web.yml` for the web/auth services
+- Updated health beacon port configuration and documentation
+- Build process no longer starts services or installs web dependencies by default
+- Updated Docker runtime to include `package.json` for banner/logging
+- Docker image now starts the bot with `pm2-runtime` for automatic restarts
+- Added yt-dlp and Python to the runtime image for YouTube fallback playback
+- Improved search responsiveness by probing HLS streams with a short timeout and running API search in parallel
+- Added search retries with backoff for transient Starchild API failures
+- Added MP3 cache prefetching and shared in-flight downloads to reduce playback gaps
+- Reused audio players across plays to reduce setup overhead
+- Streamed directly from Starchild while caching in the background when no seek is needed
+- Prevented duplicate idle listeners on the audio player
+- Added voice reconnect attempts with backoff after disconnects
+- Added ffmpeg start retries for transient stream failures
+- Increased audio player missed-frame tolerance to reduce dropouts
+- Added audio player error retries with backoff before skipping
+- Preloaded next-track stream paths after caching completes
+- Added YouTube link parsing with oEmbed title lookup to search Starchild
+- Added yt-dlp fallback for YouTube links when Starchild has no match
+- Added support for playing mp3 attachments uploaded to Discord
+- Added `/yt` command to play YouTube URLs or search terms via yt-dlp
+- Added playback buttons (pause/resume, next) to the Now Playing message
+- Added previous and stop buttons to the Now Playing controls
+- Added AI suggestion dropdown using Songbird Next API (`SONGBIRD_NEXT_URL`)
+- Added search modal button on Now Playing controls
+- Added Prisma 7 config file and moved datasource URL out of `schema.prisma`
+- Switched Prisma datasource provider to PostgreSQL (requires `DATABASE_URL` environment variable)
+- Updated Docker documentation to reflect PostgreSQL requirement and new environment variables
+
+## [2.17.0] - 2026-01-17
+
+### Changed - Repository Unification
+
+**ISOBEL is now a single unified repository** - the web interface has been integrated as a first-class directory instead of a git submodule.
+
+#### Repository Structure
+- **Removed git submodule**: Deinitialized and removed the ECHO-Web git submodule that was previously at `./web`
+- **Integrated web interface**: Moved the standalone ISOBEL-REACT project into `./web/` as a regular directory
+- **Single repository**: The web interface is now tracked as part of the main ISOBEL repository (no separate repos to manage)
+- **Updated .gitmodules**: Removed all submodule references (file is now empty)
+- **Updated .gitignore**: Removed `web` directory exclusions to properly track the web interface
+- **Renamed from ECHO to ISOBEL**: Updated all references in web interface from "ECHO" to "ISOBEL" for consistent branding
+
+#### Build & Deployment Integration
+- **Unified build process**: `npm run build` now builds both bot and web interface, then automatically starts both services via PM2
+- **Separated build commands**:
+  - `npm run build` - Builds both projects and starts them (production workflow)
+  - `npm run build:bot` - Build only the bot
+  - `npm run build:all` - Build both without starting services
+- **Automatic startup**: Added `postbuild` hook that runs `start:all:prod` to launch both services
+- **Coordinated PM2 management**: Bot and web interface now start/stop/restart together via unified commands
+
+#### Development Workflow
+- **Unified development mode**: Added `npm run dev:all` to run both bot and web interface simultaneously using `concurrently`
+  - Bot runs on its standard ports with `tsx watch`
+  - Web interface runs Vite dev server (port 3001) + auth server (port 3003)
+  - Colored console output (blue for bot, cyan for web) for easy distinction
+- **Individual development modes**:
+  - `npm run dev` - Bot only (development mode)
+  - `npm run web:dev` - Web Vite server only
+  - `npm run web:dev:all` - Web Vite + auth server
+  - `npm run dev:all` - Both together (recommended for full-stack development)
+
+#### Package Management
+- **Added concurrently**: Installed `concurrently@^9.2.1` as dev dependency for running parallel development processes
+- **Streamlined postinstall**: Updated `postinstall` script to install web dependencies without submodule initialization
+- **Removed submodule scripts**: Cleaned up `submodule:init`, `submodule:update`, and `submodule:status` scripts (no longer needed)
+- **Updated error messages**: Replaced all "Web submodule not found" messages with "Web directory not found"
+
+#### Web Interface Features (Integrated)
+The web interface now includes all features from the previous standalone ISOBEL-REACT project:
+
+**Architecture & Technologies**:
+- React 19 with TypeScript
+- Vite 7.3 for fast builds and development
+- PostgreSQL database (via Drizzle ORM) replacing SQLite
+- Discord OAuth authentication (NextAuth v5)
+- Express.js backend with security middleware (helmet, rate-limiting)
+- Winston logging for production debugging
+- PM2 process management for production deployments
+
+**Security & Production Features**:
+- Helmet.js security headers
+- Express rate limiting (protects against abuse)
+- Environment-based configuration with Zod validation
+- Separate development and production modes
+- Comprehensive error handling and logging
+- CORS configuration support
+
+**UI Components**:
+- Modern landing page with Discord-inspired design
+- Discord guild (server) sidebar for easy navigation
+- Per-guild settings management interface
+- Health indicator showing bot and API status
+- Discord login/logout functionality
+- Fully responsive mobile-first design
+
+**Deployment Options**:
+- Vercel deployment configuration included
+- PM2 ecosystem configuration for self-hosting
+- Environment-specific startup scripts
+- Database migration scripts
+
+#### Documentation Updates
+- **README.md**:
+  - Removed all git submodule instructions
+  - Updated development section with new unified workflow
+  - Added "Building and Deploying" section documenting new build process
+  - Updated web interface scripts documentation
+  - Removed `--recursive` flag from clone instructions (no longer needed)
+- **Web branding**: Updated all web interface files to use "ISOBEL" instead of "ECHO"
+  - `web/package.json` - Updated description
+  - `web/README.md` - Updated title and description
+  - `web/index.html` - Updated page title
+  - `web/src/App.tsx` - Updated GitHub link
+  - `web/CLAUDE.md` - Updated project description
+  - `web/CHANGELOG.md` - Updated project name
+
+#### Migration Impact
+- **No breaking changes for users**: The bot functionality remains unchanged
+- **Simplified development**: Contributors no longer need to manage git submodules
+- **Cleaner repository**: Everything in one place, easier to clone and develop
+- **Better integration**: Bot and web interface can be developed, built, and deployed together
+- **Improved startup**: Running `npm run build` now handles everything automatically
+
+### Added
+
+- Added `dev:all` script for unified development of bot and web interface
+- Added `web:dev:all` script wrapper for web interface development (Vite + auth server)
+- Added `build:bot` script to build only the bot
+- Added `build:all` script to build both projects without starting services
+- Added `concurrently` dependency for parallel process management
+
+### Removed
+
+- Removed git submodule configuration and references
+- Removed submodule management scripts (`submodule:init`, `submodule:update`, `submodule:status`)
+- Removed ISOBEL-REACT as separate standalone project
+
+## [2.16.0] - 2026-01-14
+
+### Security
+- **API Key Security**: Moved Starchild API key from URL query parameters to HTTP headers (`X-API-Key`) to prevent exposure in logs and referrer headers
+- **SSRF Protection**: Added validation to block localhost and internal IP addresses in HLS stream URLs to prevent Server-Side Request Forgery attacks
+- **Path Traversal Protection**: Added hash validation in file cache to prevent path traversal attacks
+- **CORS Security**: Made health server CORS configurable via `HEALTH_CORS_ORIGINS` environment variable (defaults to allow all for backward compatibility)
+- **Rate Limiting**: Implemented rate limiting on health server endpoint (10 requests per 60 seconds per IP)
+
+### Fixed
+- Fixed `SPONSORBLOCK_TIMEOUT` configuration bug - now correctly reads from `SPONSORBLOCK_TIMEOUT` environment variable instead of `ENABLE_SPONSORBLOCK`
+- Fixed JSON parsing error handling in key-value cache - corrupted cache entries are now automatically deleted and recomputed
+- Fixed memory leak where player instances were never cleaned up when bot left a guild
+- Fixed N+1 database query problem in file cache orphan removal - now batches queries for better performance
+- Fixed eviction loop inefficiency - now tracks total cache size incrementally instead of recalculating after each eviction
+- Fixed unsafe type assertions in file cache iterator
+- Fixed missing null checks and validation in `addToQueue` method
+- Fixed config display bug - now correctly shows `queueAddResponseEphemeral` setting instead of wrong field
+- Fixed `shouldSplitChapters` parameter being declared but not destructured in `addToQueue` method (feature not yet implemented)
+- Fixed error handling in `get-songs.ts` - validation failures (invalid protocol, SSRF-blocked URLs) now properly fall through to API search instead of crashing the function
+- Fixed memory leak in health server - cleanup interval is now properly stored and cleared when server stops or restarts
+- Fixed TypeScript build error - removed impossible length check on voice channels tuple (always length 2)
+
+### Changed
+- Improved error handling for async void functions in player service with new `safeAsync()` helper method
+- Enhanced URL validation in `get-songs.ts` with protocol validation and SSRF protection - invalid URLs now gracefully fall back to search instead of throwing errors
+- Added proper error logging for unexpected errors during URL parsing and HLS stream checking
+- Added Prisma connection management with graceful shutdown handlers and development logging
+- Optimized file cache cleanup to use batch operations instead of per-file database queries
+
+### Performance
+- Optimized file cache eviction to avoid recalculating total size after each file deletion
+- Reduced database queries in orphan file cleanup from O(n) to O(1)
+- Added automatic cleanup of player instances on guild leave to prevent memory leaks
+- Fixed memory leak in health server rate limit cleanup interval
+
 ## [2.15.0] - 2025-12-02
 
 ### Added

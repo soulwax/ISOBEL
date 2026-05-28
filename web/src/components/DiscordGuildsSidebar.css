@@ -1,0 +1,308 @@
+/* File: web/src/components/DiscordGuildsSidebar.css */
+
+.discord-guilds-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 72px;
+  height: 100vh;
+  background-color: var(--discord-darker);
+  border-right: 1px solid var(--border-color);
+  z-index: 50;
+}
+
+.sidebar-content {
+  height: 100%;
+  padding: 0.75rem 0.625rem 4.5rem;
+  overflow-y: auto;
+  overflow-x: visible;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-content::-webkit-scrollbar {
+  display: none;
+}
+
+.guilds-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.guild-item {
+  appearance: none;
+  position: relative;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-radius 0.18s ease, transform 0.18s ease;
+  user-select: none;
+}
+
+.guild-item::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 4px;
+  height: 0;
+  border-radius: 0 4px 4px 0;
+  background: var(--text-primary);
+  transform: translateY(-50%);
+  transition: height 0.18s ease;
+}
+
+.guild-item:hover,
+.guild-item:focus-visible,
+.guild-item.selected {
+  border-radius: 14px;
+}
+
+.guild-item:hover,
+.guild-item:focus-visible {
+  transform: translateY(-1px);
+}
+
+.guild-item:hover::before,
+.guild-item:focus-visible::before {
+  height: 22px;
+}
+
+.guild-item.selected::before {
+  height: 38px;
+}
+
+.guild-item.dragging {
+  opacity: 0.45;
+  transform: scale(0.92);
+}
+
+.guild-item.dragging::before {
+  height: 38px;
+}
+
+.guild-item:focus-visible {
+  outline: 2px solid var(--discord-blurple);
+  outline-offset: 3px;
+}
+
+.guild-icon,
+.guild-icon-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: inherit;
+  flex-shrink: 0;
+  transition: border-radius 0.18s ease, box-shadow 0.18s ease;
+}
+
+.guild-icon {
+  object-fit: cover;
+}
+
+.guild-icon-placeholder {
+  background: linear-gradient(135deg, var(--discord-blurple), var(--gradient-end));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.guild-item:hover .guild-icon,
+.guild-item:hover .guild-icon-placeholder,
+.guild-item:focus-visible .guild-icon,
+.guild-item:focus-visible .guild-icon-placeholder,
+.guild-item.selected .guild-icon,
+.guild-item.selected .guild-icon-placeholder {
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.85);
+}
+
+.guild-name {
+  position: fixed;
+  left: 86px;
+  max-width: 240px;
+  padding: 0.4375rem 0.625rem;
+  border-radius: 4px;
+  background: var(--discord-darkest);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 1;
+  transform: translateY(-50%);
+  animation: guild-tooltip-in 0.12s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 60;
+}
+
+.guild-name::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  background: var(--discord-darkest);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.sidebar-loading,
+.sidebar-error,
+.sidebar-empty {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: var(--discord-dark);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sidebar-error {
+  color: #f04747;
+}
+
+.rail-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.75rem 0.625rem;
+  border-top: 1px solid rgba(64, 68, 75, 0.7);
+  background: linear-gradient(180deg, rgba(35, 39, 42, 0), var(--discord-darker) 20%);
+}
+
+.rail-action-button {
+  appearance: none;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--discord-dark);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: border-radius 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.rail-action-button:hover:not(:disabled),
+.rail-action-button:focus-visible:not(:disabled) {
+  border-radius: 14px;
+}
+
+.rail-action-button:focus-visible {
+  outline: 2px solid var(--discord-blurple);
+  outline-offset: 3px;
+}
+
+.rail-action-button:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.rail-action-danger:hover:not(:disabled),
+.rail-action-danger:focus-visible:not(:disabled) {
+  background: #da373c;
+  color: var(--text-primary);
+}
+
+.rail-feedback {
+  position: fixed;
+  left: 86px;
+  bottom: 1rem;
+  max-width: 260px;
+  padding: 0.5rem 0.625rem;
+  border-radius: 4px;
+  background: var(--discord-darkest);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 60;
+}
+
+.rail-feedback.success {
+  color: #3ba55d;
+}
+
+.rail-feedback.error {
+  color: #f04747;
+}
+
+.rail-status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--discord-blurple);
+  animation: rail-pulse 1s ease-in-out infinite;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes guild-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(-4px, -50%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+
+@keyframes rail-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (max-width: 768px) {
+  .discord-guilds-sidebar {
+    display: none;
+  }
+}

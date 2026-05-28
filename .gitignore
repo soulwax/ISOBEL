@@ -47,6 +47,7 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
+package-lock.json
 
 # TypeScript v1 declaration files
 typings/
@@ -78,6 +79,12 @@ typings/
 # dotenv environment variables file
 .env
 .env.test
+.env.local
+.env.production
+.env.development
+
+# Keep .env.example for documentation
+!.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -110,6 +117,16 @@ dist
 # TernJS port file
 .tern-port
 
-./web
+.cursor
+.claude
+RELEASING.md
 
-web
+CLAUDE.md
+
+!yarn.lock
+
+.github/docs/DOCKER_ECOSYSTEM.md
+
+dist/
+.vercel
+.env*.local

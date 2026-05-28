@@ -9,14 +9,25 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-        - uses: actions/checkout@v1
-        - uses: actions/setup-node@v2
-          with:
-            node-version: '22'
-            cache: 'yarn'
-        - name: Install dependencies
-          run: yarn install
-        - name: Generate Prisma client
-          run: yarn prisma generate
-        - name: Run lint
-          run: yarn lint
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install package manager
+        run: corepack install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/isobel
+
+      - name: Run lint
+        run: pnpm run lint

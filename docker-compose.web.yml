@@ -1,0 +1,45 @@
+# File: docker-compose.web.yml
+
+# Optional web interface services. Use with:
+# docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
+#
+# Single web service: frontend + API + Discord auth on port 3001.
+
+services:
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: isobel-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    volumes:
+      - ./data:/data:ro
+      - ./.env:/config/.env:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+
+      # Database (required - PostgreSQL for sessions and app data)
+      - DATABASE_URL=${DATABASE_URL}
+
+      # Discord OAuth (web login)
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
+
+      # Optional: Bot health endpoint
+      - BOT_HEALTH_URL=${BOT_HEALTH_URL:-http://bot:3002/health}
+      - DATA_DIR=/data
+    networks:
+      - isobel-network
+    depends_on:
+      - bot
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

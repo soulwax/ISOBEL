@@ -13,16 +13,19 @@ import PlayerManager from './managers/player.js';
 // Services
 import AddQueryToQueue from './services/add-query-to-queue.js';
 import GetSongs from './services/get-songs.js';
-import StarchildAPI from './services/starchild-api.js';
 import HealthServer from './services/health-server.js';
+import SongbirdNext from './services/songbird-next.js';
+import StarchildAPI from './services/starchild-api.js';
 
 // Commands
 import Clear from './commands/clear.js';
 import Config from './commands/config.js';
 import Disconnect from './commands/disconnect.js';
 import Favorites from './commands/favorites.js';
+import File from './commands/file.js';
 import ForwardSeek from './commands/fseek.js';
-import Command from './commands/index.js';
+import Help from './commands/help.js';
+import type Command from './commands/index.js';
 import LoopQueue from './commands/loop-queue.js';
 import Loop from './commands/loop.js';
 import Move from './commands/move.js';
@@ -30,6 +33,7 @@ import Next from './commands/next.js';
 import NowPlaying from './commands/now-playing.js';
 import Pause from './commands/pause.js';
 import Play from './commands/play.js';
+import PlaybackControls from './commands/playback-controls.js';
 import QueueCommand from './commands/queue.js';
 import Remove from './commands/remove.js';
 import Replay from './commands/replay.js';
@@ -40,6 +44,7 @@ import Skip from './commands/skip.js';
 import Stop from './commands/stop.js';
 import Unskip from './commands/unskip.js';
 import Volume from './commands/volume.js';
+import Yt from './commands/yt.js';
 import FileCacheProvider from './services/file-cache.js';
 import KeyValueCacheProvider from './services/key-value-cache.js';
 
@@ -66,6 +71,7 @@ container.bind<GetSongs>(TYPES.Services.GetSongs).to(GetSongs).inSingletonScope(
 container.bind<AddQueryToQueue>(TYPES.Services.AddQueryToQueue).to(AddQueryToQueue).inSingletonScope();
 container.bind<StarchildAPI>(TYPES.Services.StarchildAPI).to(StarchildAPI).inSingletonScope();
 container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSingletonScope();
+container.bind<SongbirdNext>(TYPES.Services.SongbirdNext).to(SongbirdNext).inSingletonScope();
 
 // Commands
 [
@@ -73,7 +79,9 @@ container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSin
   Config,
   Disconnect,
   Favorites,
+  File,
   ForwardSeek,
+  Help,
   LoopQueue,
   Loop,
   Move,
@@ -81,6 +89,7 @@ container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSin
   NowPlaying,
   Pause,
   Play,
+  PlaybackControls,
   QueueCommand,
   Remove,
   Replay,
@@ -91,6 +100,7 @@ container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSin
   Stop,
   Unskip,
   Volume,
+  Yt,
 ].forEach(command => {
   container.bind<Command>(TYPES.Command).to(command).inSingletonScope();
 });

@@ -1,12 +1,12 @@
 // File: src/commands/loop-queue.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ChatInputCommandInteraction } from 'discord.js';
+import { type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
-import PlayerManager from '../managers/player.js';
+import type PlayerManager from '../managers/player.js';
 import { STATUS } from '../services/player.js';
 import { TYPES } from '../types.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 @injectable()
 export default class implements Command {

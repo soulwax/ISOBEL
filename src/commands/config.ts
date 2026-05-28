@@ -1,11 +1,12 @@
 // File: src/commands/config.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { type ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { injectable } from 'inversify';
 import { prisma } from '../utils/db.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
-import Command from './index.js';
+import type Command from './index.js';
+import { LoopMode } from '../services/player.js';
 
 @injectable()
 export default class implements Command {
@@ -83,6 +84,27 @@ export default class implements Command {
         .setMinValue(1)
         .setMaxValue(30)
         .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('set-max-queue-size')
+      .setDescription('set the maximum active queue size')
+      .addIntegerOption(option => option
+        .setName('size')
+        .setDescription('maximum active tracks in queue; 0 means unlimited')
+        .setMinValue(0)
+        .setMaxValue(500)
+        .setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('set-default-loop-mode')
+      .setDescription('set the loop mode used when playback starts')
+      .addIntegerOption(option => option
+        .setName('mode')
+        .setDescription('default loop mode')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Off', value: LoopMode.Off },
+          { name: 'Loop track', value: LoopMode.Track },
+          { name: 'Loop queue', value: LoopMode.Queue },
+        )))
     .addSubcommand(subcommand => subcommand
       .setName('get')
       .setDescription('show all settings'));
@@ -215,6 +237,40 @@ export default class implements Command {
         break;
       }
 
+      case 'set-max-queue-size': {
+        const value = interaction.options.getInteger('size')!;
+
+        await prisma.setting.update({
+          where: {
+            guildId: interaction.guild!.id,
+          },
+          data: {
+            maxQueueSize: value,
+          },
+        });
+
+        await interaction.reply('👍 max queue size updated');
+
+        break;
+      }
+
+      case 'set-default-loop-mode': {
+        const value = interaction.options.getInteger('mode')!;
+
+        await prisma.setting.update({
+          where: {
+            guildId: interaction.guild!.id,
+          },
+          data: {
+            defaultLoopMode: value,
+          },
+        });
+
+        await interaction.reply('👍 default loop mode updated');
+
+        break;
+      }
+
       case 'set-reduce-vol-when-voice': {
         const value = interaction.options.getBoolean('value')!;
 
@@ -261,10 +317,13 @@ export default class implements Command {
             : `${config.secondsToWaitAfterQueueEmpties}s`,
           'Leave if there are no listeners': config.leaveIfNoListeners ? 'yes' : 'no',
           'Auto announce next song in queue': config.autoAnnounceNextSong ? 'yes' : 'no',
-          'Add to queue reponses show for requester only': config.autoAnnounceNextSong ? 'yes' : 'no',
+          'Add to queue responses show for requester only': config.queueAddResponseEphemeral ? 'yes' : 'no',
           'Default Volume': config.defaultVolume,
           'Default queue page size': config.defaultQueuePageSize,
+          'Max queue size': config.maxQueueSize === 0 ? 'unlimited' : config.maxQueueSize,
+          'Default loop mode': this.formatLoopMode(config.defaultLoopMode),
           'Reduce volume when people speak': config.turnDownVolumeWhenPeopleSpeak ? 'yes' : 'no',
+          'Reduce volume target': `${config.turnDownVolumeWhenPeopleSpeakTarget}%`,
         };
 
         let description = '';
@@ -281,6 +340,17 @@ export default class implements Command {
 
       default:
         throw new Error('unknown subcommand');
+    }
+  }
+
+  private formatLoopMode(loopMode: number): string {
+    switch (loopMode) {
+      case LoopMode.Track:
+        return 'loop track';
+      case LoopMode.Queue:
+        return 'loop queue';
+      default:
+        return 'off';
     }
   }
 }

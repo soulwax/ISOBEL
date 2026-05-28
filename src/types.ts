@@ -16,5 +16,6 @@ export const TYPES = {
     GetSongs: Symbol('GetSongs'),
     StarchildAPI: Symbol('StarchildAPI'),
     HealthServer: Symbol('HealthServer'),
+    SongbirdNext: Symbol('SongbirdNext'),
   },
 };

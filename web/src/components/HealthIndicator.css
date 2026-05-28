@@ -1,0 +1,108 @@
+/* File: web/src/components/HealthIndicator.css */
+
+.health-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  cursor: default;
+}
+
+.health-indicator.online {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.health-indicator.offline {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.health-indicator.starting {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.health-indicator.loading {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.health-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.health-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-indicator.starting .health-dot {
+  background-color: #fbbf24;
+}
+
+.health-indicator.loading .health-dot {
+  background-color: #94a3b8;
+}
+
+.health-dot.pulsing {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.health-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.health-text {
+  line-height: 1.25;
+}
+
+.health-subtext {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .health-indicator {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .health-icon {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .health-dot {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  .health-subtext {
+    display: none;
+  }
+}

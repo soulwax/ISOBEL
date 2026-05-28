@@ -2,11 +2,37 @@
 
 <div align="center">
   <img src=".github/songbird.png" width="600" alt="ISOBEL - A Discord Music Bot">
+  <br><br>
+  <i>My name Isobel</i><br>
+  <i>Married to myself</i><br>
+  <i>My love Isobel</i><br>
+  <i>Living by herself</i><br>
+  <br>
+  <i>In a heart full of dust</i><br>
+  <i>Lives a creature called lust</i><br>
+  <i>It surprises and scares</i><br>
+  <i>Like me, like me</i><br>
+  <br>
+  <i>My name Isobel</i><br>
+  <i>Married to myself</i><br>
+  <i>My love Isobel</i><br>
+  <i>Living by herself</i>
+  <br><br>
 </div>
 
+ISOBEL is a **highly-opinionated midwestern, now German claimed (same thing really), self-hosted** Discord music bot **that doesn't suck**. It's made for small to medium-sized Discord servers/guilds (think about a group the size of you, your friends, and your friend's friends).
 
+The original author of the bot is [codetheweb](https://github.com/codetheweb) with the original code for [muse found here](https://github.com/museofficial/muse) and *I cannot thank him enough for the inspiration and foundation he laid.*
 
-ISOBEL is a **highly-opinionated midwestern German self-hosted** Discord music bot **that doesn't suck**. It's made for small to medium-sized Discord servers/guilds (think about a group the size of you, your friends, and your friend's friends).
+Thus I claim the same: This discord bot is one that doesn't suck.
+
+There are a lot of changes made since Max Isom's original version.
+First of all, this bot does not depend on YouTube or Spotify for music streaming. Instead, it uses its own music api, we just call it the *ominous music* **Songbird API**. (Formerly starchild music api that's why you might find references in code or docs)
+
+Yes, it is more of a black box experience now than before, but with spotify and youtube being so unreliable for music streaming, this was the only way to go. Sorry Max.
+The second big change is that this bot is coming with its own web interface for configuration and settings management but this is work in progress. See [./web/README.md](./web/README.md).
+
+**OTHERWISE**, ISOBEL works like before, you /play songs, /file uploads, /skip, /pause, /resume, /seek, etc.
 
 ## Features
 
@@ -16,291 +42,974 @@ ISOBEL is a **highly-opinionated midwestern German self-hosted** Discord music b
 - ⏩ **Seeking**: Seek to any position within a song
 - 💾 **Advanced Caching**: Local MP3 caching for instant playback and better performance
 - 📋 **No Vote-to-Skip**: This is anarchy, not a democracy
-- 🎶 **Starchild Music API**: Streams directly from the Starchild Music API (no YouTube or Spotify required)
+- 🎶 **Songbird API**: Streams directly from the Songbird Music API (no YouTube or Spotify required)
 - ↗️ **Custom Shortcuts**: Users can add custom shortcuts (aliases) for quick access
 - 1️⃣ **One Song Per Command**: Predictable queue management - one song per `/play` command
 - 🔄 **Smart Skipping**: Skip only works when more songs are queued - no errors at end of queue
 - 🔊 **Volume Management**: Normalizes volume across tracks with automatic ducking when people speak
+- 🌐 **Web Interface**: Optional web UI for managing settings and favorites
 - ✍️ **TypeScript**: Written in TypeScript with full type safety, easily extendable
 - ❤️ **Loyal Packers fan**
 
-## Running
+## Table of Contents
 
-ISOBEL is written in TypeScript. You can either run ISOBEL with Docker (recommended) or directly with Node.js. Both methods require API keys passed in as environment variables.
+- [Quick Start](#-quick-start)
+- [Prerequisites](#-prerequisites)
+- [Environment Variables](#-environment-variables)
+- [Running with Docker](#-running-with-docker)
+- [Running with Node.js](#-running-with-nodejs-pm2)
+- [Database Setup](#-database-setup)
+- [Web Interface](#-web-interface-optional)
+- [Health Checks](#-health-checks)
+- [Development](#-development)
+- [Configuration](#-additional-configuration)
+- [Troubleshooting](#-troubleshooting)
+- [License](#-license)
 
-### Environment Variables
+## 🚀 Quick Start
 
-Create a `.env` file in the project root with the following variables:
-
-#### Required Variables
-
-```env
-DISCORD_TOKEN=your-discord-bot-token
-STARCHILD_BASE_URL=https://your-api-url
-STARCHILD_API_KEY=your-api's-key
-```
-
-- `DISCORD_TOKEN` - Your Discord bot token. Can be acquired [here](https://discordapp.com/developers/applications) by creating a 'New Application', then going to 'Bot'.
-- `STARCHILD_BASE_URL` - The base URL for your Starchild Music API instance
-- `STARCHILD_API_KEY` - Your Starchild Music API key. This unlocks streaming on the Starchild Music API. Create this key in your Starchild dashboard.
-
-#### Optional Variables
-
-```env
-DATA_DIR=./data
-CACHE_LIMIT=2GB
-
-# SponsorBlock integration (optional)
-# ENABLE_SPONSORBLOCK=true
-# SPONSORBLOCK_TIMEOUT=5    # Delay (in minutes) before retrying when SponsorBlock servers are unreachable
-
-# Bot status and activity (optional)
-BOT_STATUS=online
-# BOT_ACTIVITY_TYPE=LISTENING
-# BOT_ACTIVITY_URL=
-# BOT_ACTIVITY=music
-```
-
-- `DATA_DIR` - Directory for storing data files (defaults to `./data`)
-- `CACHE_LIMIT` - Cache size limit (defaults to `2GB`, examples: `512MB`, `10GB`)
-- `ENABLE_SPONSORBLOCK` - Set to `true` to enable SponsorBlock integration (defaults to `false`)
-- `SPONSORBLOCK_TIMEOUT` - Delay (in minutes) before retrying when SponsorBlock servers are unreachable (defaults to `5`)
-- `BOT_STATUS` - Bot presence status: `online`, `idle`, or `dnd` (defaults to `online`)
-- `BOT_ACTIVITY_TYPE` - Activity type: `PLAYING`, `LISTENING`, `WATCHING`, or `STREAMING` (defaults to `LISTENING`)
-- `BOT_ACTIVITY` - Activity text (defaults to `music`)
-- `BOT_ACTIVITY_URL` - Required if using `STREAMING` activity type. A Twitch or YouTube stream URL.
-
-**Complete `.env` example**:
-
-```env
-DISCORD_TOKEN=your-discord-bot-token-here
-DATA_DIR=./data
-STARCHILD_BASE_URL=https://your-api-url
-STARCHILD_API_KEY=your-api's-key
-
-############
-# Optional #
-############
-
-CACHE_LIMIT=2GB
-
-# ENABLE_SPONSORBLOCK=true
-# SPONSORBLOCK_TIMEOUT=5    # Delay (in minutes) before retrying when SponsorBlock servers are unreachable
-
-BOT_STATUS=online
-# BOT_ACTIVITY_TYPE=LISTENING
-# BOT_ACTIVITY_URL=
-# BOT_ACTIVITY=music
-```
-
-ISOBEL will log a URL when run. Open this URL in a browser to invite ISOBEL to your server. ISOBEL will DM the server owner after it's added with setup instructions.
-
-A 64-bit OS is required to run ISOBEL.
-
-### Versioning
-
-The `master` branch acts as the developing / bleeding edge branch and is not guaranteed to be stable.
-
-When running a production instance, I recommend that you use the [latest release](https://github.com/soulwax/ISOBEL/releases/).
-
-### 🐳 Docker
-
-There are a variety of image tags available:
-- `:2`: versions >= 2.0.0
-- `:2.12`: versions >= 2.12.0 and < 2.13.0
-- `:2.12.2`: an exact version specifier
-- `:latest`: whatever the latest version is
-
-**Basic Docker Run**:
+**The fastest way to get ISOBEL running:**
 
 ```bash
-docker run -it \
+# 1. Clone the repository
+git clone --recursive https://github.com/soulwax/ISOBEL.git
+cd ISOBEL
+
+# 2. Copy environment template
+cp .env.example .env
+
+# 3. Edit .env with your credentials (required!)
+# You MUST set: DISCORD_TOKEN, SONGBIRD_BASE_URL, SONGBIRD_API_KEY, DATABASE_URL
+
+# 4. Run with Docker (recommended)
+docker compose up -d --build
+
+# OR run with Node.js
+pnpm install
+pnpm build
+pnpm start
+```
+
+**Access your bot:**
+- Bot will log an invite URL - use it to add ISOBEL to your server
+- Health check: http://localhost:3002/health
+- Web interface (if enabled): http://localhost:3001
+
+## 📋 Prerequisites
+
+### Required for All Deployments
+
+1. **Discord Bot Token**
+   - Create at [Discord Developer Portal](https://discordapp.com/developers/applications)
+   - Create a "New Application" → Go to "Bot" → Copy token
+
+2. **Songbird Music API**
+   - ISOBEL requires a Songbird API instance for music streaming
+   - Set up your own instance or use a hosted service
+   - You'll need the base URL and API key
+
+3. **PostgreSQL Database** (NEW - REQUIRED!)
+   - ISOBEL uses PostgreSQL for storing settings, favorites, and queue history
+   - Options:
+     - **Cloud (Recommended)**: [Neon](https://neon.tech), [Supabase](https://supabase.com), [Railway](https://railway.app)
+     - **Self-hosted**: PostgreSQL 14+
+   - You'll need the connection string (DATABASE_URL)
+
+4. **64-bit Operating System**
+   - Required for audio processing
+
+### Required for Docker Deployment
+
+- Docker 20.10+
+- Docker Compose v2+
+
+### Required for Node.js Deployment
+
+- Node.js 20.x or later (24.x recommended)
+- pnpm 10.x or later (via Corepack)
+- ffmpeg 4.1 or later
+- PM2 (installed automatically)
+
+## 🔐 Environment Variables
+
+ISOBEL requires several environment variables to run. Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+```
+
+### Required Variables
+
+These variables are **REQUIRED** for ISOBEL to start:
+
+```env
+# Discord Bot Configuration
+DISCORD_TOKEN=your-discord-bot-token-here
+
+# Songbird Music API
+SONGBIRD_BASE_URL=https://your-songbird-api-url
+SONGBIRD_API_KEY=your-songbird-api-key
+
+# PostgreSQL Database (REQUIRED!)
+DATABASE_URL=postgresql://user:password@host:5432/isobel?sslmode=require
+```
+
+#### Database URL Examples
+
+**Neon (recommended):**
+```env
+DATABASE_URL=postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/isobel?sslmode=require
+```
+
+**Supabase:**
+```env
+DATABASE_URL=postgresql://postgres:pass@db.projectref.supabase.co:5432/postgres?sslmode=require
+```
+
+**Local PostgreSQL:**
+```env
+DATABASE_URL=postgresql://postgres:password@localhost:5432/isobel
+```
+
+### Optional Variables
+
+```env
+# Bot Data and Cache
+DATA_DIR=./data
+CACHE_LIMIT=2GB
+HEALTH_PORT=3002
+
+# Bot Presence
+BOT_STATUS=online                # Options: online, idle, dnd
+BOT_ACTIVITY_TYPE=LISTENING      # Options: PLAYING, LISTENING, WATCHING, STREAMING
+BOT_ACTIVITY=music
+# BOT_ACTIVITY_URL=              # Required ONLY if BOT_ACTIVITY_TYPE=STREAMING
+
+# SponsorBlock Integration (optional)
+ENABLE_SPONSORBLOCK=false
+SPONSORBLOCK_TIMEOUT=5
+
+# Advanced Configuration
+# SONGBIRD_NEXT_URL=             # Alternative Songbird API URL
+# REGISTER_COMMANDS_ON_BOT=false # Global vs per-guild command registration
+NODE_ENV=production              # Usually set by PM2/Docker automatically
+```
+
+### Web Interface Variables (Optional)
+
+Only needed if you want to use the web UI:
+
+```env
+# Discord OAuth (for web login)
+DISCORD_CLIENT_ID=your-discord-oauth-client-id
+DISCORD_CLIENT_SECRET=your-discord-oauth-client-secret
+
+# Auth.js Configuration (NEXTAUTH_* env names)
+NEXTAUTH_SECRET=your-random-secret-here  # Generate with: openssl rand -base64 32
+NEXTAUTH_URL=http://localhost:3001       # Or your public domain
+
+# Web Service Ports
+WEB_PORT=3001        # Web interface
+# API_PORT=3003       # Dev only: API server when using pnpm web:dev:all
+# Note: HEALTH_PORT (3002) is for bot health checks
+```
+
+### Verify Your Configuration
+
+Before starting ISOBEL, validate your environment:
+
+```bash
+# Check environment variables
+pnpm verify:env
+
+# Test database connection
+pnpm verify:db
+
+# Check health (after starting)
+pnpm health
+```
+
+## 🐳 Running with Docker
+
+Docker is the **recommended** deployment method. ISOBEL can be deployed in two configurations:
+
+### Option 1: Bot Only (Recommended)
+
+**Using Docker Compose:**
+
+```bash
+# Start the bot
+docker compose up -d --build
+
+# View logs
+docker compose logs -f bot
+
+# Check health
+curl http://localhost:3002/health
+
+# Stop the bot
+docker compose down
+```
+
+**Using Docker Run:**
+
+```bash
+docker run -d \
+  --name isobel-bot \
   -v "$(pwd)/data":/data \
+  -p 3002:3002 \
   -e DISCORD_TOKEN='your-discord-token' \
-  -e STARCHILD_API_KEY='your-starchild-api-key' \
-  -e STARCHILD_BASE_URL='https://your-api-url' \
+  -e SONGBIRD_API_KEY='your-songbird-api-key' \
+  -e SONGBIRD_BASE_URL='https://your-api-url' \
+  -e DATABASE_URL='postgresql://user:password@host:5432/isobel?sslmode=require' \
+  --restart unless-stopped \
   ghcr.io/soulwax/ISOBEL:latest
 ```
 
-This starts ISOBEL and creates a data directory in your current directory.
+### Option 2: Bot + Web Interface
 
-You can also store your tokens in an environment file and make it available to your container. By default, the container will look for a `/config` environment file. You can customize this path with the `ENV_FILE` environment variable to use with, for example, [docker secrets](https://docs.docker.com/engine/swarm/secrets/).
+**Prerequisites:**
+1. Create Discord OAuth Application ([guide](https://discord.com/developers/applications))
+2. Generate Auth.js secret: `openssl rand -base64 32`
+3. Update `.env` with web variables (see [Environment Variables](#-environment-variables))
 
-**Docker Compose**:
+**Start all services:**
 
-```yaml
-services:
-  isobel:
-    image: ghcr.io/soulwax/ISOBEL:latest
-    restart: always
-    volumes:
-      - ./data:/data
-    environment:
-      - DISCORD_TOKEN=your-discord-token
-      - STARCHILD_API_KEY=your-api-key
-      - STARCHILD_BASE_URL=your-api-url
-      # Optional: Custom cache limit
-      - CACHE_LIMIT=5GB
-      # Optional: Bot status
-      - BOT_STATUS=online
+```bash
+# Start bot + web interface (single web process: frontend + API + auth)
+docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
+
+# View logs for all services
+docker compose -f docker-compose.yml -f docker-compose.web.yml logs -f
+
+# Check health
+curl http://localhost:3002/health  # Bot
+curl http://localhost:3001/health  # Web
+curl http://localhost:3001/health  # Web (API + frontend)
+
+# Stop all services
+docker compose -f docker-compose.yml -f docker-compose.web.yml down
 ```
 
-### Node.js
+**Services included:**
+- **bot** (port 3002) - Discord music bot
+- **web** (port 3001) - Web interface
+- **web** (port 3001) - Web UI, API, and Discord auth (single process)
 
-**Prerequisites**:
-* Node.js (20.0.0 or later is required, latest 20.x.x LTS recommended)
-* ffmpeg (4.1 or later)
-* npm (comes with Node.js)
+### Docker Management
 
-1. `git clone --recursive https://github.com/soulwax/ISOBEL.git && cd ISOBEL`
-   - The `--recursive` flag is required to pull the web interface submodule located at `./web`
-2. Copy `.env.example` to `.env` and populate with values:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
-3. I recommend checking out a tagged release with `git checkout v[latest release]`
-4. Install dependencies: `npm install`
-   - This will automatically initialize the web submodule and install its dependencies via the `postinstall` script
-5. `npm run start`
+```bash
+# Update to latest version
+docker compose pull
+docker compose up -d
 
-**Note**: if you're on Windows, you may need to manually set the ffmpeg path. See [#345](https://github.com/soulwax/ISOBEL/issues/345) for details.
+# Rebuild from source and replace containers
+docker compose up -d --build --force-recreate
 
-## ⚙️ Additional configuration (advanced)
+# View container status
+docker compose ps
 
-### Cache
+# Restart services
+docker compose restart
 
-ISOBEL uses advanced local MP3 caching for optimal performance and sound quality. By default, ISOBEL limits the total cache size to around 2 GB. If you want to change this, set the environment variable `CACHE_LIMIT`. For example, `CACHE_LIMIT=512MB` or `CACHE_LIMIT=10GB`.
+# Remove everything (keeps data volume)
+docker compose down
 
-The cache stores high-quality MP3 files (320kbps) locally for instant playback, reducing API calls and ensuring consistent audio quality.
+# Remove everything INCLUDING data (CAUTION!)
+docker compose down -v
+```
+
+If you change `.env`, `docker compose build` by itself is not enough. It rebuilds the image, but it does not replace the running container. Use `docker compose restart` for runtime-only env changes, or `docker compose up -d --build --force-recreate` after changing ports or other Compose-level settings. Docker Compose reads `.env` automatically, not `.env.local`.
+
+### Available Docker Images
+
+- `ghcr.io/soulwax/ISOBEL:latest` - Latest release
+- `ghcr.io/soulwax/ISOBEL:2` - Version 2.x.x
+- `ghcr.io/soulwax/ISOBEL:2.12` - Version 2.12.x
+- `ghcr.io/soulwax/ISOBEL:2.12.2` - Exact version
+
+## 🚀 Running with Node.js (PM2)
+
+For running ISOBEL directly with Node.js on your host machine.
+
+### First-Time Setup
+
+```bash
+# 1. Clone repository with web submodule
+git clone --recursive https://github.com/soulwax/ISOBEL.git
+cd ISOBEL
+
+# 2. Install bot dependencies
+pnpm run install:bot
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env with your values
+
+# 4. Set up database (first time only)
+pnpm prisma:migrate:deploy
+
+# 5. Build and start the bot
+pnpm build
+pnpm pm2:start:prod
+```
+
+### Running on the Same Machine (Bot + Web)
+
+To run both bot and web interface on a single machine without Docker:
+
+```bash
+# 1. Install all dependencies explicitly
+pnpm install -r
+
+# 2. Build everything explicitly
+pnpm build:all
+
+# 3. Start all services with PM2
+pnpm start:all:prod
+
+# 4. Check status
+pm2 status
+
+# 5. View logs
+pnpm logs:all
+```
+
+**Your services will be available at:**
+- Bot health: http://localhost:3002/health
+- Web interface: http://localhost:3001
+- Web (API + auth): http://localhost:3001
+
+### PM2 Management Commands
+
+```bash
+# Start services
+pnpm start                       # Bot only
+pnpm pm2:start:prod          # Bot only (explicit)
+pnpm web:pm2:start:prod      # Web only
+pnpm start:all:prod          # Bot + Web
+
+# Stop services
+pnpm pm2:stop                # Bot only
+pnpm web:pm2:stop            # Web only
+pnpm stop:all                # Everything
+
+# Restart services
+pnpm pm2:restart             # Bot only
+pnpm web:pm2:restart         # Web only
+pnpm restart:all             # Everything
+
+# View logs
+pnpm pm2:logs                # Bot logs
+pnpm web:pm2:logs            # Web logs
+pnpm logs:all                # All logs
+
+# View status
+pm2 status                      # All PM2 processes
+pm2 monit                       # Real-time monitoring
+
+# Reset PM2 (nuclear option)
+pnpm pm2:reset               # Stops and deletes all processes
+```
+
+### Development Mode
+
+```bash
+# Bot only (with hot reload)
+pnpm dev
+
+# Web only (with hot reload)
+pnpm web:dev:all
+
+# Both bot and web (with hot reload)
+pnpm dev:all
+```
+
+### Production Deployment
+
+```bash
+# Quick deployment
+pnpm deploy                  # Build and start bot only
+pnpm deploy:all              # Build and start bot + web
+
+# Or step by step
+pnpm build                  # Build bot only
+pnpm web:build              # Build web only
+pnpm build:all              # Build bot + web
+pnpm pm2:start:prod         # Start bot only
+pnpm web:pm2:start:prod     # Start web only
+pnpm start:all:prod         # Start bot + web
+pm2 save                       # Save PM2 process list
+pm2 startup                    # Enable PM2 on system boot
+```
+
+## 🗄️ Database Setup
+
+ISOBEL requires a PostgreSQL database. The database is used to store:
+- Guild (server) settings
+- User favorites and shortcuts
+- Queue history
+- Web authentication sessions
+
+### Database Options
+
+#### Option 1: Cloud Database (Recommended)
+
+**Neon (Free tier available):**
+1. Create account at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy the pooled connection string for runtime traffic
+4. Copy the direct connection string for migrations
+5. Add to `.env`:
+   `DATABASE_URL=postgresql://...`
+   `DATABASE_URL_UNPOOLED=postgresql://...`
+
+**Supabase (Free tier available):**
+1. Create account at [supabase.com](https://supabase.com)
+2. Create a new project
+3. Go to Settings → Database → Connection String
+4. Copy the connection pooler URL for `DATABASE_URL`
+5. Copy the direct connection URL for `DATABASE_URL_UNPOOLED`
+6. Add both to `.env`
+
+**Railway:**
+1. Create account at [railway.app](https://railway.app)
+2. Create PostgreSQL database
+3. Copy DATABASE_URL from variables
+4. Add to `.env`
+
+#### Option 2: Self-Hosted PostgreSQL
+
+```bash
+# Docker PostgreSQL
+docker run -d \
+  --name isobel-postgres \
+  -e POSTGRES_PASSWORD=yourpassword \
+  -e POSTGRES_DB=isobel \
+  -p 5432:5432 \
+  -v isobel-db:/var/lib/postgresql/data \
+  postgres:16-alpine
+
+# Then set in .env:
+DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/isobel
+```
+
+### Database Migrations
+
+ISOBEL automatically runs migrations on startup, but you can run them manually:
+
+```bash
+# Run pending migrations
+pnpm prisma:migrate:deploy
+
+# Check migration status
+pnpm db:status
+
+# Reset database (CAUTION: deletes all data!)
+pnpm db:reset
+
+# Generate Prisma client after schema changes
+pnpm prisma:generate
+```
+
+If your provider gives you both pooled and direct PostgreSQL URLs, use:
+
+```env
+DATABASE_URL=postgresql://pooled-runtime-url
+DATABASE_URL_UNPOOLED=postgresql://direct-migrations-url
+```
+
+ISOBEL uses `DATABASE_URL_UNPOOLED` for Prisma CLI migrations and `DATABASE_URL` for the running bot.
+
+### Database Verification
+
+```bash
+# Test database connection
+pnpm verify:db
+
+# This checks:
+# - DATABASE_URL is valid
+# - PostgreSQL connection works
+# - Database is accessible
+# - Migrations are up to date
+```
+
+## 🌐 Web Interface (Optional)
+
+The web interface provides a modern UI for managing ISOBEL settings, favorites, and more.
+
+### Web Setup
+
+**1. Create Discord OAuth Application:**
+- Go to [Discord Developer Portal](https://discord.com/developers/applications)
+- Create new application (or use existing bot application)
+- Go to OAuth2 → General
+- Add redirect URL: `http://your-domain:3001/api/auth/callback/discord`
+- Copy Client ID and Client Secret
+
+**2. Generate Auth.js Secret:**
+```bash
+openssl rand -base64 32
+```
+
+**3. Configure Environment:**
+
+Add to your `.env` file:
+```env
+# Discord OAuth
+DISCORD_CLIENT_ID=your-client-id
+DISCORD_CLIENT_SECRET=your-client-secret
+
+# Auth.js
+NEXTAUTH_SECRET=your-generated-secret
+NEXTAUTH_URL=http://localhost:3001  # Or your public domain
+
+# Optional
+WEB_PORT=3001
+API_PORT=3003
+```
+
+**4. Start Web Interface:**
+
+**With Docker:**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.web.yml up -d --build
+```
+
+**With Node.js:**
+```bash
+pnpm install -r
+pnpm build:all
+pnpm start:all:prod
+```
+
+**5. Access:**
+- Open http://localhost:3001
+- Click "Login with Discord"
+- Authorize the application
+- You're in!
+
+### Web Interface Features
+
+- 📊 **Dashboard**: View bot status and active guilds
+- 🎵 **Now Playing**: See what's playing across all servers
+- ⭐ **Favorites**: Manage favorite songs and playlists
+- ⚙️ **Settings**: Configure bot behavior per guild
+- 📜 **Queue History**: View playback history
+- 👥 **User Management**: See who's using the bot
+
+## 🏥 Health Checks
+
+ISOBEL includes health check endpoints for monitoring:
+
+### Bot Health Check
+
+**Endpoint:** `http://localhost:3002/health`
+
+```bash
+# Check bot health
+curl http://localhost:3002/health
+
+# Or use pnpm script
+pnpm health
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "uptime": 123456,
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "version": "2.12.0"
+}
+```
+
+### Web Health Check
+
+**Endpoint:** `http://localhost:3001/health`
+
+```bash
+# Check web health
+curl http://localhost:3001/health
+
+# Or use pnpm script
+pnpm health:web
+```
+
+### Using Health Checks
+
+**Docker health checks:**
+- Automatically configured in docker-compose files
+- Check with: `docker compose ps`
+
+**Monitoring:**
+- Use with uptime monitoring services (UptimeRobot, Pingdom, etc.)
+- Set up alerts for when health checks fail
+
+**Reverse Proxy:**
+```nginx
+# Nginx example
+location /health {
+    proxy_pass http://localhost:3002/health;
+}
+```
+
+## 🔧 Development
+
+### Project Structure
+
+ISOBEL consists of two projects:
+
+```
+ISOBEL/
+├── src/                    # Bot source code
+│   ├── bot.ts             # Main bot entry point
+│   ├── commands/          # Discord slash commands
+│   ├── services/          # Business logic (DI services)
+│   ├── managers/          # Player, queue, cache managers
+│   └── utils/             # Utility functions
+├── web/                   # Web interface (git submodule)
+│   ├── src/               # Web source code
+│   ├── public/            # Static assets
+│   └── auth-server/       # Auth server
+├── prisma/                # Database schema
+└── ecosystem.config.cjs   # PM2 configuration
+```
+
+### Development Workflow
+
+**1. Clone with submodules:**
+```bash
+git clone --recursive https://github.com/soulwax/ISOBEL.git
+cd ISOBEL
+```
+
+**2. Install dependencies:**
+```bash
+pnpm install              # Bot dependencies
+pnpm --filter isobel-web install    # Web dependencies (optional)
+```
+
+**3. Set up environment:**
+```bash
+cp .env.example .env
+# Edit .env with your values
+```
+
+**4. Run database migrations:**
+```bash
+pnpm prisma:migrate:dev
+```
+
+**5. Start development server:**
+```bash
+# Bot only
+pnpm dev
+
+# Web only
+pnpm web:dev:all
+
+# Both (recommended for full-stack development)
+pnpm dev:all
+```
+
+### Development Commands
+
+```bash
+# Code Quality
+pnpm lint              # Lint bot code
+pnpm lint:fix          # Auto-fix bot code
+pnpm lint:all          # Lint bot + web
+pnpm lint:fix:all      # Auto-fix bot + web
+pnpm typecheck         # Type check bot
+pnpm typecheck:all     # Type check bot + web
+
+# Database
+pnpm prisma:studio     # Open Prisma Studio (database GUI)
+pnpm prisma:migrate:dev  # Create new migration
+pnpm prisma:generate   # Generate Prisma client
+
+# Building
+pnpm build             # Build bot only
+pnpm web:build         # Build web only
+pnpm build:all         # Build bot + web
+
+# Utilities
+pnpm verify:env        # Validate environment variables
+pnpm verify:db         # Test database connection
+```
+
+### Making Changes
+
+**Adding a new Discord command:**
+1. Create file in `src/commands/`
+2. Extend `BaseCommand` class
+3. Implement `execute()` method
+4. Bot auto-discovers new commands
+
+**Modifying database schema:**
+1. Edit `prisma/schema.prisma`
+2. Run `pnpm prisma:migrate:dev`
+3. Name your migration
+4. Run `pnpm prisma:generate`
+
+**Working on web interface:**
+1. `cd web`
+2. Make changes in `web/src/`
+3. Changes auto-reload in dev mode
+4. See [web/README.md](web/README.md) for details
+
+### Git Submodules
+
+The web interface is a git submodule. To update it:
+
+```bash
+# Pull latest web changes
+git submodule update --remote web
+
+# Or initialize if missing
+git submodule update --init --recursive
+```
+
+## ⚙️ Additional Configuration
+
+### Cache Management
+
+ISOBEL uses advanced local MP3 caching for better performance.
+
+**Configure cache size:**
+```env
+CACHE_LIMIT=2GB    # Default
+CACHE_LIMIT=512MB  # Smaller
+CACHE_LIMIT=10GB   # Larger
+```
+
+**Cache location:**
+- Docker: `/data/file-cache/`
+- Node.js: `./data/file-cache/`
+
+**Clear cache:**
+```bash
+# Docker
+docker compose exec bot rm -rf /data/file-cache/*
+
+# Node.js
+rm -rf ./data/file-cache/*
+```
 
 ### Custom Bot Status
 
-In the default state, ISOBEL has the status "Online" and the text "Listening to Music". You can change the status through environment variables:
+**Examples:**
 
-- `BOT_STATUS`:
-  - `online` (Online)
-  - `idle` (Away)
-  - `dnd` (Do not Disturb)
+**Listening to music:**
+```env
+BOT_STATUS=online
+BOT_ACTIVITY_TYPE=LISTENING
+BOT_ACTIVITY=music
+```
 
-- `BOT_ACTIVITY_TYPE`:
-  - `PLAYING` (Playing XYZ)
-  - `LISTENING` (Listening to XYZ)
-  - `WATCHING` (Watching XYZ)
-  - `STREAMING` (Streaming XYZ)
-
-- `BOT_ACTIVITY`: the text that follows the activity type
-
-- `BOT_ACTIVITY_URL`: If you use `STREAMING` you MUST set this variable, otherwise it will not work! Here you write a regular YouTube or Twitch Stream URL.
-
-#### Examples
-
-**ISOBEL is watching a movie and is DND**:
+**Watching a movie:**
 ```env
 BOT_STATUS=dnd
 BOT_ACTIVITY_TYPE=WATCHING
 BOT_ACTIVITY=a movie
 ```
 
-**ISOBEL is streaming Monstercat**:
+**Streaming on Twitch:**
 ```env
 BOT_STATUS=online
 BOT_ACTIVITY_TYPE=STREAMING
-BOT_ACTIVITY_URL=https://www.twitch.tv/monstercat
 BOT_ACTIVITY=Monstercat
-```
-
-**ISOBEL is in debugging mode**:
-```env
-BOT_STATUS=DEBUGGING
+BOT_ACTIVITY_URL=https://www.twitch.tv/monstercat
 ```
 
 ### SponsorBlock Integration
 
-ISOBEL supports SponsorBlock integration to automatically skip non-music segments of tracks. To enable:
+Automatically skip non-music segments:
 
 ```env
 ENABLE_SPONSORBLOCK=true
-SPONSORBLOCK_TIMEOUT=5    # Delay (in minutes) before retrying when SponsorBlock servers are unreachable
+SPONSORBLOCK_TIMEOUT=5
 ```
 
-### Automatic Volume Management
+### Volume Management
 
-ISOBEL can automatically adjust volume when people speak in the voice channel:
+Configure automatic volume reduction when people speak:
 
-- `/config set-reduce-vol-when-voice true` - Enable automatic volume reduction when people speak
-- `/config set-reduce-vol-when-voice false` - Disable automatic volume reduction
-- `/config set-reduce-vol-when-voice-target <volume>` - Set the target volume percentage when people speak (0-100, default is 70)
+```
+/config set-reduce-vol-when-voice true
+/config set-reduce-vol-when-voice-target 70
+```
 
-This feature ensures clear communication during conversations while maintaining music playback.
+## 🔍 Troubleshooting
 
-## 🎵 About Starchild Music API
+### Common Issues
 
-ISOBEL uses the Starchild Music API for all music streaming and searching. This means:
+#### "Missing required environment variable"
+
+**Problem:** Bot won't start, complains about missing variables.
+
+**Solution:**
+```bash
+# Check what's missing
+pnpm verify:env
+
+# Make sure these are in .env:
+# - DISCORD_TOKEN
+# - SONGBIRD_BASE_URL
+# - SONGBIRD_API_KEY
+# - DATABASE_URL
+```
+
+#### "Database connection failed"
+
+**Problem:** Can't connect to PostgreSQL.
+
+**Solution:**
+```bash
+# Test database connection
+pnpm verify:db
+
+# Common issues:
+# - Wrong DATABASE_URL format
+# - Database server not running
+# - Firewall blocking connection
+# - Wrong credentials
+
+# DATABASE_URL format:
+postgresql://username:password@host:port/database?sslmode=require
+```
+
+#### "Web directory not found"
+
+**Problem:** Web interface submodule not initialized.
+
+**Solution:**
+```bash
+git submodule update --init --recursive
+pnpm --filter isobel-web install
+```
+
+#### "PM2 processes stuck"
+
+**Problem:** Can't stop or restart PM2 processes.
+
+**Solution:**
+```bash
+# Nuclear option - reset everything
+pnpm pm2:reset
+
+# Then start fresh
+pnpm start:all:prod
+```
+
+#### "Discord bot not responding to commands"
+
+**Problem:** Bot is online but commands don't work.
+
+**Checklist:**
+1. Check bot has proper permissions in Discord server
+2. Verify bot has "applications.commands" scope
+3. Re-invite bot with correct permissions
+4. Check logs: `docker compose logs bot` or `pnpm pm2:logs`
+
+#### "Port already in use"
+
+**Problem:** Can't start service, port is occupied.
+
+**Solution:**
+```bash
+# Find what's using the port
+lsof -i :3002  # Bot health
+lsof -i :3001  # Web
+lsof -i :3003  # Dev API server (when using web:dev:all)
+
+# Change port in .env
+HEALTH_PORT=3012
+WEB_PORT=3011
+API_PORT=3013
+```
+
+#### "Docker build fails"
+
+**Problem:** Docker build error.
+
+**Solution:**
+```bash
+# Clear Docker cache and rebuild
+docker compose down
+docker system prune -a
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Getting Help
+
+**Check logs:**
+```bash
+# Docker
+docker compose logs -f bot
+docker compose logs -f web
+
+# PM2
+pnpm pm2:logs
+pnpm logs:all
+```
+
+**Enable debug mode:**
+```env
+NODE_ENV=development
+```
+
+**Report issues:**
+- Check [existing issues](https://github.com/soulwax/ISOBEL/issues)
+- Create new issue with:
+  - ISOBEL version
+  - Node.js version
+  - Operating system
+  - Complete error logs
+  - Steps to reproduce
+
+### Versioning
+
+- `main` branch - Development/bleeding edge (may be unstable)
+- Tags - Stable releases (recommended for production)
+
+**Use stable releases:**
+```bash
+# List available versions
+git tag
+
+# Checkout specific version
+git checkout v2.12.2
+```
+
+## 📚 Additional Resources
+
+- [Web Interface Documentation](web/README.md)
+- [CLAUDE.md](CLAUDE.md) - Development guidelines for Claude Code
+- [Discord Developer Portal](https://discord.com/developers/applications)
+- [Prisma Documentation](https://www.prisma.io/docs)
+
+## 🎵 About Songbird Music API
+
+ISOBEL uses the Songbird Music API for all music streaming and searching. This means:
 
 - ✅ **No YouTube API keys required**
 - ✅ **No Spotify credentials required**
 - ✅ **Self-hosted or cloud-hosted API support**
-- ✅ **High-quality audio streaming**
+- ✅ **High-quality audio streaming (320kbps MP3)**
 - ✅ **Fast and reliable search**
+- ✅ **Livestream support**
 
-You'll need to set up your own Music API instance.
-
-*My name Isobel*
-
-*Married to myself*  
-*My love Isobel*  
-*Living by herself*
-
-*In a heart full of dust*
-
-*Lives a creature called lust*  
-*It surprises and scares*  
-*Like me, like me*
-
-*My name Isobel*  
-*Married to myself*  
-*My love Isobel*  
-*Living by herself*
-
-## 🔧 Development
-
-If you want to contribute or develop ISOBEL:
-
-1. Clone the repository with `git clone --recursive https://github.com/soulwax/ISOBEL.git`
-   - The `--recursive` flag is required to pull the web interface submodule located at `./web`
-   - If you forgot `--recursive`, you can initialize submodules later with `npm run submodule:init`
-2. Install dependencies: `npm install`
-   - This automatically initializes the web submodule and installs its dependencies via the `postinstall` script
-3. Set up your `.env` file with required variables
-4. Run in development mode: `npm run dev`
-5. Run linting: `npm run lint` (or `npm run lint:all` for both bot and web)
-6. Run type checking: `npm run typecheck` (or `npm run typecheck:all` for both bot and web)
-
-### Unified Scripts
-
-The project includes unified scripts that work across both the bot and web interface:
-
-- `npm run lint:all` - Lint both bot and web projects
-- `npm run lint:fix:all` - Auto-fix linting issues in both projects
-- `npm run typecheck:all` - Type check both projects
-- `npm run build:all` - Build both projects
-
-### Web Interface Scripts
-
-Access web interface commands from the root:
-
-- `npm run web:dev` - Start web development server
-- `npm run web:build` - Build web interface for production
-- `npm run web:lint` - Lint web interface
-- `npm run web:preview` - Preview production build
-
-### Submodule Management
-
-- `npm run submodule:init` - Initialize and update submodules
-- `npm run submodule:update` - Update submodules to latest remote commits
-- `npm run submodule:status` - Check submodule status
+You'll need to set up your own Music API instance or use a hosted service.
 
 ## 📝 License
 
-GPLv3 - see LICENSE file for details.
+GPLv3 - see [LICENSE](LICENSE.md) file for details.
+
+---
+
+<div align="center">
+  Made with ❤️ by music lovers, for music lovers
+</div>

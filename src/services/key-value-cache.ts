@@ -53,14 +53,24 @@ export default class KeyValueCacheProvider {
     if (cachedResult) {
       if (new Date() < cachedResult.expiresAt) {
         debug(`Cache hit: ${key}`);
-        return JSON.parse(cachedResult.value) as R;
+        try {
+          return JSON.parse(cachedResult.value) as R;
+        } catch (error) {
+          debug(`Failed to parse cached value for key ${key}, deleting corrupted entry: ${error instanceof Error ? error.message : String(error)}`);
+          await prisma.keyValueCache.delete({
+            where: {
+              key,
+            },
+          });
+          // Fall through to recompute the value
+        }
+      } else {
+        await prisma.keyValueCache.delete({
+          where: {
+            key,
+          },
+        });
       }
-
-      await prisma.keyValueCache.delete({
-        where: {
-          key,
-        },
-      });
     }
 
     debug(`Cache miss: ${key}`);

@@ -1,16 +1,16 @@
 // File: src/commands/play.ts
 
-import { SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from '@discordjs/builders';
-import { AutocompleteInteraction, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, type SlashCommandOptionsOnlyBuilder, type SlashCommandSubcommandsOnlyBuilder } from '@discordjs/builders';
+import { type AutocompleteInteraction, type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { URL } from 'url';
-import AddQueryToQueue from '../services/add-query-to-queue.js';
-import KeyValueCacheProvider from '../services/key-value-cache.js';
-import StarchildAPI from '../services/starchild-api.js';
+import type AddQueryToQueue from '../services/add-query-to-queue.js';
+import type KeyValueCacheProvider from '../services/key-value-cache.js';
+import type StarchildAPI from '../services/starchild-api.js';
 import { TYPES } from '../types.js';
 import { ONE_HOUR_IN_SECONDS } from '../utils/constants.js';
 import getStarchildSuggestionsFor from '../utils/get-starchild-suggestions-for.js';
-import Command from './index.js';
+import type Command from './index.js';
 
 type GetStarchildSuggestionsForReturn = Awaited<ReturnType<typeof getStarchildSuggestionsFor>>;
 
@@ -52,11 +52,11 @@ export default class implements Command {
   }
 
   public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const query = interaction.options.getString('query')!;
+    const query = interaction.options.getString('query')!.trim();
 
     await this.addQueryToQueue.addToQueue({
       interaction,
-      query: query.trim(),
+      query,
       addToFrontOfQueue: interaction.options.getBoolean('immediate') ?? false,
       shuffleAdditions: interaction.options.getBoolean('shuffle') ?? false,
       shouldSplitChapters: interaction.options.getBoolean('split') ?? false,
@@ -72,13 +72,11 @@ export default class implements Command {
       return;
     }
 
-    try {
-      // Don't return suggestions for URLs
-      // eslint-disable-next-line no-new
-      new URL(query);
+    // Don't return suggestions for URLs
+    if (URL.canParse(query)) {
       await interaction.respond([]);
       return;
-    } catch {}
+    }
 
     const suggestions = await this.cache.wrap<typeof getStarchildSuggestionsFor, GetStarchildSuggestionsForReturn>(
       getStarchildSuggestionsFor,

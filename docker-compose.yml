@@ -1,0 +1,65 @@
+# File: docker-compose.yml
+
+services:
+  # Discord Bot Service
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        COMMIT_HASH: ${COMMIT_HASH:-local}
+        BUILD_DATE: ${BUILD_DATE:-now}
+    container_name: isobel-bot
+    restart: unless-stopped
+    ports:
+      - "${HEALTH_PORT:-3002}:${HEALTH_PORT:-3002}"
+    volumes:
+      - ./data:/data
+      - ./.env:/config/.env:ro
+    environment:
+      # Required: Discord and Starchild API credentials
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - SONGBIRD_BASE_URL=${SONGBIRD_BASE_URL}
+      - SONGBIRD_API_KEY=${SONGBIRD_API_KEY}
+
+      # Required: Database connection
+      - DATABASE_URL=${DATABASE_URL}
+
+      # Optional: Bot configuration
+      - DATA_DIR=/data
+      - CACHE_LIMIT=${CACHE_LIMIT:-2GB}
+      - BOT_STATUS=${BOT_STATUS:-online}
+      - BOT_ACTIVITY_TYPE=${BOT_ACTIVITY_TYPE:-LISTENING}
+      - BOT_ACTIVITY_URL=${BOT_ACTIVITY_URL:-}
+      - BOT_ACTIVITY=${BOT_ACTIVITY:-music}
+      - ENABLE_SPONSORBLOCK=${ENABLE_SPONSORBLOCK:-false}
+      - SPONSORBLOCK_TIMEOUT=${SPONSORBLOCK_TIMEOUT:-5}
+      - REGISTER_COMMANDS_ON_BOT=${REGISTER_COMMANDS_ON_BOT:-false}
+      - SONGBIRD_NEXT_URL=${SONGBIRD_NEXT_URL:-}
+      - HEALTH_PORT=${HEALTH_PORT:-3002}
+
+      # Environment
+      - NODE_ENV=production
+    networks:
+      - isobel-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+
+networks:
+  isobel-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local
