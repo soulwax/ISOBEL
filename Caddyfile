@@ -1,0 +1,15 @@
+# isobelnet.de — automatic HTTPS via Let's Encrypt.
+# Caddy obtains and renews the certificate on its own; it needs
+# ports 80 and 443 open to the internet and the domain's DNS A/AAAA
+# records pointing at this server.
+
+isobelnet.de, www.isobelnet.de {
+	# Forward everything (SPA + /api + /health) to the web container
+	# on the internal docker network. "web" is the service name.
+	reverse_proxy web:3001
+
+	encode gzip zstd
+
+	# Use the contact address Let's Encrypt should email about renewals.
+	tls kling.mac@icloud.com
+}

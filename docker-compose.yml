@@ -1,6 +1,37 @@
 # File: docker-compose.yml
 
+# Self-contained Discord bot stack: PostgreSQL + bot, no external database required.
+# Bring it up with:  docker compose up -d --build   (or: pnpm docker:build:bot)
+#
+# Secrets (DISCORD_TOKEN, SONGBIRD_*) are read from ./.env via Compose's automatic
+# ${VAR} substitution. DATABASE_URL is hardcoded to the bundled `postgres` service
+# below, so any DATABASE_URL in ./.env is intentionally ignored inside the container.
+
 services:
+  # PostgreSQL — bundled database, persisted to the `pgdata` named volume.
+  postgres:
+    image: postgres:17-alpine
+    container_name: isobel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-isobel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-isobel}
+      POSTGRES_DB: ${POSTGRES_DB:-isobel}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Uncomment to reach the DB from the host (psql / drizzle studio). Bound to
+    # localhost only; change the left-hand port if 5432 is already in use.
+    # ports:
+    #   - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-isobel} -d ${POSTGRES_DB:-isobel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - isobel-network
+
   # Discord Bot Service
   bot:
     build:
@@ -15,15 +46,19 @@ services:
       - "${HEALTH_PORT:-3002}:${HEALTH_PORT:-3002}"
     volumes:
       - ./data:/data
-      - ./.env:/config/.env:ro
     environment:
-      # Required: Discord and Starchild API credentials
+      # Required: Discord and Songbird API credentials (substituted from ./.env)
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - SONGBIRD_BASE_URL=${SONGBIRD_BASE_URL}
       - SONGBIRD_API_KEY=${SONGBIRD_API_KEY}
 
-      # Required: Database connection
-      - DATABASE_URL=${DATABASE_URL}
+      # Database connection — points at the bundled `postgres` service.
+      # This overrides any DATABASE_URL present in ./.env.
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-isobel}:${POSTGRES_PASSWORD:-isobel}@postgres:5432/${POSTGRES_DB:-isobel}
+
+      # Force the bot to trust the env vars above rather than a mounted .env file
+      # (load-env.ts treats a set ENV_FILE as authoritative-with-override).
+      - ENV_FILE=
 
       # Optional: Bot configuration
       - DATA_DIR=/data
@@ -40,10 +75,13 @@ services:
 
       # Environment
       - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - isobel-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:'+(process.env.HEALTH_PORT||3002)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -61,5 +99,5 @@ networks:
     driver: bridge
 
 volumes:
-  data:
+  pgdata:
     driver: local
