@@ -414,7 +414,7 @@ pnpm pm2:reset               # Stops and deletes all processes
 
 ### Oxmgr Management Commands
 
-ISOBEL also includes an `oxfile.toml` for running the bot with oxmgr.
+ISOBEL also includes an `oxfile.toml` for running the bot with oxmgr. The npm scripts generate `.oxmgr/oxfile.generated.toml` with the active Node.js path before calling oxmgr, which helps when the oxmgr daemon cannot see your shell-managed Node installation.
 
 ```bash
 # Validate the oxmgr config
