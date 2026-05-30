@@ -412,6 +412,34 @@ pm2 monit                       # Real-time monitoring
 pnpm pm2:reset               # Stops and deletes all processes
 ```
 
+### Oxmgr Management Commands
+
+ISOBEL also includes an `oxfile.toml` for running the bot with oxmgr.
+
+```bash
+# Validate the oxmgr config
+pnpm oxmgr:validate
+
+# Build and start/apply the bot process
+pnpm oxmgr:start
+
+# Run in foreground runtime mode
+pnpm oxmgr:runtime
+
+# Manage the running bot
+pnpm oxmgr:status
+pnpm oxmgr:logs
+pnpm oxmgr:restart
+pnpm oxmgr:reload
+pnpm oxmgr:stop
+pnpm oxmgr:delete
+
+# Inspect oxmgr itself
+pnpm oxmgr:list
+pnpm oxmgr:ui
+pnpm oxmgr:doctor
+```
+
 ### Development Mode
 
 ```bash

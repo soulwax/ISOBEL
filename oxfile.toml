@@ -1,0 +1,25 @@
+version = 1
+
+[defaults]
+restart_policy = "on_failure"
+max_restarts = 10
+crash_restart_limit = 3
+restart_delay_secs = 4
+stop_signal = "SIGTERM"
+stop_timeout_secs = 5
+
+[[apps]]
+name = "isobel"
+namespace = "isobel"
+command = "node --enable-source-maps dist/scripts/migrate-and-start.js"
+cwd = "."
+health_cmd = "node -e \"const http=require('http');const port=process.env.HEALTH_PORT||'3002';http.get('http://127.0.0.1:'+port+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));\""
+health_interval_secs = 30
+health_timeout_secs = 10
+health_max_failures = 3
+max_memory_mb = 1024
+unified_logs = true
+log_date_format = "%Y-%m-%d %H:%M:%S"
+
+[apps.env]
+NODE_ENV = "production"
