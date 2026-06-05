@@ -4,6 +4,12 @@ packages:
   - .
   - web
 
+allowBuilds:
+  '@discordjs/opus': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+
 onlyBuiltDependencies:
   - '@discordjs/opus'
   - '@prisma/engines'
