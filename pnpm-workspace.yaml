@@ -4,6 +4,13 @@ packages:
   - .
   - web
 
+# Prisma 7 generates a client under node_modules/.prisma that resolves some
+# runtime packages (e.g. @prisma/client-runtime-utils) from the project root.
+# pnpm's isolated linker keeps them private, breaking oxmgr/PM2/Docker runs.
+# pnpm 11 reads this from pnpm-workspace.yaml, NOT .npmrc.
+publicHoistPattern:
+  - '@prisma/*'
+
 allowBuilds:
   '@discordjs/opus': true
   '@prisma/engines': true
