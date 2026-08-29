@@ -23,3 +23,20 @@ log_date_format = "%Y-%m-%d %H:%M:%S"
 
 [apps.env]
 NODE_ENV = "production"
+
+[[apps]]
+name = "isobel-web"
+namespace = "isobel"
+command = "node --import tsx src/server/serve.ts"
+cwd = "./web"
+health_cmd = "node -e \"const http=require('http');const port=process.env.PORT||'3001';http.get('http://127.0.0.1:'+port+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));\""
+health_interval_secs = 30
+health_timeout_secs = 10
+health_max_failures = 3
+max_memory_mb = 1024
+unified_logs = true
+log_date_format = "%Y-%m-%d %H:%M:%S"
+
+[apps.env]
+NODE_ENV = "production"
+PORT = "3001"
