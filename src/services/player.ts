@@ -23,7 +23,8 @@ import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, PLAYBACK_TELEMETRY_INTERVAL_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import ByteCounter from '../utils/byte-counter.js';
 import debug from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
@@ -129,6 +130,15 @@ export default class Player {
   private defaultVolume: number = DEFAULT_VOLUME;
   private nowPlaying: QueuedSong | null = null;
   private playPositionInterval: NodeJS.Timeout | undefined;
+  private telemetryInterval: NodeJS.Timeout | undefined;
+
+  // Playback telemetry: how far ahead ffmpeg has encoded, and how much
+  // playback time we lost to underruns. See startPlaybackTelemetry().
+  private activeStreamMeter: ByteCounter | null = null;
+  private activeStreamByteRate = 0;
+  private lastPlaybackDurationMs = 0;
+  private lastTelemetrySampleAt = 0;
+  private lostPlaybackMs = 0;
 
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
@@ -757,6 +767,8 @@ export default class Player {
       clearInterval(this.playPositionInterval);
     }
 
+    this.startPlaybackTelemetry();
+
     // Start interval to increment position every second
     this.playPositionInterval = setInterval(() => {
       if (this.status === STATUS.PLAYING) {
@@ -769,6 +781,60 @@ export default class Player {
     if (this.playPositionInterval) {
       clearInterval(this.playPositionInterval);
       this.playPositionInterval = undefined;
+    }
+
+    this.stopPlaybackTelemetry();
+  }
+
+  /**
+   * Samples the two numbers that distinguish a network problem from a CPU one:
+   *
+   * - cushion: seconds of audio ffmpeg has encoded but the player hasn't reached
+   *   yet. Should climb after a track starts. Pinned near zero means the input
+   *   is being read at playback speed and there is nothing to absorb jitter.
+   * - lost: milliseconds of wall time in which playback did not advance, i.e.
+   *   audible stutter. Non-zero while the cushion is healthy points at the
+   *   event loop rather than the network.
+   */
+  private startPlaybackTelemetry(): void {
+    this.stopPlaybackTelemetry();
+
+    this.lastPlaybackDurationMs = this.audioResource?.playbackDuration ?? 0;
+    this.lastTelemetrySampleAt = Date.now();
+    this.lostPlaybackMs = 0;
+
+    this.telemetryInterval = setInterval(() => {
+      const resource = this.audioResource;
+      if (!resource || this.status !== STATUS.PLAYING) {
+        return;
+      }
+
+      const now = Date.now();
+      const wallElapsedMs = now - this.lastTelemetrySampleAt;
+      const playedMs = resource.playbackDuration - this.lastPlaybackDurationMs;
+      this.lastTelemetrySampleAt = now;
+      this.lastPlaybackDurationMs = resource.playbackDuration;
+
+      // Only count a shortfall as lost audio; scheduling can also make a tick
+      // arrive late, which shows up as playing more than the wall clock.
+      const shortfallMs = Math.max(0, wallElapsedMs - playedMs);
+      this.lostPlaybackMs += shortfallMs;
+
+      const producedSeconds = this.activeStreamMeter && this.activeStreamByteRate > 0
+        ? this.activeStreamMeter.bytes / this.activeStreamByteRate
+        : null;
+      const cushionSeconds = producedSeconds === null
+        ? null
+        : producedSeconds - (resource.playbackDuration / 1000);
+
+      debug(`[audio] guild=${this.guildId} cushion=${cushionSeconds === null ? 'n/a' : `${cushionSeconds.toFixed(1)}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+    }, PLAYBACK_TELEMETRY_INTERVAL_MS);
+  }
+
+  private stopPlaybackTelemetry(): void {
+    if (this.telemetryInterval) {
+      clearInterval(this.telemetryInterval);
+      this.telemetryInterval = undefined;
     }
   }
 
@@ -1008,7 +1074,12 @@ export default class Player {
         ],
         overwriteExisting: true,
       });
-      ff.toStream().pipe(capacitor as unknown as NodeJS.WritableStream);
+      // Measure how much audio ffmpeg has produced, so telemetry can report the
+      // cushion between the encoder and the player.
+      const meter = new ByteCounter();
+      this.activeStreamMeter = meter;
+      this.activeStreamByteRate = (OPUS_OUTPUT_BITRATE_KBPS * 1000) / 8;
+      ff.toStream().pipe(meter).pipe(capacitor as unknown as NodeJS.WritableStream);
 
       ff
         .on('error', (error: Error) => {

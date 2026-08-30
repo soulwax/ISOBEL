@@ -52,6 +52,63 @@ export const SEEK_STEP_SECONDS = 15;
 export const VOLUME_STEP = 10;
 
 /**
+ * Read-ahead pacing for network inputs.
+ *
+ * ffmpeg bursts this many seconds of input as fast as the source allows, then
+ * settles to STREAM_READ_RATE. The burst builds a cushion the audio player can
+ * drain during network jitter; the rate keeps rebuilding it without pulling
+ * whole tracks that may be skipped.
+ */
+export const STREAM_READ_BURST_SECONDS = 15;
+export const STREAM_READ_RATE = 1.5;
+
+/**
+ * Upper bound for the Opus encoder, in kbps.
+ *
+ * The voice channel advertises its own bitrate and that wins when it is lower.
+ * Past this point Opus gains very little on 48 kHz stereo music, while the
+ * larger packets cost more on a lossy link than the fidelity is worth.
+ */
+export const OPUS_MAX_BITRATE_KBPS = 128;
+
+/**
+ * Fallback bitrate in kbps when the voice channel's own bitrate is unknown.
+ * Matches Discord's default for unboosted guilds.
+ */
+export const OPUS_FALLBACK_BITRATE_KBPS = 64;
+
+/**
+ * Expected packet loss percentage used to size libopus in-band FEC.
+ * Only meaningful on the passthrough path, where our packets are the ones
+ * listeners receive.
+ */
+export const OPUS_EXPECTED_PACKET_LOSS_PERCENT = 5;
+
+/**
+ * Discord voice is 48 kHz stereo; state it explicitly rather than letting the
+ * encoder infer it from whatever the source happens to be.
+ */
+export const DISCORD_SAMPLE_RATE_HZ = 48_000;
+export const DISCORD_CHANNEL_COUNT = 2;
+
+/**
+ * Bytes per second of signed 16-bit PCM at Discord's sample rate, used to
+ * convert produced bytes into seconds of cushion on the PCM path.
+ */
+export const PCM_BYTES_PER_SECOND = DISCORD_SAMPLE_RATE_HZ * DISCORD_CHANNEL_COUNT * 2;
+
+/**
+ * How long to wait for further volume changes before respawning the stream on
+ * the passthrough path, so dragging a volume slider respawns once.
+ */
+export const VOLUME_RESPAWN_DEBOUNCE_MS = 400;
+
+/**
+ * How often playback telemetry (buffer cushion, playback drift) is sampled.
+ */
+export const PLAYBACK_TELEMETRY_INTERVAL_MS = 1000;
+
+/**
  * Audio player max missed frames (for livestreams)
  */
 export const AUDIO_PLAYER_MAX_MISSED_FRAMES = 80;
