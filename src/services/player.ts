@@ -23,7 +23,7 @@ import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
@@ -1045,6 +1045,21 @@ export default class Player {
     this.useLiveVolume = guildSettings.turnDownVolumeWhenPeopleSpeak;
   }
 
+  /**
+   * Opus bitrate for the channel we are actually in.
+   *
+   * Voice channels run at 64 kbps unboosted and reach 384 kbps only with server
+   * boosts. Encoding above the channel's rate does not raise the ceiling, it
+   * just makes packets the link may not be provisioned for.
+   */
+  private getOpusBitrateKbps(): number {
+    const channelBitrateKbps = this.currentChannel?.bitrate
+      ? Math.round(this.currentChannel.bitrate / 1000)
+      : OPUS_FALLBACK_BITRATE_KBPS;
+
+    return Math.min(channelBitrateKbps, OPUS_MAX_BITRATE_KBPS);
+  }
+
   private getOrCreateAudioPlayer(): AudioPlayer {
     this.audioPlayer ??= createAudioPlayer({
       behaviors: {
@@ -1096,6 +1111,7 @@ export default class Player {
     // Callers don't pick the format; the guild's volume mode does. Resolving it
     // here keeps every call site in getStream() consistent.
     const outputFormat = options.outputFormat ?? (this.useLiveVolume ? 'pcm' : 'opus');
+    const opusBitrateKbps = this.getOpusBitrateKbps();
     const volumeAdjustment = options.volumeAdjustment
       ?? (outputFormat === 'opus' && this.getVolume() !== VOLUME_MAX
         ? (this.getVolume() / VOLUME_MAX).toString()
@@ -1146,9 +1162,13 @@ export default class Player {
         : [
           '-vn',
           '-c:a', 'libopus',
-          '-b:a', `${OPUS_OUTPUT_BITRATE_KBPS}k`,
+          '-b:a', `${opusBitrateKbps}k`,
           '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
           '-ac', DISCORD_CHANNEL_COUNT.toString(),
+          // Our packets are what listeners receive on the passthrough path, so
+          // in-band FEC lets their clients rebuild ones that go missing.
+          '-packet_loss', OPUS_EXPECTED_PACKET_LOSS_PERCENT.toString(),
+          '-fec', '1',
           '-f', 'webm',
           ...volumeFilter,
         ];
@@ -1166,7 +1186,7 @@ export default class Player {
       this.activeStreamMeter = meter;
       this.activeStreamByteRate = outputFormat === 'pcm'
         ? PCM_BYTES_PER_SECOND
-        : (OPUS_OUTPUT_BITRATE_KBPS * 1000) / 8;
+        : (opusBitrateKbps * 1000) / 8;
       ff.toStream().pipe(meter).pipe(capacitor as unknown as NodeJS.WritableStream);
 
       ff

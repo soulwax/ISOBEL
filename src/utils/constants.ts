@@ -131,12 +131,6 @@ export const NOW_PLAYING_UPDATE_INTERVAL_MS = 5000;
 export const AUDIO_BITRATE_KBPS = 320;
 
 /**
- * Audio bitrate for Opus output (Discord voice requirement)
- * Set to 192kbps for good quality while maintaining compatibility
- */
-export const OPUS_OUTPUT_BITRATE_KBPS = 192;
-
-/**
  * FFmpeg start timeout in milliseconds
  * How long to wait for ffmpeg to emit its 'start' event before aborting
  */
