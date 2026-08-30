@@ -23,7 +23,7 @@ import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, PLAYBACK_TELEMETRY_INTERVAL_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
@@ -1059,7 +1059,18 @@ export default class Player {
 
       // Determine if input is a file path or URL
       const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
-      const inputOptions = options?.ffmpegInputOptions ?? (isFile ? [] : ['-re']);
+
+      // Network inputs burst a cushion, then settle to a rate that keeps
+      // rebuilding it. Reading at exactly 1x (-re) leaves nothing buffered, so
+      // any jitter becomes an underrun. Local files are already instant.
+      const readAhead = isFile
+        ? []
+        : ['-readrate', STREAM_READ_RATE.toString(), '-readrate_initial_burst', STREAM_READ_BURST_SECONDS.toString()];
+
+      // Concatenate rather than replace: seeking passes -ss, which previously
+      // discarded the pacing flags entirely and made seek behave differently
+      // from normal playback.
+      const inputOptions = [...readAhead, ...(options?.ffmpegInputOptions ?? [])];
 
       const ff = new FFmpeggy({
         input: options.url,
