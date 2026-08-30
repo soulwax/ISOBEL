@@ -22,5 +22,6 @@ declare module 'ffmpeggy' {
     toStream(): NodeJS.ReadableStream;
     on(event: 'error', listener: (error: Error) => void): this;
     on(event: 'start', listener: (args: readonly string[]) => void): this;
+    on(event: 'exit', listener: (code: number | null, error?: Error) => void): this;
   }
 }

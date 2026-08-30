@@ -16,6 +16,7 @@ import type { Setting } from '@prisma/client';
 import shuffle from 'array-shuffle';
 import { type Message, type Snowflake, type VoiceChannel } from 'discord.js';
 import { FFmpeggy } from 'ffmpeggy';
+import { createReadStream as createFileReadStream } from 'fs';
 import { WriteStream } from 'fs-capacitor';
 import { hashSync } from 'hasha';
 import { inject } from 'inversify';
@@ -111,6 +112,8 @@ export interface NowPlayingSnapshot {
   cushionSeconds: number | null;
   /** Wall time in which playback did not advance, i.e. audible stutter. */
   lostPlaybackMs: number;
+  /** How this play was served: cached artifact, remux of one, or a live encode. */
+  playbackPath: 'cache' | 'remux' | 'encode';
 }
 
 
@@ -147,6 +150,7 @@ export default class Player {
   private lastTelemetrySampleAt = 0;
   private lostPlaybackMs = 0;
   private cushionSeconds: number | null = null;
+  private playbackPath: 'cache' | 'remux' | 'encode' = 'encode';
 
   // When a guild ducks the music while people speak, gain has to change
   // mid-track, which needs PCM in the chain. Every other guild gets Opus
@@ -166,6 +170,7 @@ export default class Player {
 
   private readonly channelToSpeakingUsers = new Map<string, Set<string>>();
   private readonly mp3CacheInFlight = new Map<string, Promise<string>>();
+  private readonly opusCacheInFlight = new Map<string, Promise<string>>();
   private audioPlayerIdleHandler?: (oldState: AudioPlayerState, newState: AudioPlayerState) => void;
   private audioPlayerErrorHandler?: (error: Error) => void;
   private readonly preloadedStreamPaths = new Map<string, string>();
@@ -305,6 +310,7 @@ export default class Player {
       isLive: song.isLive,
       cushionSeconds: this.cushionSeconds,
       lostPlaybackMs: Math.round(this.lostPlaybackMs),
+      playbackPath: this.playbackPath,
     };
   }
 
@@ -663,6 +669,133 @@ export default class Player {
    * @param song - The song to download
    * @returns Path to cached MP3 file
    */
+  private getOpusCacheKey(bitrateKbps: number, url: string): string {
+    return `opus:${url}:${bitrateKbps}`;
+  }
+
+  /**
+   * Encodes a track to its final Opus form once and keeps it.
+   *
+   * Playback otherwise re-encodes the same MP3 on every play. With the artifact
+   * cached, a replay is a file read: no ffmpeg process, no encode, no encoder
+   * start latency. Cached at unity gain so it is reusable - a guild playing at
+   * anything other than full volume needs gain baked in and takes the encode
+   * path instead.
+   */
+  private async transcodeAndCacheOpus(song: QueuedSong, bitrateKbps: number): Promise<string> {
+    const hash = this.getHashForCache(this.getOpusCacheKey(bitrateKbps, song.url));
+
+    const inFlight = this.opusCacheInFlight.get(hash);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const cachedPath = await this.fileCache.getPathFor(hash);
+    if (cachedPath) {
+      return cachedPath;
+    }
+
+    const transcodePromise = (async () => {
+      const sourcePath = await this.downloadAndCacheMP3(song);
+      const {stream: writeStream, committed} = this.fileCache.createWriteStream(hash);
+
+      const ff = new FFmpeggy({
+        input: sourcePath,
+        pipe: true,
+        outputOptions: [
+          '-vn',
+          '-c:a', 'libopus',
+          '-b:a', `${bitrateKbps}k`,
+          '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
+          '-ac', DISCORD_CHANNEL_COUNT.toString(),
+          '-packet_loss', OPUS_EXPECTED_PACKET_LOSS_PERCENT.toString(),
+          '-fec', '1',
+          '-f', 'webm',
+        ],
+        overwriteExisting: true,
+      });
+
+      // A partial encode must never reach the cache: the write stream commits on
+      // close and only rejects empty files, so anything short of a clean exit
+      // has to destroy it rather than let it close normally.
+      const exited = new Promise<void>((resolve, reject) => {
+        ff.on('exit', (code: number | null, error?: Error) => {
+          if (code === 0 && !error) {
+            resolve();
+            return;
+          }
+
+          reject(error ?? new Error(`ffmpeg exited with code ${String(code)}`));
+        });
+
+        ff.on('error', (error: Error) => {
+          reject(error);
+        });
+      });
+
+      // Nothing consumes this rejection when the encode fails below.
+      void committed.catch(() => undefined);
+
+      // run() resolves once the process is spawned, not when it finishes, so
+      // the pipeline has to be started before awaiting either.
+      const written = pipeline(ff.toStream() as unknown as Readable, writeStream);
+      await ff.run();
+
+      try {
+        await exited;
+        await written;
+      } catch (error) {
+        writeStream.destroy(error instanceof Error ? error : new Error(String(error)));
+        throw error;
+      }
+
+      const finalPath = await committed;
+      if (!finalPath) {
+        throw new Error(`Empty Opus encode for ${song.title}`);
+      }
+
+      debugAudio(`cached opus artifact for ${song.title} at ${bitrateKbps}k`);
+      return finalPath;
+    })();
+
+    this.opusCacheInFlight.set(hash, transcodePromise);
+    try {
+      return await transcodePromise;
+    } finally {
+      this.opusCacheInFlight.delete(hash);
+    }
+  }
+
+  /**
+   * Path to a reusable Opus artifact for this track, if one exists and this
+   * guild can actually use it.
+   */
+  private async getCachedOpusPath(song: QueuedSong): Promise<string | null> {
+    if (this.useLiveVolume || song.isLive || song.source !== MediaSource.Starchild) {
+      return null;
+    }
+
+    // The artifact is unity gain; anything else has to be baked in.
+    if (this.getVolume() !== VOLUME_MAX) {
+      return null;
+    }
+
+    return this.fileCache.getPathFor(this.getHashForCache(this.getOpusCacheKey(this.getOpusBitrateKbps(), song.url)));
+  }
+
+  /**
+   * Populates the cache off the critical path: the source MP3, and where the
+   * guild can use it, the encoded Opus artifact that makes the next play free.
+   */
+  private async warmArtifacts(song: QueuedSong): Promise<void> {
+    if (this.useLiveVolume || song.isLive || song.source !== MediaSource.Starchild) {
+      await this.downloadAndCacheMP3(song);
+      return;
+    }
+
+    await this.transcodeAndCacheOpus(song, this.getOpusBitrateKbps());
+  }
+
   private async downloadAndCacheMP3(song: QueuedSong): Promise<string> {
     const cacheKey = `mp3:${song.url}:${AUDIO_BITRATE_KBPS}`;
     const hash = this.getHashForCache(cacheKey);
@@ -715,6 +848,9 @@ export default class Player {
   }
 
   private async getStream(song: QueuedSong, options: {seek?: number; to?: number} = {}): Promise<Readable> {
+    // Default for every branch below; the cached-artifact branches override it.
+    this.playbackPath = 'encode';
+
     if (this.status === STATUS.PLAYING) {
       this.audioPlayer?.stop();
     } else if (this.status === STATUS.PAUSED) {
@@ -737,6 +873,35 @@ export default class Player {
         cacheKey: song.url,
         ffmpegInputOptions,
         cache: false,
+      });
+    }
+
+    // A previously encoded artifact turns playback into a file read, and a
+    // seek into a remux. Both skip the encoder entirely.
+    const cachedOpusPath = await this.getCachedOpusPath(song);
+    if (cachedOpusPath) {
+      if (options.seek === undefined && options.to === undefined) {
+        this.playbackPath = 'cache';
+        this.activeStreamMeter = null;
+        return createFileReadStream(cachedOpusPath);
+      }
+
+      const remuxInputOptions: string[] = [];
+      if (options.seek) {
+        remuxInputOptions.push('-ss', options.seek.toString());
+      }
+
+      if (options.to) {
+        remuxInputOptions.push('-to', options.to.toString());
+      }
+
+      this.playbackPath = 'remux';
+      return this.createReadStream({
+        url: cachedOpusPath,
+        cacheKey: song.url,
+        ffmpegInputOptions: remuxInputOptions,
+        cache: false,
+        outputFormat: 'copy',
       });
     }
 
@@ -777,6 +942,7 @@ export default class Player {
     const cacheKey = `mp3:${song.url}:${AUDIO_BITRATE_KBPS}`;
     const cachedPath = await this.fileCache.getPathFor(this.getHashForCache(cacheKey));
     if (cachedPath) {
+      this.safeAsync(this.warmArtifacts(song));
       return this.createReadStream({
         url: cachedPath,
         cacheKey: song.url,
@@ -785,7 +951,8 @@ export default class Player {
     }
 
     // Start caching in the background and stream directly for faster start.
-    this.safeAsync(this.downloadAndCacheMP3(song));
+    // Warming the Opus artifact too means the next play skips the encoder.
+    this.safeAsync(this.warmArtifacts(song));
     const streamUrl = this.starchildAPI.getStreamUrl(song.url, {
       kbps: AUDIO_BITRATE_KBPS as number,
     });
@@ -880,7 +1047,7 @@ export default class Player {
         ? null
         : Number((producedSeconds - (resource.playbackDuration / 1000)).toFixed(1));
 
-      debugAudio(`guild=${this.guildId} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+      debugAudio(`guild=${this.guildId} path=${this.playbackPath} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
     }, PLAYBACK_TELEMETRY_INTERVAL_MS);
   }
 
@@ -1139,7 +1306,7 @@ export default class Player {
     }
   }
 
-  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm'}): Promise<Readable> {
+  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm' | 'copy'}): Promise<Readable> {
     // Callers don't pick the format; the guild's volume mode does. Resolving it
     // here keeps every call site in getStream() consistent.
     const outputFormat = options.outputFormat ?? (this.useLiveVolume ? 'pcm' : 'opus');
@@ -1183,7 +1350,15 @@ export default class Player {
         ? []
         : ['-filter:a', `volume=${volumeAdjustment}`];
 
-      const outputOptions = outputFormat === 'pcm'
+      const outputOptions = outputFormat === 'copy'
+        ? [
+          // Already encoded at the right bitrate: remux only, so seeking a
+          // cached artifact costs no encode and loses no quality.
+          '-vn',
+          '-c:a', 'copy',
+          '-f', 'webm',
+        ]
+        : outputFormat === 'pcm'
         ? [
           '-vn',
           '-f', 's16le',
@@ -1323,6 +1498,8 @@ export default class Player {
     this.safeAsync((async () => {
       const path = await this.downloadAndCacheMP3(nextSong);
       this.preloadedStreamPaths.set(nextSong.url, path);
+      // Pay the encode for the next track now, while this one is playing.
+      await this.warmArtifacts(nextSong);
     })());
   }
 
@@ -1354,7 +1531,7 @@ export default class Player {
     }
   }
 
-  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm'}): Promise<Readable> {
+  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm' | 'copy'}): Promise<Readable> {
     const maxRetries = STREAM_CREATE_MAX_RETRIES;
     let attempt = 0;
     let lastError: unknown;
