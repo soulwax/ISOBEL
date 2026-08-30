@@ -23,6 +23,9 @@ log_date_format = "%Y-%m-%d %H:%M:%S"
 
 [apps.env]
 NODE_ENV = "production"
+# Prints the encoder cushion and lost playback time once a second per playing
+# guild. Drop once the audio pipeline is settled.
+DEBUG = "ISOBEL:audio"
 
 [[apps]]
 name = "isobel-web"
