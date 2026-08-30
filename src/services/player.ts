@@ -146,6 +146,7 @@ export default class Player {
   // re-encoded on the way.
   private useLiveVolume = false;
   private volumeRespawnTimer: NodeJS.Timeout | null = null;
+  private positionAtStreamStart = 0;
 
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
@@ -200,22 +201,15 @@ export default class Player {
     const guildSettings = await getGuildSettings(this.guildId);
     this.applyDefaultLoopMode(guildSettings.defaultLoopMode);
 
-    // Workaround to disable keepAlive
     this.voiceConnection.on('stateChange', (oldState, newState) => {
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
-      const oldNetworking = Reflect.get(oldState, 'networking');
-      const newNetworking = Reflect.get(newState, 'networking');
-
-      const networkStateChangeHandler = (_: unknown, newNetworkState: unknown) => {
-        const newUdp = Reflect.get(newNetworkState as Record<string, unknown>, 'udp') as {keepAliveInterval?: NodeJS.Timeout} | undefined;
-        if (newUdp?.keepAliveInterval) {
-          clearInterval(newUdp.keepAliveInterval);
-        }
-      };
-
-      oldNetworking?.off('stateChange', networkStateChangeHandler);
-      newNetworking?.on('stateChange', networkStateChangeHandler);
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+      // The UDP keepalive holds the NAT mapping open and tells Discord the
+      // connection is still alive. Clearing it was a workaround for a bug in a
+      // much older voice release; on 0.19 suppressing it invites mid-track
+      // dropouts on long sessions. Kept behind an env flag so the old behaviour
+      // can be restored without a redeploy if this turns out to be wrong.
+      if (process.env.DISABLE_VOICE_KEEPALIVE?.trim() === 'true') {
+        this.suppressUdpKeepAlive(oldState, newState);
+      }
 
       if (newState.status === VoiceConnectionStatus.Ready) {
         this.reconnectAttempts = 0;
@@ -807,11 +801,21 @@ export default class Player {
 
     this.startPlaybackTelemetry();
 
-    // Start interval to increment position every second
+    // Derive position from how much audio the resource has actually played
+    // rather than counting wall-clock seconds, so a stall doesn't drift the
+    // reported position past what the listener heard.
+    this.positionAtStreamStart = this.positionInSeconds;
     this.playPositionInterval = setInterval(() => {
-      if (this.status === STATUS.PLAYING) {
-      this.positionInSeconds++;
+      if (this.status !== STATUS.PLAYING) {
+        return;
       }
+
+      if (!this.audioResource) {
+        this.positionInSeconds++;
+        return;
+      }
+
+      this.positionInSeconds = this.positionAtStreamStart + Math.floor(this.audioResource.playbackDuration / 1000);
     }, 1000);
   }
 
@@ -1060,6 +1064,23 @@ export default class Player {
     return Math.min(channelBitrateKbps, OPUS_MAX_BITRATE_KBPS);
   }
 
+  private suppressUdpKeepAlive(oldState: unknown, newState: unknown): void {
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+    const oldNetworking = Reflect.get(oldState as object, 'networking');
+    const newNetworking = Reflect.get(newState as object, 'networking');
+
+    const networkStateChangeHandler = (_: unknown, newNetworkState: unknown) => {
+      const newUdp = Reflect.get(newNetworkState as Record<string, unknown>, 'udp') as {keepAliveInterval?: NodeJS.Timeout} | undefined;
+      if (newUdp?.keepAliveInterval) {
+        clearInterval(newUdp.keepAliveInterval);
+      }
+    };
+
+    oldNetworking?.off('stateChange', networkStateChangeHandler);
+    newNetworking?.on('stateChange', networkStateChangeHandler);
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+  }
+
   private getOrCreateAudioPlayer(): AudioPlayer {
     this.audioPlayer ??= createAudioPlayer({
       behaviors: {
@@ -1282,6 +1303,9 @@ export default class Player {
   private prefetchNextSong(): void {
     const nextSong = this.queue[this.queuePosition + 1];
     if (!nextSong || nextSong.isLive || nextSong.source !== MediaSource.Starchild) {
+      // Only Starchild tracks can be fetched as a file ahead of time. Others
+      // (YouTube, HLS, attachments) are streamed straight from their origin, so
+      // there is nothing to warm - they rely on the read-ahead burst instead.
       return;
     }
 
