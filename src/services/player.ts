@@ -23,7 +23,8 @@ import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import ByteCounter from '../utils/byte-counter.js';
 import debug from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
@@ -129,6 +130,23 @@ export default class Player {
   private defaultVolume: number = DEFAULT_VOLUME;
   private nowPlaying: QueuedSong | null = null;
   private playPositionInterval: NodeJS.Timeout | undefined;
+  private telemetryInterval: NodeJS.Timeout | undefined;
+
+  // Playback telemetry: how far ahead ffmpeg has encoded, and how much
+  // playback time we lost to underruns. See startPlaybackTelemetry().
+  private activeStreamMeter: ByteCounter | null = null;
+  private activeStreamByteRate = 0;
+  private lastPlaybackDurationMs = 0;
+  private lastTelemetrySampleAt = 0;
+  private lostPlaybackMs = 0;
+
+  // When a guild ducks the music while people speak, gain has to change
+  // mid-track, which needs PCM in the chain. Every other guild gets Opus
+  // passthrough: ffmpeg's packets reach Discord without being decoded and
+  // re-encoded on the way.
+  private useLiveVolume = false;
+  private volumeRespawnTimer: NodeJS.Timeout | null = null;
+  private positionAtStreamStart = 0;
 
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
@@ -167,6 +185,7 @@ export default class Player {
     const {defaultVolume = DEFAULT_VOLUME} = settings;
     this.defaultVolume = defaultVolume;
     this.currentChannel = channel;
+    await this.refreshVolumeMode(settings);
 
     this.voiceConnection = joinVoiceChannel({
       channelId: channel.id,
@@ -182,22 +201,15 @@ export default class Player {
     const guildSettings = await getGuildSettings(this.guildId);
     this.applyDefaultLoopMode(guildSettings.defaultLoopMode);
 
-    // Workaround to disable keepAlive
     this.voiceConnection.on('stateChange', (oldState, newState) => {
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
-      const oldNetworking = Reflect.get(oldState, 'networking');
-      const newNetworking = Reflect.get(newState, 'networking');
-
-      const networkStateChangeHandler = (_: unknown, newNetworkState: unknown) => {
-        const newUdp = Reflect.get(newNetworkState as Record<string, unknown>, 'udp') as {keepAliveInterval?: NodeJS.Timeout} | undefined;
-        if (newUdp?.keepAliveInterval) {
-          clearInterval(newUdp.keepAliveInterval);
-        }
-      };
-
-      oldNetworking?.off('stateChange', networkStateChangeHandler);
-      newNetworking?.on('stateChange', networkStateChangeHandler);
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+      // The UDP keepalive holds the NAT mapping open and tells Discord the
+      // connection is still alive. Clearing it was a workaround for a bug in a
+      // much older voice release; on 0.19 suppressing it invites mid-track
+      // dropouts on long sessions. Kept behind an env flag so the old behaviour
+      // can be restored without a redeploy if this turns out to be wrong.
+      if (process.env.DISABLE_VOICE_KEEPALIVE?.trim() === 'true') {
+        this.suppressUdpKeepAlive(oldState, newState);
+      }
 
       if (newState.status === VoiceConnectionStatus.Ready) {
         this.reconnectAttempts = 0;
@@ -319,6 +331,8 @@ export default class Player {
     }
 
     try {
+      await this.refreshVolumeMode();
+
       let positionSeconds: number | undefined;
       let to: number | undefined;
       if (currentSong.offset !== undefined) {
@@ -594,7 +608,35 @@ export default class Player {
   setVolume(level: number): void {
     // Level should be a number between 0 and 100 = 0% => 100%
     this.volume = level;
-    this.setAudioPlayerVolume(level);
+
+    if (this.useLiveVolume) {
+      this.setAudioPlayerVolume(level);
+      return;
+    }
+
+    // Passthrough has no volume transformer to talk to, so the new gain has to
+    // be baked into a fresh ffmpeg process. Debounced, because a user holding
+    // the volume button would otherwise respawn the stream on every press.
+    this.scheduleVolumeRespawn();
+  }
+
+  private scheduleVolumeRespawn(): void {
+    if (this.volumeRespawnTimer) {
+      clearTimeout(this.volumeRespawnTimer);
+    }
+
+    this.volumeRespawnTimer = setTimeout(() => {
+      this.volumeRespawnTimer = null;
+
+      const currentSong = this.getCurrent();
+      if (this.status !== STATUS.PLAYING || !currentSong || currentSong.isLive) {
+        // Live streams cannot be restarted at a position; the new volume
+        // applies from the next track.
+        return;
+      }
+
+      this.safeAsync(this.seek(this.getPosition()));
+    }, VOLUME_RESPAWN_DEBOUNCE_MS);
   }
 
   getVolume(): number {
@@ -757,11 +799,23 @@ export default class Player {
       clearInterval(this.playPositionInterval);
     }
 
-    // Start interval to increment position every second
+    this.startPlaybackTelemetry();
+
+    // Derive position from how much audio the resource has actually played
+    // rather than counting wall-clock seconds, so a stall doesn't drift the
+    // reported position past what the listener heard.
+    this.positionAtStreamStart = this.positionInSeconds;
     this.playPositionInterval = setInterval(() => {
-      if (this.status === STATUS.PLAYING) {
-      this.positionInSeconds++;
+      if (this.status !== STATUS.PLAYING) {
+        return;
       }
+
+      if (!this.audioResource) {
+        this.positionInSeconds++;
+        return;
+      }
+
+      this.positionInSeconds = this.positionAtStreamStart + Math.floor(this.audioResource.playbackDuration / 1000);
     }, 1000);
   }
 
@@ -769,6 +823,60 @@ export default class Player {
     if (this.playPositionInterval) {
       clearInterval(this.playPositionInterval);
       this.playPositionInterval = undefined;
+    }
+
+    this.stopPlaybackTelemetry();
+  }
+
+  /**
+   * Samples the two numbers that distinguish a network problem from a CPU one:
+   *
+   * - cushion: seconds of audio ffmpeg has encoded but the player hasn't reached
+   *   yet. Should climb after a track starts. Pinned near zero means the input
+   *   is being read at playback speed and there is nothing to absorb jitter.
+   * - lost: milliseconds of wall time in which playback did not advance, i.e.
+   *   audible stutter. Non-zero while the cushion is healthy points at the
+   *   event loop rather than the network.
+   */
+  private startPlaybackTelemetry(): void {
+    this.stopPlaybackTelemetry();
+
+    this.lastPlaybackDurationMs = this.audioResource?.playbackDuration ?? 0;
+    this.lastTelemetrySampleAt = Date.now();
+    this.lostPlaybackMs = 0;
+
+    this.telemetryInterval = setInterval(() => {
+      const resource = this.audioResource;
+      if (!resource || this.status !== STATUS.PLAYING) {
+        return;
+      }
+
+      const now = Date.now();
+      const wallElapsedMs = now - this.lastTelemetrySampleAt;
+      const playedMs = resource.playbackDuration - this.lastPlaybackDurationMs;
+      this.lastTelemetrySampleAt = now;
+      this.lastPlaybackDurationMs = resource.playbackDuration;
+
+      // Only count a shortfall as lost audio; scheduling can also make a tick
+      // arrive late, which shows up as playing more than the wall clock.
+      const shortfallMs = Math.max(0, wallElapsedMs - playedMs);
+      this.lostPlaybackMs += shortfallMs;
+
+      const producedSeconds = this.activeStreamMeter && this.activeStreamByteRate > 0
+        ? this.activeStreamMeter.bytes / this.activeStreamByteRate
+        : null;
+      const cushionSeconds = producedSeconds === null
+        ? null
+        : producedSeconds - (resource.playbackDuration / 1000);
+
+      debug(`[audio] guild=${this.guildId} cushion=${cushionSeconds === null ? 'n/a' : `${cushionSeconds.toFixed(1)}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+    }, PLAYBACK_TELEMETRY_INTERVAL_MS);
+  }
+
+  private stopPlaybackTelemetry(): void {
+    if (this.telemetryInterval) {
+      clearInterval(this.telemetryInterval);
+      this.telemetryInterval = undefined;
     }
   }
 
@@ -778,6 +886,13 @@ export default class Player {
    */
   setNowPlayingMessage(message: Message | null): void {
     this.nowPlayingMessage = message;
+  }
+
+  /**
+   * Returns the message currently rendering the now-playing embed, if any.
+   */
+  getNowPlayingMessage(): Message | null {
+    return this.nowPlayingMessage;
   }
 
   getAiSuggestions(): string[] {
@@ -924,6 +1039,48 @@ export default class Player {
     }
   }
 
+  /**
+   * Decides whether this guild needs a live volume control in the audio
+   * pipeline. Only ducking requires one; everything else can bake gain into
+   * ffmpeg and skip the decode/re-encode round trip entirely.
+   */
+  private async refreshVolumeMode(settings?: Setting): Promise<void> {
+    const guildSettings = settings ?? await getGuildSettings(this.guildId);
+    this.useLiveVolume = guildSettings.turnDownVolumeWhenPeopleSpeak;
+  }
+
+  /**
+   * Opus bitrate for the channel we are actually in.
+   *
+   * Voice channels run at 64 kbps unboosted and reach 384 kbps only with server
+   * boosts. Encoding above the channel's rate does not raise the ceiling, it
+   * just makes packets the link may not be provisioned for.
+   */
+  private getOpusBitrateKbps(): number {
+    const channelBitrateKbps = this.currentChannel?.bitrate
+      ? Math.round(this.currentChannel.bitrate / 1000)
+      : OPUS_FALLBACK_BITRATE_KBPS;
+
+    return Math.min(channelBitrateKbps, OPUS_MAX_BITRATE_KBPS);
+  }
+
+  private suppressUdpKeepAlive(oldState: unknown, newState: unknown): void {
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+    const oldNetworking = Reflect.get(oldState as object, 'networking');
+    const newNetworking = Reflect.get(newState as object, 'networking');
+
+    const networkStateChangeHandler = (_: unknown, newNetworkState: unknown) => {
+      const newUdp = Reflect.get(newNetworkState as Record<string, unknown>, 'udp') as {keepAliveInterval?: NodeJS.Timeout} | undefined;
+      if (newUdp?.keepAliveInterval) {
+        clearInterval(newUdp.keepAliveInterval);
+      }
+    };
+
+    oldNetworking?.off('stateChange', networkStateChangeHandler);
+    newNetworking?.on('stateChange', networkStateChangeHandler);
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+  }
+
   private getOrCreateAudioPlayer(): AudioPlayer {
     this.audioPlayer ??= createAudioPlayer({
       behaviors: {
@@ -971,7 +1128,16 @@ export default class Player {
     }
   }
 
-  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm'}): Promise<Readable> {
+    // Callers don't pick the format; the guild's volume mode does. Resolving it
+    // here keeps every call site in getStream() consistent.
+    const outputFormat = options.outputFormat ?? (this.useLiveVolume ? 'pcm' : 'opus');
+    const opusBitrateKbps = this.getOpusBitrateKbps();
+    const volumeAdjustment = options.volumeAdjustment
+      ?? (outputFormat === 'opus' && this.getVolume() !== VOLUME_MAX
+        ? (this.getVolume() / VOLUME_MAX).toString()
+        : undefined);
+
     return new Promise((resolve, reject) => {
       const capacitor = new WriteStream();
 
@@ -986,22 +1152,63 @@ export default class Player {
 
       // Determine if input is a file path or URL
       const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
-      const inputOptions = options?.ffmpegInputOptions ?? (isFile ? [] : ['-re']);
+
+      // Network inputs burst a cushion, then settle to a rate that keeps
+      // rebuilding it. Reading at exactly 1x (-re) leaves nothing buffered, so
+      // any jitter becomes an underrun. Local files are already instant.
+      const readAhead = isFile
+        ? []
+        : ['-readrate', STREAM_READ_RATE.toString(), '-readrate_initial_burst', STREAM_READ_BURST_SECONDS.toString()];
+
+      // Concatenate rather than replace: seeking passes -ss, which previously
+      // discarded the pacing flags entirely and made seek behave differently
+      // from normal playback.
+      const inputOptions = [...readAhead, ...(options?.ffmpegInputOptions ?? [])];
+
+      // Gain is baked in here on the passthrough path, since there is no volume
+      // transformer downstream to apply it. A filter is only added when there is
+      // actually an adjustment to make.
+      const volumeFilter = volumeAdjustment === undefined
+        ? []
+        : ['-filter:a', `volume=${volumeAdjustment}`];
+
+      const outputOptions = outputFormat === 'pcm'
+        ? [
+          '-vn',
+          '-f', 's16le',
+          '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
+          '-ac', DISCORD_CHANNEL_COUNT.toString(),
+          ...volumeFilter,
+        ]
+        : [
+          '-vn',
+          '-c:a', 'libopus',
+          '-b:a', `${opusBitrateKbps}k`,
+          '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
+          '-ac', DISCORD_CHANNEL_COUNT.toString(),
+          // Our packets are what listeners receive on the passthrough path, so
+          // in-band FEC lets their clients rebuild ones that go missing.
+          '-packet_loss', OPUS_EXPECTED_PACKET_LOSS_PERCENT.toString(),
+          '-fec', '1',
+          '-f', 'webm',
+          ...volumeFilter,
+        ];
 
       const ff = new FFmpeggy({
         input: options.url,
         inputOptions,
         pipe: true,
-        outputOptions: [
-          '-vn',
-          '-c:a', 'libopus',
-          '-b:a', `${OPUS_OUTPUT_BITRATE_KBPS}k`,
-          '-f', 'webm',
-          '-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`,
-        ],
+        outputOptions,
         overwriteExisting: true,
       });
-      ff.toStream().pipe(capacitor as unknown as NodeJS.WritableStream);
+      // Measure how much audio ffmpeg has produced, so telemetry can report the
+      // cushion between the encoder and the player.
+      const meter = new ByteCounter();
+      this.activeStreamMeter = meter;
+      this.activeStreamByteRate = outputFormat === 'pcm'
+        ? PCM_BYTES_PER_SECOND
+        : (opusBitrateKbps * 1000) / 8;
+      ff.toStream().pipe(meter).pipe(capacitor as unknown as NodeJS.WritableStream);
 
       ff
         .on('error', (error: Error) => {
@@ -1052,9 +1259,20 @@ export default class Player {
   }
 
   private createAudioStream(stream: Readable) {
+    // Asking for Opus input *and* a volume control forces the library to insert
+    // a decoder, a volume transformer and an encoder - the stream is torn down
+    // to samples and rebuilt for no benefit. Only take that cost where live
+    // gain is actually needed; otherwise hand Discord the packets as they are.
+    if (this.useLiveVolume) {
+      return createAudioResource(stream, {
+        inputType: StreamType.Raw,
+        inlineVolume: true,
+      });
+    }
+
     return createAudioResource(stream, {
       inputType: StreamType.WebmOpus,
-      inlineVolume: true,
+      inlineVolume: false,
     });
   }
 
@@ -1085,6 +1303,9 @@ export default class Player {
   private prefetchNextSong(): void {
     const nextSong = this.queue[this.queuePosition + 1];
     if (!nextSong || nextSong.isLive || nextSong.source !== MediaSource.Starchild) {
+      // Only Starchild tracks can be fetched as a file ahead of time. Others
+      // (YouTube, HLS, attachments) are streamed straight from their origin, so
+      // there is nothing to warm - they rely on the read-ahead burst instead.
       return;
     }
 
@@ -1122,7 +1343,7 @@ export default class Player {
     }
   }
 
-  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm'}): Promise<Readable> {
     const maxRetries = STREAM_CREATE_MAX_RETRIES;
     let attempt = 0;
     let lastError: unknown;

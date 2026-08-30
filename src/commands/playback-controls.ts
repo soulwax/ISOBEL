@@ -6,11 +6,13 @@ import { inject, injectable } from 'inversify';
 import { URL } from 'node:url';
 import type PlayerManager from '../managers/player.js';
 import type AddQueryToQueue from '../services/add-query-to-queue.js';
+import type Player from '../services/player.js';
 import { MediaSource, STATUS, type SongMetadata } from '../services/player.js';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed, buildQueueEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel } from '../utils/channels.js';
-import errorMsg from '../utils/error-msg.js';
+import { QUEUE_PAGE_SIZE_DEFAULT, SEEK_STEP_SECONDS, VOLUME_MAX, VOLUME_MIN, VOLUME_STEP } from '../utils/constants.js';
+import errorMsg, { formatError } from '../utils/error-msg.js';
 import type Command from './index.js';
 
 @injectable()
@@ -21,7 +23,25 @@ export default class PlaybackControls implements Command {
     .setName('playback-controls')
     .setDescription('internal playback controls');
 
-  public readonly handledButtonIds = ['playback:toggle', 'playback:prev', 'playback:next', 'playback:search', 'playback:stop', 'playback:seek', 'playback:suggest'] as const;
+  public readonly handledButtonIds = [
+    // Row 1: transport
+    'playback:prev',
+    'playback:rewind',
+    'playback:toggle',
+    'playback:fastforward',
+    'playback:next',
+    // Row 2: mix
+    'playback:loop',
+    'playback:shuffle',
+    'playback:volume-down',
+    'playback:volume-up',
+    'playback:stop',
+    // Row 3: library
+    'playback:search',
+    'playback:queue',
+    'playback:seek',
+    'playback:suggest',
+  ] as const;
 
   private readonly playerManager: PlayerManager;
   private readonly addQueryToQueue: AddQueryToQueue;
@@ -43,37 +63,88 @@ export default class PlaybackControls implements Command {
       return;
     }
 
+    const player = this.playerManager.get(interaction.guild.id);
+
+    // Peeking at the queue changes nothing, so it doesn't require being in the voice channel.
+    if (interaction.customId === 'playback:queue') {
+      await this.showQueue(interaction, player);
+      return;
+    }
+
     if (!getMemberVoiceChannel(interaction.member as GuildMember)) {
       await interaction.reply({content: errorMsg('You must be in a voice channel'), flags: MessageFlags.Ephemeral});
       return;
     }
-
-    const player = this.playerManager.get(interaction.guild.id);
 
     switch (interaction.customId) {
       case 'playback:toggle':
         if (player.status === STATUS.PLAYING) {
           player.pause();
         } else {
-          await player.play();
+          // Resuming can rebuild the stream, which takes longer than the 3s ack window.
+          await interaction.deferUpdate();
+          await this.runPlayerAction(interaction, () => player.play());
         }
+
         break;
       case 'playback:prev':
-        if (player.canGoBack()) {
-          await player.back();
-        } else {
+        if (!player.canGoBack()) {
           await interaction.reply({content: errorMsg('No previous song in queue'), flags: MessageFlags.Ephemeral});
           return;
         }
+
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => player.back());
         break;
       case 'playback:next':
-        if (player.canGoForward(1)) {
-          await player.forward(1);
-        } else {
+        if (!player.canGoForward(1)) {
           await interaction.reply({content: errorMsg('No next song in queue'), flags: MessageFlags.Ephemeral});
           return;
         }
+
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => player.forward(1));
         break;
+      case 'playback:rewind':
+      case 'playback:fastforward': {
+        const step = interaction.customId === 'playback:rewind' ? -SEEK_STEP_SECONDS : SEEK_STEP_SECONDS;
+        const target = this.getSeekTarget(player, step);
+
+        if (target === null) {
+          await interaction.reply({content: errorMsg('This track can\'t be seeked'), flags: MessageFlags.Ephemeral});
+          return;
+        }
+
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => player.seek(target));
+        break;
+      }
+
+      case 'playback:loop':
+        if (!player.getCurrent()) {
+          await interaction.reply({content: errorMsg('Nothing is playing'), flags: MessageFlags.Ephemeral});
+          return;
+        }
+
+        this.cycleLoopMode(player);
+        break;
+      case 'playback:shuffle':
+        if (player.queueSize() < 2) {
+          await interaction.reply({content: errorMsg('Not enough songs queued to shuffle'), flags: MessageFlags.Ephemeral});
+          return;
+        }
+
+        player.shuffle();
+        break;
+      case 'playback:volume-down':
+      case 'playback:volume-up': {
+        const step = interaction.customId === 'playback:volume-up' ? VOLUME_STEP : -VOLUME_STEP;
+        const volume = Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, player.getVolume() + step));
+
+        player.setVolume(volume);
+        break;
+      }
+
       case 'playback:search': {
         const modal = new ModalBuilder()
           .setCustomId('playback:search')
@@ -93,6 +164,7 @@ export default class PlaybackControls implements Command {
         await interaction.showModal(modal);
         return;
       }
+
       case 'playback:stop':
         player.stop();
         break;
@@ -115,32 +187,12 @@ export default class PlaybackControls implements Command {
         await interaction.showModal(modal);
         return;
       }
+
       default:
         return;
     }
 
-    try {
-      const currentSong = player.getCurrent();
-      if (currentSong) {
-        player.setNowPlayingMessage(interaction.message);
-        await interaction.update({
-          embeds: [buildPlayingMessageEmbed(player)],
-          components: buildPlaybackControls(player),
-        });
-      } else {
-        player.setNowPlayingMessage(null);
-        await interaction.update({
-          content: 'Playback stopped.',
-          embeds: [],
-          components: [],
-        });
-      }
-    } catch {
-      // If message was deleted or can't be updated, fall back to ack.
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferUpdate();
-      }
-    }
+    await this.refreshNowPlaying(interaction, player);
   }
 
   public async handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
@@ -252,6 +304,119 @@ export default class PlaybackControls implements Command {
       shouldSplitChapters: false,
       skipCurrentTrack: false,
     });
+  }
+
+  /**
+   * Re-renders the now-playing message the pressed button belongs to.
+   */
+  private async refreshNowPlaying(interaction: ButtonInteraction, player: Player): Promise<void> {
+    const activeMessage = player.getNowPlayingMessage();
+
+    // Starting a new track posts a fresh now-playing message, so only claim the
+    // pressed message when the player isn't already animating a different one.
+    const ownsMessage = !activeMessage || activeMessage.id === interaction.message.id;
+
+    try {
+      if (player.getCurrent()) {
+        if (ownsMessage) {
+          player.setNowPlayingMessage(interaction.message);
+        }
+
+        const payload = {
+          content: null,
+          embeds: [buildPlayingMessageEmbed(player)],
+          components: buildPlaybackControls(player),
+        };
+
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(payload);
+        } else {
+          await interaction.update(payload);
+        }
+      } else {
+        player.setNowPlayingMessage(null);
+        const payload = {content: '⏹️ Playback stopped.', embeds: [], components: []};
+
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(payload);
+        } else {
+          await interaction.update(payload);
+        }
+      }
+    } catch {
+      // If message was deleted or can't be updated, fall back to ack.
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferUpdate();
+      }
+    }
+  }
+
+  private async showQueue(interaction: ButtonInteraction, player: Player): Promise<void> {
+    if (!player.getCurrent()) {
+      await interaction.reply({content: errorMsg('Nothing is playing'), flags: MessageFlags.Ephemeral});
+      return;
+    }
+
+    await interaction.reply({
+      embeds: [buildQueueEmbed(player, 1, QUEUE_PAGE_SIZE_DEFAULT)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  /**
+   * Runs a playback action that can fail (stream errors, lost connection) without
+   * clobbering the now-playing message with an error string.
+   */
+  private async runPlayerAction(interaction: ButtonInteraction, action: () => Promise<void>): Promise<void> {
+    try {
+      await action();
+    } catch (error: unknown) {
+      const content = errorMsg(formatError(error));
+
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.followUp({content, flags: MessageFlags.Ephemeral});
+        } else {
+          await interaction.reply({content, flags: MessageFlags.Ephemeral});
+        }
+      } catch {
+        // The interaction may already be gone; nothing else we can do.
+      }
+    }
+  }
+
+  /**
+   * Cycles loop mode: off -> track -> queue -> off, skipping queue looping
+   * when there's nothing queued to loop.
+   */
+  private cycleLoopMode(player: Player): void {
+    if (player.loopCurrentSong) {
+      player.loopCurrentSong = false;
+      player.loopCurrentQueue = player.queueSize() > 0;
+      return;
+    }
+
+    if (player.loopCurrentQueue) {
+      player.loopCurrentQueue = false;
+      return;
+    }
+
+    player.loopCurrentSong = true;
+  }
+
+  /**
+   * Clamps a relative seek to the bounds of the current song, or returns null
+   * when the current song can't be seeked (live streams, unknown length).
+   */
+  private getSeekTarget(player: Player, deltaSeconds: number): number | null {
+    const song = player.getCurrent();
+
+    if (!song || song.isLive || song.length <= 0) {
+      return null;
+    }
+
+    const maxPosition = Math.max(0, song.length - 1);
+    return Math.min(Math.max(player.getPosition() + deltaSeconds, 0), maxPosition);
   }
 
   private parseSeekInput(value: string): number | null {
