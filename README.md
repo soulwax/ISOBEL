@@ -36,11 +36,11 @@ The second big change is that this bot is coming with its own web interface for 
 
 ## Features
 
-- 🎵 **High-Quality Audio**: 320kbps MP3 source with 192kbps Opus output for crystal-clear sound
+- 🎵 **High-Quality Audio**: 320kbps MP3 source, encoded to Opus exactly once and handed to Discord untouched — no decode/re-encode round trip
 - ⏹️ **Animated Progress Bar**: Real-time updating progress bars in Discord embeds
 - 🎥 **Livestream Support**: Stream HLS live audio feeds
 - ⏩ **Seeking**: Seek to any position within a song
-- 💾 **Advanced Caching**: Local MP3 caching for instant playback and better performance
+- 💾 **Advanced Caching**: Caches both the source MP3 *and* the encoded Opus, so a replay costs no CPU at all
 - 📋 **No Vote-to-Skip**: This is anarchy, not a democracy
 - 🎶 **Songbird API**: Streams directly from the Songbird Music API (no YouTube or Spotify required)
 - ↗️ **Custom Shortcuts**: Users can add custom shortcuts (aliases) for quick access
@@ -50,6 +50,56 @@ The second big change is that this bot is coming with its own web interface for 
 - 🌐 **Web Interface**: Optional web UI for managing settings and favorites
 - ✍️ **TypeScript**: Written in TypeScript with full type safety, easily extendable
 - ❤️ **Loyal Packers fan**
+
+## 🔊 The Audio Pipeline
+
+Most self-hosted music bots pipe ffmpeg into discord.js and call it done. That path quietly decodes and
+re-encodes your audio on the way out, and reads the network at exactly 1× so there is nothing buffered when
+the connection hiccups. ISOBEL does neither.
+
+**The way it usually goes:**
+
+```
+MP3 320k ──► ffmpeg ──► Opus ──► decode ──► PCM ──► volume ──► re-encode ──► Discord
+              │                  └──────────── third lossy generation, every 20ms,
+              │                               on the same thread as everything else
+              └─ -re: reads at 1×, so the buffer never gets ahead
+```
+
+**What ISOBEL actually does:**
+
+```
+MP3 320k ──► ffmpeg ──► Opus (cached) ─────────────────────────────────► Discord
+              │            └─ packets pass straight through, untouched
+              └─ bursts 15s ahead, then paces at 1.5×
+```
+
+| | Typical bot | ISOBEL |
+|---|---|---|
+| Lossy generations | 3 | **2** |
+| Opus encodes per play | 2 | **0** (cached) / 1 (first play) |
+| CPU per replay, 4-min track | 10.9s | **0.00s** |
+| Seeking | full re-encode | **remux**, 1.0s, no quality loss |
+| Buffer cushion | ~0s | **~15s** |
+
+- **Opus passthrough.** Asking for Opus input *and* a volume control forces a decoder, a volume transformer
+  and an encoder into the chain — the stream gets torn down to samples and rebuilt for nothing. ISOBEL skips
+  all three and hands Discord the packets ffmpeg produced. Guilds using voice ducking take a single-encode
+  PCM path instead, because live gain genuinely needs PCM.
+- **Encoded once, not once per play.** The cache holds the finished Opus, not just the source. Replaying a
+  track is a file read — no ffmpeg process, no encode, no encoder start latency. Seeking remuxes with
+  `-c:a copy`, so it costs no encode and adds no generation. The next track in the queue is encoded while
+  the current one is still playing.
+- **Encoded for the channel you're in.** Bitrate follows `channel.bitrate` (64/96/128k) instead of a
+  hardcoded number. Encoding above what the channel is provisioned for doesn't raise the ceiling — it just
+  makes packets the link can't carry.
+- **In-band FEC.** Because the packets reach listeners as-is, libopus forward error correction is on, and
+  their clients can rebuild dropped ones. Impossible if something re-encodes downstream.
+- **Measured, not vibes.** `GET /health` reports `cushionSeconds`, `lostPlaybackMs` and `playbackPath` per
+  playing guild. `DEBUG=ISOBEL:audio` prints the same once a second.
+
+Two ceilings are not ours to raise: the Songbird API tops out at 320kbps MP3, and Discord's channel bitrate
+is whatever your boost level says. Everything between those two, we stopped wasting.
 
 ## Table of Contents
 
@@ -193,7 +243,17 @@ SPONSORBLOCK_TIMEOUT=5
 # SONGBIRD_NEXT_URL=             # Alternative Songbird API URL
 # REGISTER_COMMANDS_ON_BOT=false # Global vs per-guild command registration
 NODE_ENV=production              # Usually set by PM2/Docker automatically
+
+# Audio Pipeline
+# DEBUG=ISOBEL:audio             # Print cushion/stutter telemetry once a second per playing guild
+# DISABLE_VOICE_KEEPALIVE=true   # Escape hatch: suppress the voice UDP keepalive again.
+                                 # Only set this if long sessions start dropping - the keepalive
+                                 # is what holds the NAT mapping open.
 ```
+
+> **Cache sizing:** `CACHE_LIMIT` now covers both the source MP3 *and* the encoded Opus artifact for each
+> track (roughly +28% per track, e.g. 9.2MB → 11.8MB for 4 minutes). That artifact is what makes replays
+> cost no CPU, so give the cache room rather than trimming it.
 
 ### Web Interface Variables (Optional)
 
@@ -646,11 +706,37 @@ pnpm health
 ```json
 {
   "status": "ok",
+  "ready": true,
+  "guilds": 5,
+  "guildList": [{ "id": "844108947002359851", "name": "Symphony of the Mind", "icon": "bc7d1d..." }],
+  "nowPlaying": [
+    {
+      "title": "Isobel",
+      "artist": "Björk",
+      "thumbnailUrl": null,
+      "position": 42,
+      "length": 245,
+      "isLive": false,
+      "cushionSeconds": 14.8,
+      "lostPlaybackMs": 0,
+      "playbackPath": "cache"
+    }
+  ],
   "uptime": 123456,
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "version": "2.12.0"
+  "uptimeFormatted": "2m 3s",
+  "timestamp": "2026-08-30T04:15:00.000Z"
 }
 ```
+
+**Reading the audio telemetry** (the three fields on each `nowPlaying` entry):
+
+| Field | What it means |
+|---|---|
+| `cushionSeconds` | Audio encoded ahead of the player. Should climb toward ~15s after a track starts. Pinned near zero means the read-ahead isn't working. `null` on `"cache"` playback — there is no encoder to run ahead of a file on disk. |
+| `lostPlaybackMs` | Wall time in which playback did not advance, i.e. audible stutter. Should stay at 0. Non-zero *while the cushion is healthy* points at the event loop, not the network. |
+| `playbackPath` | `"cache"` = replayed from the encoded artifact, no ffmpeg. `"remux"` = seeking a cached artifact. `"encode"` = first play, encoding live. |
+
+`DEBUG=ISOBEL:audio` prints the same three once a second per playing guild.
 
 ### Web Health Check
 
