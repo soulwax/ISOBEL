@@ -82,12 +82,12 @@ PATH = ${tomlString(buildPath(app.cwd))}
 const content = `version = 1
 
 [defaults]
-restart_policy = "on_failure"
-max_restarts = 10
-crash_restart_limit = 3
-restart_delay_secs = 4
+restart_policy = "always"
+max_restarts = 50
+crash_restart_limit = 10
+restart_delay_secs = 5
 stop_signal = "SIGTERM"
-stop_timeout_secs = 5
+stop_timeout_secs = 15
 
 ${apps.map(app => renderApp(app)).join('\n')}`;
 

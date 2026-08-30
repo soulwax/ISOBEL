@@ -25,6 +25,9 @@ const client = postgres(databaseUrl, {
   // For serverless, connections are short-lived, so we don't need a large pool
 });
 
+// Exported so shutdown handlers can drain the pool before the process exits.
+export const sqlClient = client;
+
 export const db = drizzle(client, { schema });
 
 export type Database = typeof db;

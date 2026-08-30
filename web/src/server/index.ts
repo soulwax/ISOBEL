@@ -6,6 +6,7 @@ loadEnvWithSafeguard();
 import { logger } from "../lib/logger";
 import { validateEnv, getEnv } from "../lib/env";
 import { createApp } from "./app";
+import { installCrashHandlers, installGracefulShutdown } from "../lib/shutdown";
 
 // Validate environment variables at startup
 try {
@@ -23,6 +24,9 @@ const app = createApp();
 const PORT = getEnv("API_PORT", "3003");
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`API server running on http://localhost:${PORT}`);
 });
+
+installGracefulShutdown(server, "api");
+installCrashHandlers("api");
