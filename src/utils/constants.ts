@@ -39,7 +39,17 @@ export const QUEUE_PAGE_SIZE_MAX = 30;
 /**
  * Progress bar segment count
  */
-export const PROGRESS_BAR_SEGMENTS = 10;
+export const PROGRESS_BAR_SEGMENTS = 16;
+
+/**
+ * Seconds skipped by the rewind/fast-forward playback buttons
+ */
+export const SEEK_STEP_SECONDS = 15;
+
+/**
+ * Volume percentage step for the volume up/down playback buttons
+ */
+export const VOLUME_STEP = 10;
 
 /**
  * Audio player max missed frames (for livestreams)

@@ -780,6 +780,13 @@ export default class Player {
     this.nowPlayingMessage = message;
   }
 
+  /**
+   * Returns the message currently rendering the now-playing embed, if any.
+   */
+  getNowPlayingMessage(): Message | null {
+    return this.nowPlayingMessage;
+  }
+
   getAiSuggestions(): string[] {
     return this.aiSuggestions;
   }
