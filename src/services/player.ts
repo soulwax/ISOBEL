@@ -23,7 +23,7 @@ import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, OPUS_OUTPUT_BITRATE_KBPS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
@@ -140,6 +140,13 @@ export default class Player {
   private lastTelemetrySampleAt = 0;
   private lostPlaybackMs = 0;
 
+  // When a guild ducks the music while people speak, gain has to change
+  // mid-track, which needs PCM in the chain. Every other guild gets Opus
+  // passthrough: ffmpeg's packets reach Discord without being decoded and
+  // re-encoded on the way.
+  private useLiveVolume = false;
+  private volumeRespawnTimer: NodeJS.Timeout | null = null;
+
   private positionInSeconds = 0;
   private readonly fileCache: FileCacheProvider;
   private readonly starchildAPI: StarchildAPI;
@@ -177,6 +184,7 @@ export default class Player {
     const {defaultVolume = DEFAULT_VOLUME} = settings;
     this.defaultVolume = defaultVolume;
     this.currentChannel = channel;
+    await this.refreshVolumeMode(settings);
 
     this.voiceConnection = joinVoiceChannel({
       channelId: channel.id,
@@ -329,6 +337,8 @@ export default class Player {
     }
 
     try {
+      await this.refreshVolumeMode();
+
       let positionSeconds: number | undefined;
       let to: number | undefined;
       if (currentSong.offset !== undefined) {
@@ -604,7 +614,35 @@ export default class Player {
   setVolume(level: number): void {
     // Level should be a number between 0 and 100 = 0% => 100%
     this.volume = level;
-    this.setAudioPlayerVolume(level);
+
+    if (this.useLiveVolume) {
+      this.setAudioPlayerVolume(level);
+      return;
+    }
+
+    // Passthrough has no volume transformer to talk to, so the new gain has to
+    // be baked into a fresh ffmpeg process. Debounced, because a user holding
+    // the volume button would otherwise respawn the stream on every press.
+    this.scheduleVolumeRespawn();
+  }
+
+  private scheduleVolumeRespawn(): void {
+    if (this.volumeRespawnTimer) {
+      clearTimeout(this.volumeRespawnTimer);
+    }
+
+    this.volumeRespawnTimer = setTimeout(() => {
+      this.volumeRespawnTimer = null;
+
+      const currentSong = this.getCurrent();
+      if (this.status !== STATUS.PLAYING || !currentSong || currentSong.isLive) {
+        // Live streams cannot be restarted at a position; the new volume
+        // applies from the next track.
+        return;
+      }
+
+      this.safeAsync(this.seek(this.getPosition()));
+    }, VOLUME_RESPAWN_DEBOUNCE_MS);
   }
 
   getVolume(): number {
@@ -997,6 +1035,16 @@ export default class Player {
     }
   }
 
+  /**
+   * Decides whether this guild needs a live volume control in the audio
+   * pipeline. Only ducking requires one; everything else can bake gain into
+   * ffmpeg and skip the decode/re-encode round trip entirely.
+   */
+  private async refreshVolumeMode(settings?: Setting): Promise<void> {
+    const guildSettings = settings ?? await getGuildSettings(this.guildId);
+    this.useLiveVolume = guildSettings.turnDownVolumeWhenPeopleSpeak;
+  }
+
   private getOrCreateAudioPlayer(): AudioPlayer {
     this.audioPlayer ??= createAudioPlayer({
       behaviors: {
@@ -1044,7 +1092,15 @@ export default class Player {
     }
   }
 
-  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm'}): Promise<Readable> {
+    // Callers don't pick the format; the guild's volume mode does. Resolving it
+    // here keeps every call site in getStream() consistent.
+    const outputFormat = options.outputFormat ?? (this.useLiveVolume ? 'pcm' : 'opus');
+    const volumeAdjustment = options.volumeAdjustment
+      ?? (outputFormat === 'opus' && this.getVolume() !== VOLUME_MAX
+        ? (this.getVolume() / VOLUME_MAX).toString()
+        : undefined);
+
     return new Promise((resolve, reject) => {
       const capacitor = new WriteStream();
 
@@ -1072,24 +1128,45 @@ export default class Player {
       // from normal playback.
       const inputOptions = [...readAhead, ...(options?.ffmpegInputOptions ?? [])];
 
+      // Gain is baked in here on the passthrough path, since there is no volume
+      // transformer downstream to apply it. A filter is only added when there is
+      // actually an adjustment to make.
+      const volumeFilter = volumeAdjustment === undefined
+        ? []
+        : ['-filter:a', `volume=${volumeAdjustment}`];
+
+      const outputOptions = outputFormat === 'pcm'
+        ? [
+          '-vn',
+          '-f', 's16le',
+          '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
+          '-ac', DISCORD_CHANNEL_COUNT.toString(),
+          ...volumeFilter,
+        ]
+        : [
+          '-vn',
+          '-c:a', 'libopus',
+          '-b:a', `${OPUS_OUTPUT_BITRATE_KBPS}k`,
+          '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
+          '-ac', DISCORD_CHANNEL_COUNT.toString(),
+          '-f', 'webm',
+          ...volumeFilter,
+        ];
+
       const ff = new FFmpeggy({
         input: options.url,
         inputOptions,
         pipe: true,
-        outputOptions: [
-          '-vn',
-          '-c:a', 'libopus',
-          '-b:a', `${OPUS_OUTPUT_BITRATE_KBPS}k`,
-          '-f', 'webm',
-          '-filter:a', `volume=${options?.volumeAdjustment ?? '1'}`,
-        ],
+        outputOptions,
         overwriteExisting: true,
       });
       // Measure how much audio ffmpeg has produced, so telemetry can report the
       // cushion between the encoder and the player.
       const meter = new ByteCounter();
       this.activeStreamMeter = meter;
-      this.activeStreamByteRate = (OPUS_OUTPUT_BITRATE_KBPS * 1000) / 8;
+      this.activeStreamByteRate = outputFormat === 'pcm'
+        ? PCM_BYTES_PER_SECOND
+        : (OPUS_OUTPUT_BITRATE_KBPS * 1000) / 8;
       ff.toStream().pipe(meter).pipe(capacitor as unknown as NodeJS.WritableStream);
 
       ff
@@ -1141,9 +1218,20 @@ export default class Player {
   }
 
   private createAudioStream(stream: Readable) {
+    // Asking for Opus input *and* a volume control forces the library to insert
+    // a decoder, a volume transformer and an encoder - the stream is torn down
+    // to samples and rebuilt for no benefit. Only take that cost where live
+    // gain is actually needed; otherwise hand Discord the packets as they are.
+    if (this.useLiveVolume) {
+      return createAudioResource(stream, {
+        inputType: StreamType.Raw,
+        inlineVolume: true,
+      });
+    }
+
     return createAudioResource(stream, {
       inputType: StreamType.WebmOpus,
-      inlineVolume: true,
+      inlineVolume: false,
     });
   }
 
@@ -1211,7 +1299,7 @@ export default class Player {
     }
   }
 
-  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+  private async createReadStreamWithRetry(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string; outputFormat?: 'opus' | 'pcm'}): Promise<Readable> {
     const maxRetries = STREAM_CREATE_MAX_RETRIES;
     let attempt = 0;
     let lastError: unknown;
