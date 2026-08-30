@@ -23,6 +23,7 @@ import DiscordGuildsSidebar from "./components/DiscordGuildsSidebar";
 import GuildSettings from "./components/GuildSettings";
 import { useAuth } from "./hooks/useAuth";
 import type { DiscordGuild } from "./types/discord";
+import { DISCORD_INVITE_URL } from "./lib/discord-invite";
 
 const DEFAULT_META_TITLE = "ISOBEL | Self-Hosted Discord Music Bot";
 const DEFAULT_META_DESCRIPTION =
@@ -319,14 +320,16 @@ function App() {
                 your stack.
               </p>
               <div className="hero-buttons">
-                <a
-                  href="https://discord.com/oauth2/authorize"
-                  className="btn btn-primary"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Add to Discord
-                </a>
+                {DISCORD_INVITE_URL && (
+                  <a
+                    href={DISCORD_INVITE_URL}
+                    className="btn btn-primary"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Add to Discord
+                  </a>
+                )}
                 <a
                   href="https://github.com/soulwax/ISOBEL"
                   className="btn btn-secondary"
