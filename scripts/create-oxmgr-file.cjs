@@ -41,7 +41,9 @@ const apps = [
     cwd: root,
     command: `${nodePath} --enable-source-maps dist/scripts/migrate-and-start.js`,
     health: healthCommand('HEALTH_PORT', '3002'),
-    env: {NODE_ENV: 'production'},
+    // ISOBEL:audio prints the encoder cushion and lost playback time once a
+    // second per playing guild. Drop it once the pipeline is settled.
+    env: {NODE_ENV: 'production', DEBUG: 'ISOBEL:audio'},
   },
   {
     // Web dashboard: SPA + /api (including Discord auth) on PORT (3001).

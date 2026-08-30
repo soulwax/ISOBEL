@@ -25,12 +25,15 @@ import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
-import debug from '../utils/debug.js';
+import debug, { createNamespacedDebug } from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import type FileCacheProvider from './file-cache.js';
 import type SongbirdNext from './songbird-next.js';
 import type StarchildAPI from './starchild-api.js';
+
+// Enable with DEBUG=ISOBEL:audio to watch the encoder cushion in real time.
+const debugAudio = createNamespacedDebug('audio');
 
 const configureFfmpeggy = (): void => {
   const ffmpeggy = FFmpeggy as unknown as {
@@ -104,6 +107,10 @@ export interface NowPlayingSnapshot {
   position: number;
   length: number;
   isLive: boolean;
+  /** Seconds of audio encoded ahead of the player; null until the first sample. */
+  cushionSeconds: number | null;
+  /** Wall time in which playback did not advance, i.e. audible stutter. */
+  lostPlaybackMs: number;
 }
 
 
@@ -139,6 +146,7 @@ export default class Player {
   private lastPlaybackDurationMs = 0;
   private lastTelemetrySampleAt = 0;
   private lostPlaybackMs = 0;
+  private cushionSeconds: number | null = null;
 
   // When a guild ducks the music while people speak, gain has to change
   // mid-track, which needs PCM in the chain. Every other guild gets Opus
@@ -295,6 +303,8 @@ export default class Player {
       position: this.positionInSeconds,
       length: song.length,
       isLive: song.isLive,
+      cushionSeconds: this.cushionSeconds,
+      lostPlaybackMs: Math.round(this.lostPlaybackMs),
     };
   }
 
@@ -844,6 +854,7 @@ export default class Player {
     this.lastPlaybackDurationMs = this.audioResource?.playbackDuration ?? 0;
     this.lastTelemetrySampleAt = Date.now();
     this.lostPlaybackMs = 0;
+    this.cushionSeconds = null;
 
     this.telemetryInterval = setInterval(() => {
       const resource = this.audioResource;
@@ -865,11 +876,11 @@ export default class Player {
       const producedSeconds = this.activeStreamMeter && this.activeStreamByteRate > 0
         ? this.activeStreamMeter.bytes / this.activeStreamByteRate
         : null;
-      const cushionSeconds = producedSeconds === null
+      this.cushionSeconds = producedSeconds === null
         ? null
-        : producedSeconds - (resource.playbackDuration / 1000);
+        : Number((producedSeconds - (resource.playbackDuration / 1000)).toFixed(1));
 
-      debug(`[audio] guild=${this.guildId} cushion=${cushionSeconds === null ? 'n/a' : `${cushionSeconds.toFixed(1)}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+      debugAudio(`guild=${this.guildId} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
     }, PLAYBACK_TELEMETRY_INTERVAL_MS);
   }
 
