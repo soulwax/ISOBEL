@@ -235,10 +235,6 @@ BOT_ACTIVITY_TYPE=LISTENING      # Options: PLAYING, LISTENING, WATCHING, STREAM
 BOT_ACTIVITY=music
 # BOT_ACTIVITY_URL=              # Required ONLY if BOT_ACTIVITY_TYPE=STREAMING
 
-# SponsorBlock Integration (optional)
-ENABLE_SPONSORBLOCK=false
-SPONSORBLOCK_TIMEOUT=5
-
 # Advanced Configuration
 # SONGBIRD_NEXT_URL=             # Alternative Songbird API URL
 # REGISTER_COMMANDS_ON_BOT=false # Global vs per-guild command registration
@@ -935,15 +931,6 @@ BOT_STATUS=online
 BOT_ACTIVITY_TYPE=STREAMING
 BOT_ACTIVITY=Monstercat
 BOT_ACTIVITY_URL=https://www.twitch.tv/monstercat
-```
-
-### SponsorBlock Integration
-
-Automatically skip non-music segments:
-
-```env
-ENABLE_SPONSORBLOCK=true
-SPONSORBLOCK_TIMEOUT=5
 ```
 
 ### Volume Management

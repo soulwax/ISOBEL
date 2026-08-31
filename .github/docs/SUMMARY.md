@@ -217,8 +217,6 @@ Optional variables:
 - `BOT_ACTIVITY_TYPE`: `PLAYING`, `LISTENING`, `WATCHING`, `STREAMING`
 - `BOT_ACTIVITY`: Activity text
 - `BOT_ACTIVITY_URL`: Required for `STREAMING` activity type (Twitch or YouTube URL)
-- `ENABLE_SPONSORBLOCK`: Enable SponsorBlock integration (default: `false`)
-- `SPONSORBLOCK_TIMEOUT`: Retry delay in minutes when SponsorBlock is unreachable (default: `5`)
 - `REGISTER_COMMANDS_ON_BOT`: Register commands globally vs per-guild
 
 ## Key Implementation Patterns

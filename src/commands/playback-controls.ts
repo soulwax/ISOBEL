@@ -15,6 +15,8 @@ import { QUEUE_PAGE_SIZE_DEFAULT, SEEK_STEP_SECONDS, VOLUME_MAX, VOLUME_MIN, VOL
 import errorMsg, { formatError } from '../utils/error-msg.js';
 import type Command from './index.js';
 
+type PlaybackComponentInteraction = ButtonInteraction | StringSelectMenuInteraction;
+
 @injectable()
 export default class PlaybackControls implements Command {
   private static readonly aiSuggestionValuePrefix = 'ai-suggest:';
@@ -36,7 +38,10 @@ export default class PlaybackControls implements Command {
     'playback:volume-down',
     'playback:volume-up',
     'playback:stop',
-    // Row 3: library
+    // Row 3: secondary actions
+    'playback:actions',
+    // Keep the prior button and modal IDs registered so existing messages keep
+    // working until Discord replaces them with the redesigned controls.
     'playback:search',
     'playback:queue',
     'playback:seek',
@@ -146,22 +151,7 @@ export default class PlaybackControls implements Command {
       }
 
       case 'playback:search': {
-        const modal = new ModalBuilder()
-          .setCustomId('playback:search')
-          .setTitle('Search');
-
-        const input = new TextInputBuilder()
-          .setCustomId('search_input')
-          .setLabel('Search term or MP3 URL')
-          .setPlaceholder('song name, URL, or Discord attachment URL')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        modal.addComponents(
-          new ActionRowBuilder<TextInputBuilder>().addComponents(input)
-        );
-
-        await interaction.showModal(modal);
+        await this.showSearchModal(interaction);
         return;
       }
 
@@ -169,22 +159,7 @@ export default class PlaybackControls implements Command {
         player.stop();
         break;
       case 'playback:seek': {
-        const modal = new ModalBuilder()
-          .setCustomId('playback:seek')
-          .setTitle('Seek');
-
-        const input = new TextInputBuilder()
-          .setCustomId('seek_input')
-          .setLabel('Position (seconds or 1m23s)')
-          .setPlaceholder('e.g. 90 or 1m30s')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        modal.addComponents(
-          new ActionRowBuilder<TextInputBuilder>().addComponents(input)
-        );
-
-        await interaction.showModal(modal);
+        await this.showSeekModal(interaction);
         return;
       }
 
@@ -266,6 +241,11 @@ export default class PlaybackControls implements Command {
 
   public async handleSelectMenuInteraction(interaction: StringSelectMenuInteraction): Promise<void> {
     if (!interaction.guild || !interaction.member) {
+      return;
+    }
+
+    if (interaction.customId === 'playback:actions') {
+      await this.handleSecondaryAction(interaction);
       return;
     }
 
@@ -351,7 +331,7 @@ export default class PlaybackControls implements Command {
     }
   }
 
-  private async showQueue(interaction: ButtonInteraction, player: Player): Promise<void> {
+  private async showQueue(interaction: PlaybackComponentInteraction, player: Player): Promise<void> {
     if (!player.getCurrent()) {
       await interaction.reply({content: errorMsg('Nothing is playing'), flags: MessageFlags.Ephemeral});
       return;
@@ -361,6 +341,79 @@ export default class PlaybackControls implements Command {
       embeds: [buildQueueEmbed(player, 1, QUEUE_PAGE_SIZE_DEFAULT)],
       flags: MessageFlags.Ephemeral,
     });
+  }
+
+  /** Opens the compact action menu's selected utility without changing playback. */
+  private async handleSecondaryAction(interaction: StringSelectMenuInteraction): Promise<void> {
+    if (!interaction.guild || !interaction.member) {
+      return;
+    }
+
+    const [action] = interaction.values;
+    const player = this.playerManager.get(interaction.guild.id);
+
+    if (action === 'queue') {
+      await this.showQueue(interaction, player);
+      return;
+    }
+
+    if (!getMemberVoiceChannel(interaction.member as GuildMember)) {
+      await interaction.reply({content: errorMsg('You must be in a voice channel'), flags: MessageFlags.Ephemeral});
+      return;
+    }
+
+    if (action === 'search') {
+      await this.showSearchModal(interaction);
+      return;
+    }
+
+    if (action === 'seek') {
+      const song = player.getCurrent();
+      if (!song || song.isLive || song.length <= 0) {
+        await interaction.reply({content: errorMsg('This track can\'t be seeked'), flags: MessageFlags.Ephemeral});
+        return;
+      }
+
+      await this.showSeekModal(interaction);
+    }
+  }
+
+  private async showSearchModal(interaction: PlaybackComponentInteraction): Promise<void> {
+    const modal = new ModalBuilder()
+      .setCustomId('playback:search')
+      .setTitle('Search');
+
+    const input = new TextInputBuilder()
+      .setCustomId('search_input')
+      .setLabel('Search term or MP3 URL')
+      .setPlaceholder('song name, URL, or Discord attachment URL')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(input)
+    );
+
+    await interaction.showModal(modal);
+  }
+
+  private async showSeekModal(interaction: PlaybackComponentInteraction): Promise<void> {
+    const modal = new ModalBuilder()
+      .setCustomId('playback:seek')
+      .setTitle('Seek');
+
+    const input = new TextInputBuilder()
+      .setCustomId('seek_input')
+      .setLabel('Position (seconds or 1m23s)')
+      .setPlaceholder('e.g. 90 or 1m30s')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(input)
+    );
+
+    await interaction.showModal(modal);
   }
 
   /**
