@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL } from '../lib/api-paths';
 import type { DiscordGuild, GuildSettingsData } from '../types/discord';
+import LiveConfigPreview from './LiveConfigPreview';
 import './GuildSettings.css';
 
 interface GuildSettingsProps {
@@ -44,6 +45,47 @@ const NAV_SECTIONS = [
   { id: 'voice', label: 'Voice' },
   { id: 'announcements', label: 'Announcements' },
 ] as const;
+
+const SETTINGS_PRESETS: Array<{
+  id: string;
+  label: string;
+  values: Partial<GuildSettingsData>;
+}> = [
+  {
+    id: 'quiet',
+    label: 'Quiet room',
+    values: {
+      defaultVolume: 35,
+      defaultLoopMode: 0,
+      turnDownVolumeWhenPeopleSpeak: true,
+      turnDownVolumeWhenPeopleSpeakTarget: 20,
+      queueAddResponseEphemeral: true,
+      autoAnnounceNextSong: false,
+    },
+  },
+  {
+    id: 'party',
+    label: 'Party queue',
+    values: {
+      defaultVolume: 80,
+      defaultLoopMode: 2,
+      turnDownVolumeWhenPeopleSpeak: false,
+      queueAddResponseEphemeral: false,
+      autoAnnounceNextSong: true,
+    },
+  },
+  {
+    id: 'focused',
+    label: 'Focused listening',
+    values: {
+      defaultVolume: 55,
+      defaultLoopMode: 0,
+      leaveIfNoListeners: true,
+      secondsToWaitAfterQueueEmpties: 60,
+      autoAnnounceNextSong: false,
+    },
+  },
+];
 
 export default function GuildSettings({ guild, onBack, onGuildLeave }: GuildSettingsProps) {
   const { session, isAuthenticated } = useAuth();
@@ -105,6 +147,10 @@ export default function GuildSettings({ guild, onBack, onGuildLeave }: GuildSett
   };
 
   const handleReset = () => setSettings(original);
+
+  const applyPreset = (values: Partial<GuildSettingsData>) => {
+    setSettings((current) => current ? {...current, ...values} : current);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -277,11 +323,31 @@ export default function GuildSettings({ guild, onBack, onGuildLeave }: GuildSett
           </div>
         </header>
 
+        <section className="settings-presets" aria-labelledby="settings-presets-title">
+          <div>
+            <span className="settings-presets-eyebrow">Make it yours</span>
+            <h3 id="settings-presets-title">Start with a listening profile</h3>
+          </div>
+          <div className="settings-preset-actions">
+            {SETTINGS_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className="settings-preset-button"
+                onClick={() => applyPreset(preset.values)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* flash messages */}
         {error && <div className="settings-message error">{error}</div>}
         {leaveMessage && <div className="settings-message success">{leaveMessage}</div>}
 
-        <form onSubmit={handleSubmit} noValidate>
+        <div className="settings-content-grid">
+        <form className="settings-form" onSubmit={handleSubmit} noValidate>
 
           {/* ── Playback ── */}
           <section
@@ -543,6 +609,9 @@ export default function GuildSettings({ guild, onBack, onGuildLeave }: GuildSett
             </section>
           )}
         </form>
+
+        <LiveConfigPreview guild={guild} settings={settings} isDirty={isDirty} />
+        </div>
 
         {/* ── unsaved changes bar ── */}
         {isDirty && (
