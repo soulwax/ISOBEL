@@ -31,7 +31,11 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--discord-darkest);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(111, 77, 255, 0.18), transparent 28rem),
+    radial-gradient(circle at 86% 18%, rgba(244, 80, 182, 0.13), transparent 26rem),
+    radial-gradient(circle at 48% 90%, rgba(44, 214, 201, 0.1), transparent 32rem),
+    var(--discord-darkest);
   color: var(--text-primary);
   line-height: 1.6;
 }
@@ -41,6 +45,28 @@ body {
   display: flex;
   flex-direction: column;
   margin-left: 0; /* No offset by default */
+  isolation: isolate;
+  position: relative;
+}
+
+.app::before {
+  content: '';
+  position: fixed;
+  inset: -35vmax;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.45;
+  background:
+    radial-gradient(ellipse at 28% 30%, rgba(155, 88, 255, 0.2), transparent 24%),
+    radial-gradient(ellipse at 74% 38%, rgba(255, 72, 174, 0.16), transparent 22%),
+    radial-gradient(ellipse at 54% 72%, rgba(56, 215, 203, 0.12), transparent 25%);
+  filter: blur(26px) saturate(125%);
+  animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-drift {
+  from { transform: rotate(-7deg) scale(1); }
+  to { transform: rotate(8deg) scale(1.12) translate3d(2%, -2%, 0); }
 }
 
 .app.app-with-sidebar {
@@ -123,7 +149,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background-color: rgba(30, 33, 36, 0.85);
+  background: linear-gradient(100deg, rgba(30, 33, 36, 0.9), rgba(35, 28, 51, 0.82));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
@@ -245,7 +271,9 @@ body {
   width: 100%;
   max-width: 800px;
   height: 100%;
-  background: radial-gradient(circle at center, rgba(88, 101, 242, 0.1) 0%, transparent 70%);
+  background:
+    radial-gradient(circle at 30% 40%, rgba(88, 101, 242, 0.18) 0%, transparent 55%),
+    radial-gradient(circle at 74% 58%, rgba(235, 69, 158, 0.13) 0%, transparent 56%);
   pointer-events: none;
   z-index: 0;
 }
@@ -314,10 +342,16 @@ body {
 }
 
 .highlight {
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  background: linear-gradient(105deg, #8b92ff, #f08ac9 48%, #71e0d2);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app::before {
+    animation: none;
+  }
 }
 
 .hero-subtitle {

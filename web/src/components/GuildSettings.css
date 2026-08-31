@@ -5,7 +5,10 @@
 .guild-settings {
   display: flex;
   min-height: 100vh;
-  background: #313338;
+  background:
+    radial-gradient(ellipse at 72% 6%, rgba(151, 84, 255, 0.15), transparent 33rem),
+    radial-gradient(ellipse at 24% 72%, rgba(40, 204, 189, 0.08), transparent 28rem),
+    #313338;
   color: #f2f3f5;
   font-family: inherit;
 }
@@ -13,7 +16,7 @@
 .settings-nav {
   width: 220px;
   flex-shrink: 0;
-  background: #2b2d31;
+  background: linear-gradient(180deg, rgba(43, 45, 49, 0.97), rgba(35, 33, 46, 0.98));
   padding: 60px 8px 24px;
   overflow-y: auto;
   position: sticky;
@@ -68,6 +71,7 @@
   padding: 40px 40px 120px;
   overflow-y: auto;
   max-width: 1260px;
+  background: linear-gradient(112deg, rgba(49, 51, 56, 0.68), rgba(47, 42, 58, 0.32));
 }
 
 /* ── loading / error states ─────────────────────── */
@@ -181,9 +185,15 @@
   gap: 20px;
   margin: 0 0 28px;
   padding: 16px 18px;
-  background: linear-gradient(115deg, rgba(88, 101, 242, 0.15), rgba(235, 69, 158, 0.08));
+  background: linear-gradient(115deg, rgba(88, 101, 242, 0.17), rgba(235, 69, 158, 0.12), rgba(74, 222, 209, 0.08));
   border: 1px solid rgba(119, 132, 255, 0.22);
   border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-preset-button {
+    transition: none;
+  }
 }
 
 .settings-presets-eyebrow {
