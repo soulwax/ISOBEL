@@ -4,7 +4,7 @@ FROM node:25-bookworm-slim AS base
 
 # Install pnpm directly (avoids corepack integrity check failures in Docker)
 # Keep in sync with the "packageManager" field in package.json.
-RUN npm install -g pnpm@10.33.3
+RUN npm install -g pnpm@11.5.0
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599

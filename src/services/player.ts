@@ -878,9 +878,17 @@ export default class Player {
 
     // A previously encoded artifact turns playback into a file read, and a
     // seek into a remux. Both skip the encoder entirely.
+    //
+    // Normal playback always carries a `to` (and a `seek` of 0) because every
+    // track is given an offset, so testing for "no seek options" would send
+    // every play down the remux branch and leave the file-read path unused.
+    // What matters is whether the request actually trims the artifact.
+    const trackEndSeconds = song.length + (song.offset ?? 0);
+    const isFullTrackRequest = !options.seek
+      && (options.to === undefined || options.to >= trackEndSeconds);
     const cachedOpusPath = await this.getCachedOpusPath(song);
     if (cachedOpusPath) {
-      if (options.seek === undefined && options.to === undefined) {
+      if (isFullTrackRequest) {
         this.playbackPath = 'cache';
         this.activeStreamMeter = null;
         return createFileReadStream(cachedOpusPath);
