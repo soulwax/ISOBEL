@@ -1,72 +1,49 @@
 # ISOBEL — Agent / Codex Context
 
-## What this repo is
+This repo's architecture, commands, and conventions are documented in
+[CLAUDE.md](CLAUDE.md) — read that first; it's the canonical reference and is
+kept in sync with the code. This file only adds the handful of details
+CLAUDE.md doesn't cover.
 
-ISOBEL is a self-hosted Discord music bot with an optional web dashboard for per-server settings.
+## Corrections to old assumptions
 
-- **Bot** (`/` root): TypeScript, discord.js, Prisma → PostgreSQL
-- **Web** (`/web`): React + Vite (frontend), Express (API), Drizzle → same PostgreSQL
+- There is no bare `prisma` CLI usage — every invocation goes through
+  `pnpm run env:set-database-url -- prisma ...` so `DATABASE_URL` gets
+  resolved. Use `pnpm prisma:migrate:dev` / `pnpm prisma:migrate:deploy`, not
+  `pnpm prisma migrate dev`.
+- Web dev commands run from the root via pnpm's `--filter`, not `cd web &&`:
+  `pnpm web:dev` (or `pnpm --filter isobel-web run dev`), and Drizzle via
+  `pnpm --filter isobel-web run db:push` / `db:generate` / `db:migrate`.
 
-## Critical constraint: shared database
+## POST /api/guilds/:id/settings — exact allowed fields
 
-Both the bot and the web server must connect to the **same** Postgres database. The bot uses `DATABASE_URL` from the root `.env`; the web uses `DATABASE_URL` from `web/.env`. These must point to the same instance (ignoring `-pooler` URL variants).
-
-## Settings flow
-
-Settings are stored in a `setting` table. The bot reads them via Prisma every time a command runs. The web dashboard writes them via Drizzle when a user saves. For settings to actually affect bot behavior, both apps must share the same database.
-
-## API validation rule
-
-`web/src/lib/validation.ts` uses a Zod schema with `.strict()`. The POST body for `POST /api/guilds/:id/settings` must contain **only** these fields — no extras:
+`web/src/lib/validation.ts` uses `z.object({...}).strict()`, so the body may
+contain only these (all optional, all rejected if any extra key — including
+`guildId`, `createdAt`, `updatedAt` — is present):
 
 ```
-playlistLimit, secondsToWaitAfterQueueEmpties, leaveIfNoListeners,
-queueAddResponseEphemeral, autoAnnounceNextSong, defaultVolume,
-defaultQueuePageSize, turnDownVolumeWhenPeopleSpeak, turnDownVolumeWhenPeopleSpeakTarget,
-maxQueueSize, defaultLoopMode
+playlistLimit                        int 1-200
+secondsToWaitAfterQueueEmpties       int 0-300
+leaveIfNoListeners                   boolean
+queueAddResponseEphemeral            boolean
+autoAnnounceNextSong                 boolean
+defaultVolume                        int 0-100
+defaultQueuePageSize                 int 1-30
+turnDownVolumeWhenPeopleSpeak        boolean
+turnDownVolumeWhenPeopleSpeakTarget  int 0-100
+maxQueueSize                         int 0-500
+defaultLoopMode                      int 0-2
 ```
 
-Do not send `guildId`, `createdAt`, or `updatedAt` in the body.
+## Bot health check from the web server
 
-## Discord API rate limits
-
-`web/src/server/bot-guilds.ts` caches the bot's guild list for 5 minutes. Do not reduce this TTL. `BOT_HEALTH_URL` is optional and only needed when the bot is not reachable at `127.0.0.1` on `HEALTH_PORT` or `3002`.
-
-## Schema sync requirement
-
-The `setting` table is defined in two places:
-- `schema.prisma` (bot, Prisma)
-- `web/src/db/schema.ts` (web, Drizzle)
-
-Any schema change requires updating both files and running migrations for both ORMs.
+`web/src/server/bot-guilds.ts` (`GET /api/bot-health`) hits the bot's health
+endpoint to show it as online/offline in the dashboard. It targets
+`http://127.0.0.1:<HEALTH_PORT or 3002>/health` by default; set
+`BOT_HEALTH_URL` (see [web/src/server/bot-health-url.ts](web/src/server/bot-health-url.ts))
+only when the bot isn't reachable at that host/port from the web process.
 
 ## CORS
 
-Allowed methods: `GET, POST, DELETE, OPTIONS`. Defined in `web/src/server/app.ts`.
-
-## Env files
-
-| File | Used by |
-|------|---------|
-| `.env` (root) | Bot — `DISCORD_TOKEN`, `DATABASE_URL`, etc. |
-| `web/.env` | Web server — `DISCORD_CLIENT_ID/SECRET`, `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL` |
-
-## Package manager
-
-pnpm with workspaces. Run installs from root for the bot, from `web/` for the dashboard.
-
-## Commands
-
-```bash
-# Bot development
-pnpm dev
-
-# Web development  
-cd web && pnpm dev
-
-# Bot DB migrations
-pnpm prisma migrate dev
-
-# Web DB migrations
-cd web && pnpm drizzle-kit push   # or generate + migrate
-```
+Allowed methods: `GET, POST, DELETE, OPTIONS`. Defined in
+[web/src/server/app.ts](web/src/server/app.ts).
