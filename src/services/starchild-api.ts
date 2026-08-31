@@ -88,6 +88,7 @@ export default class StarchildAPI {
         return response.data.slice(0, lim).map((track) => ({
           title: track.title,
           artist: track.artist.name,
+          album: track.album.title,
           url: track.id.toString(), // Use Deezer ID for streaming
           length: track.duration,
           offset: 0,

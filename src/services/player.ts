@@ -78,6 +78,8 @@ export interface QueuedPlaylist {
 export interface SongMetadata {
   title: string;
   artist: string;
+  /** Album metadata is optional because not every provider exposes it. */
+  album?: string | null;
   url: string; // For YT, it's the video ID (not the full URI)
   length: number;
   offset: number;

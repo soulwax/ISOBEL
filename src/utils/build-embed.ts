@@ -26,7 +26,7 @@ const EMBED_COLOR = {
 
 // The now-playing card has room for a fuller timeline than the compact queue
 // preview, which continues to use PROGRESS_BAR_SEGMENTS.
-const PLAYING_PROGRESS_BAR_SEGMENTS = 25;
+const PLAYING_PROGRESS_BAR_SEGMENTS = 30;
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
@@ -185,44 +185,32 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   const songUrl = buildSongLink(artist, title);
   const volume = player.getVolume();
   const loop = getLoopPresentation(player);
+  const album = currentlyPlaying.album?.trim() ?? 'Unknown album';
   const timeline = currentlyPlaying.isLive
     ? '🔴 `LIVE BROADCAST`'
     : currentlyPlaying.length > 0
-      ? `\`${prettyTime(player.getPosition())}\` ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)} \`${prettyTime(currentlyPlaying.length)}\``
+      ? `\`${prettyTime(player.getPosition())}\` ⏪ ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)} ⏩ \`${prettyTime(currentlyPlaying.length)}\``
       : `\`${prettyTime(player.getPosition())}\`  •  ⏱️ · duration unavailable`;
+  const metadata = truncate(`${title} — ${artist} — ${album}`, 220);
 
   const message = new EmbedBuilder();
   message
     .setColor(status.color)
-    .setAuthor({name: `${status.emoji} ISOBEL  •  MUSIC PLAYER`})
-    .setTitle(truncate(title, 100))
+    .setTitle('ISOBEL — MUSIC')
     .setDescription([
-      `**${artist}**  •  ${getSourceLabel(currentlyPlaying)}`,
-      '',
-      `> ${status.emoji} **${status.label.toUpperCase()}**`,
+      `**${metadata}** — wished by <@${requestedBy}>`,
       '',
       timeline,
       '',
-      `-# Requested by <@${requestedBy}>`,
+      `**${getVolumeEmoji(volume)} Volume ${Number.isFinite(volume) ? `${volume}%` : '-'}   ${loop.emoji} Repeat ${loop.label}**`,
     ].join('\n'));
 
   if (songUrl) {
     message.setURL(songUrl);
   }
 
-  message.addFields([
-    {name: '🎶 Queue', value: `**${getQueueInfo(player)}**`, inline: true},
-    {name: `${getVolumeEmoji(volume)} Volume`, value: `**${Number.isFinite(volume) ? `${volume}%` : '-'}**`, inline: true},
-    {name: `${loop.emoji} Repeat`, value: `**${loop.label}**`, inline: true},
-  ]);
-
-  const [upNext] = player.getQueue();
-  if (upNext) {
-    message.addFields({name: '⬆️ Up next', value: getSongTitle(upNext, true)});
-  }
-
   message.setFooter({
-    text: playlist?.title ? `From ${playlist.title}` : 'Use the controls below to manage playback',
+    text: [`Queue: ${getQueueInfo(player)}`, playlist?.title, getSourceLabel(currentlyPlaying)].filter(Boolean).join('  •  '),
   });
 
   if (thumbnailUrl) {
@@ -302,41 +290,30 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
     .setStyle(ButtonStyle.Danger)
     .setEmoji('⏹️');
 
-  // Secondary actions are grouped in one full-width menu, which keeps the
-  // music controls prominent while retaining direct access to every action.
-  const actionsMenu = new StringSelectMenuBuilder()
-    .setCustomId('playback:actions')
-    .setPlaceholder('More playback actions')
-    .addOptions(
-      {
-        label: 'Search music',
-        description: 'Add a song, URL, or direct file',
-        value: 'search',
-        emoji: '🔎',
-      },
-      {
-        label: 'View queue',
-        description: 'See the upcoming songs',
-        value: 'queue',
-        emoji: '📜',
-      },
-      {
-        label: 'Seek to a position',
-        description: canSeek ? 'Jump to a specific timestamp' : 'Unavailable for this track',
-        value: 'seek',
-        emoji: '⏱️',
-        default: false,
-      }
-    )
-    .setDisabled(!currentSong);
+  // Library actions stay visible and direct; a menu made them easy to miss.
+  const searchButton = new ButtonBuilder()
+    .setCustomId('playback:search')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('🔎');
+
+  const queueButton = new ButtonBuilder()
+    .setCustomId('playback:queue')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('📜');
+
+  const seekButton = new ButtonBuilder()
+    .setCustomId('playback:seek')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('⏱️')
+    .setDisabled(!canSeek);
 
   const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [
     new ActionRowBuilder<ButtonBuilder>()
       .addComponents(previousButton, rewindButton, toggleButton, fastForwardButton, nextButton),
     new ActionRowBuilder<ButtonBuilder>()
       .addComponents(loopButton, shuffleButton, volumeDownButton, volumeUpButton, stopButton),
-    new ActionRowBuilder<StringSelectMenuBuilder>()
-      .addComponents(actionsMenu),
+    new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(searchButton, queueButton, seekButton),
   ];
 
   const suggestions = player.getAiSuggestions();
