@@ -94,7 +94,9 @@ export default class StarchildAPI {
           offset: 0,
           playlist: null,
           isLive: false,
-          thumbnailUrl: track.album.cover_medium ?? track.album.cover ?? null,
+          // Prefer the largest cover available. Discord still decides the
+          // thumbnail's rendered size, but it stays crisp on high-density UI.
+          thumbnailUrl: track.album.cover_big ?? track.album.cover_medium ?? track.album.cover ?? null,
           source: MediaSource.Starchild,
         }));
       },

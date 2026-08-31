@@ -233,57 +233,48 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
   const previousButton = new ButtonBuilder()
     .setCustomId('playback:prev')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏮️')
-    .setDisabled(!player.canGoBack());
+    .setEmoji('⏮️');
 
   const rewindButton = new ButtonBuilder()
     .setCustomId('playback:rewind')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏪')
-    .setDisabled(!canSeek);
+    .setEmoji('⏪');
 
   const toggleButton = new ButtonBuilder()
     .setCustomId('playback:toggle')
     .setStyle(ButtonStyle.Primary)
-    .setEmoji(isPlaying ? '⏸️' : '▶️')
-    .setDisabled(!currentSong);
+    .setEmoji(isPlaying ? '⏸️' : '▶️');
 
   const fastForwardButton = new ButtonBuilder()
     .setCustomId('playback:fastforward')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏩')
-    .setDisabled(!canSeek);
+    .setEmoji('⏩');
 
   const nextButton = new ButtonBuilder()
     .setCustomId('playback:next')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏭️')
-    .setDisabled(!player.canGoForward(1));
+    .setEmoji('⏭️');
 
   // Row 2 - playback settings and exit. This mirrors the five-button transport row.
   const loopButton = new ButtonBuilder()
     .setCustomId('playback:loop')
     .setStyle(loop.isOn ? ButtonStyle.Success : ButtonStyle.Secondary)
-    .setEmoji(loop.emoji)
-    .setDisabled(!currentSong);
+    .setEmoji(loop.emoji);
 
   const shuffleButton = new ButtonBuilder()
     .setCustomId('playback:shuffle')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('🔀')
-    .setDisabled(player.queueSize() < 2);
+    .setEmoji('🔀');
 
   const volumeDownButton = new ButtonBuilder()
     .setCustomId('playback:volume-down')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('🔉')
-    .setDisabled(volume <= VOLUME_MIN);
+    .setEmoji('🔉');
 
   const volumeUpButton = new ButtonBuilder()
     .setCustomId('playback:volume-up')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('🔊')
-    .setDisabled(volume >= VOLUME_MAX);
+    .setEmoji('🔊');
 
   const stopButton = new ButtonBuilder()
     .setCustomId('playback:stop')
@@ -304,17 +295,39 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
   const seekButton = new ButtonBuilder()
     .setCustomId('playback:seek')
     .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏱️')
-    .setDisabled(!canSeek);
+    .setEmoji('⏱️');
 
-  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [
-    new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(previousButton, rewindButton, toggleButton, fastForwardButton, nextButton),
-    new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(loopButton, shuffleButton, volumeDownButton, volumeUpButton, stopButton),
-    new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(searchButton, queueButton, seekButton),
+  const transportButtons = [
+    ...(player.canGoBack() ? [previousButton] : []),
+    ...(canSeek ? [rewindButton] : []),
+    ...(currentSong ? [toggleButton] : []),
+    ...(canSeek ? [fastForwardButton] : []),
+    ...(player.canGoForward(1) ? [nextButton] : []),
   ];
+  const playbackButtons = [
+    ...(currentSong ? [loopButton] : []),
+    ...(player.queueSize() >= 2 ? [shuffleButton] : []),
+    ...(currentSong && volume > VOLUME_MIN ? [volumeDownButton] : []),
+    ...(currentSong && volume < VOLUME_MAX ? [volumeUpButton] : []),
+    ...(currentSong ? [stopButton] : []),
+  ];
+  const utilityButtons = [
+    ...(currentSong ? [searchButton, queueButton] : []),
+    ...(canSeek ? [seekButton] : []),
+  ];
+  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
+
+  if (transportButtons.length > 0) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(transportButtons));
+  }
+
+  if (playbackButtons.length > 0) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(playbackButtons));
+  }
+
+  if (utilityButtons.length > 0) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(utilityButtons));
+  }
 
   const suggestions = player.getAiSuggestions();
   if (suggestions.length > 0) {

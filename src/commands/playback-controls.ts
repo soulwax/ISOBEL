@@ -83,11 +83,11 @@ export default class PlaybackControls implements Command {
 
     switch (interaction.customId) {
       case 'playback:toggle':
+        await interaction.deferUpdate();
         if (player.status === STATUS.PLAYING) {
-          player.pause();
+          await this.runPlayerAction(interaction, () => player.pause());
         } else {
           // Resuming can rebuild the stream, which takes longer than the 3s ack window.
-          await interaction.deferUpdate();
           await this.runPlayerAction(interaction, () => player.play());
         }
 
@@ -131,7 +131,8 @@ export default class PlaybackControls implements Command {
           return;
         }
 
-        this.cycleLoopMode(player);
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => this.cycleLoopMode(player));
         break;
       case 'playback:shuffle':
         if (player.queueSize() < 2) {
@@ -139,14 +140,18 @@ export default class PlaybackControls implements Command {
           return;
         }
 
-        player.shuffle();
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => player.shuffle());
         break;
       case 'playback:volume-down':
       case 'playback:volume-up': {
         const step = interaction.customId === 'playback:volume-up' ? VOLUME_STEP : -VOLUME_STEP;
         const volume = Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, player.getVolume() + step));
 
-        player.setVolume(volume);
+        // A volume change can restart the underlying stream after a short
+        // debounce, so acknowledge before touching the audio pipeline.
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => player.setVolume(volume));
         break;
       }
 
@@ -156,7 +161,8 @@ export default class PlaybackControls implements Command {
       }
 
       case 'playback:stop':
-        player.stop();
+        await interaction.deferUpdate();
+        await this.runPlayerAction(interaction, () => player.stop());
         break;
       case 'playback:seek': {
         await this.showSeekModal(interaction);
@@ -188,10 +194,16 @@ export default class PlaybackControls implements Command {
         return;
       }
 
+      // Seeking may have to recreate the stream, so it must be acknowledged
+      // before awaiting the audio operation.
+      await interaction.deferReply({flags: MessageFlags.Ephemeral});
       const player = this.playerManager.get(interaction.guild.id);
-      await player.seek(seconds);
-
-      await interaction.reply({content: '⏩ Seeked', flags: MessageFlags.Ephemeral});
+      try {
+        await player.seek(seconds);
+        await interaction.editReply('⏩ Seeked');
+      } catch (error: unknown) {
+        await interaction.editReply(errorMsg(formatError(error)));
+      }
       return;
     }
 
@@ -420,7 +432,7 @@ export default class PlaybackControls implements Command {
    * Runs a playback action that can fail (stream errors, lost connection) without
    * clobbering the now-playing message with an error string.
    */
-  private async runPlayerAction(interaction: ButtonInteraction, action: () => Promise<void>): Promise<void> {
+  private async runPlayerAction(interaction: ButtonInteraction, action: () => void | Promise<void>): Promise<void> {
     try {
       await action();
     } catch (error: unknown) {

@@ -284,6 +284,7 @@ export default class GetSongs {
         title?: string;
         uploader?: string;
         channel?: string;
+        album?: string;
         duration?: number;
         url?: string;
         thumbnail?: string;
@@ -300,6 +301,7 @@ export default class GetSongs {
         isLive: data.is_live ?? false,
         title: data.title,
         artist: data.uploader ?? data.channel ?? 'YouTube',
+        album: data.album ?? null,
         length: data.duration ?? 0,
         offset: 0,
         playlist: null,
