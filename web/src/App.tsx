@@ -1,11 +1,17 @@
 // File: web/src/App.tsx
 
 import {
+  HiOutlineAdjustments,
+  HiOutlineClock,
   HiOutlineCode,
+  HiOutlineDatabase,
   HiOutlineExternalLink,
   HiOutlineFastForward,
+  HiOutlineLightningBolt,
   HiOutlineMusicNote,
+  HiOutlineRefresh,
   HiOutlineSave,
+  HiOutlineShieldCheck,
   HiOutlineSpeakerphone,
   HiOutlineStop,
   HiOutlineVideoCamera,
@@ -158,6 +164,111 @@ function App() {
     },
   ];
 
+  const pipelineSteps = [
+    {
+      number: "01",
+      icon: <HiOutlineDatabase />,
+      title: "Cache hit",
+      description:
+        "An Opus artifact for that track already exists on disk, so playback is a plain file read: no ffmpeg, no re-encode, no delay.",
+    },
+    {
+      number: "02",
+      icon: <HiOutlineRefresh />,
+      title: "Remux",
+      description:
+        "The artifact is cached but you seeked. ffmpeg copies the stream instead of re-encoding it, so seeking is instant and lossless.",
+    },
+    {
+      number: "03",
+      icon: <HiOutlineLightningBolt />,
+      title: "Encode",
+      description:
+        "First play of a track: the source is fetched once, encoded to Opus, and cached. The next queued song is pre-warmed ahead of time.",
+    },
+  ];
+
+  const pipelineNotes = [
+    {
+      icon: <HiOutlineShieldCheck />,
+      title: "True Opus passthrough",
+      description:
+        "Encoded packets reach Discord's voice gateway untouched. Only servers with live volume-ducking fall back to raw PCM, since that's the one case that genuinely needs samples.",
+    },
+    {
+      icon: <HiOutlineClock />,
+      title: "Jitter-safe pacing",
+      description:
+        "Network sources burst-read 15 seconds ahead, then pace at 1.5x real-time, never a bare 1x, so playback keeps a buffer instead of racing the clock.",
+    },
+  ];
+
+  const techStack = [
+    "TypeScript",
+    "discord.js",
+    "Prisma + PostgreSQL",
+    "FFmpeg / Opus",
+    "Songbird API",
+  ];
+
+  const settingsShowcase = [
+    {
+      label: "Playlist limit",
+      description: "Cap how many tracks get queued from one playlist link.",
+      defaultValue: "50 tracks",
+    },
+    {
+      label: "Auto-leave timer",
+      description: "How long to wait in an empty queue before leaving voice.",
+      defaultValue: "30s",
+    },
+    {
+      label: "Leave when empty",
+      description: "Disconnect automatically once every listener leaves the channel.",
+      defaultValue: "On",
+    },
+    {
+      label: "Ephemeral queue replies",
+      description: "Keep \"added to queue\" confirmations visible only to the requester.",
+      defaultValue: "Off",
+    },
+    {
+      label: "Announce next song",
+      description: "Post a heads-up message before the next track starts playing.",
+      defaultValue: "Off",
+    },
+    {
+      label: "Default volume",
+      description: "Starting playback volume for every new voice session.",
+      defaultValue: "100",
+    },
+    {
+      label: "Queue page size",
+      description: "How many tracks each /queue page shows.",
+      defaultValue: "10",
+    },
+    {
+      label: "Duck for voice",
+      description: "Automatically lower music while people are talking.",
+      defaultValue: "Off",
+    },
+    {
+      label: "Duck target",
+      description: "Volume level to duck down to while people are talking.",
+      defaultValue: "20",
+    },
+    {
+      label: "Max queue size",
+      description: "Hard cap on how many tracks can be queued at once.",
+      defaultValue: "Unlimited",
+    },
+    {
+      label: "Default loop mode",
+      description: "Off, loop the current track, or loop the whole queue.",
+      defaultValue: "Off",
+    },
+  ];
+
   useEffect(() => {
     if (isAuthenticated && activeSelectedGuild) {
       document.title = `${activeSelectedGuild.name} Settings | ISOBEL Dashboard`;
@@ -262,10 +373,11 @@ function App() {
           <div className="nav-links">
             <HealthIndicator />
             <a href="#features">Features</a>
+            <a href="#pipeline">Pipeline</a>
+            <a href="#about">About</a>
             <a href="#help">Help</a>
             <a href="#setup">Setup</a>
             <a href="#faq">FAQ</a>
-            <a href="#about">About</a>
             <a
               href="https://songbirdapi.com"
               target="_blank"
@@ -297,6 +409,10 @@ function App() {
         <section className="hero">
           <div className="hero-bottom">
             <div className="hero-content">
+              <span className="eyebrow">
+                <span className="eyebrow-dot" aria-hidden="true" />
+                Self-hosted &middot; TypeScript &middot; Songbird-powered
+              </span>
               <div className="hero-title-section">
                 <img
                   src="/songbird.png"
@@ -454,8 +570,8 @@ function App() {
                 </div>
                 <h3 className="feature-title">High-Quality Audio</h3>
                 <p className="feature-description">
-                  320kbps MP3 source with 192kbps Opus output for crystal-clear
-                  sound
+                  320kbps source audio, re-encoded to Opus at your voice
+                  channel's own bitrate with forward error correction built in
                 </p>
               </div>
               <div className="feature-card">
@@ -483,45 +599,49 @@ function App() {
                 </div>
                 <h3 className="feature-title">Seeking</h3>
                 <p className="feature-description">
-                  Seek to any position within a song instantly
+                  Seek to any position within a song instantly, remuxed
+                  without a re-encode
                 </p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">
                   <HiOutlineSave />
                 </div>
-                <h3 className="feature-title">Advanced Caching</h3>
+                <h3 className="feature-title">Two-Tier Caching</h3>
                 <p className="feature-description">
-                  Local MP3 caching for instant playback and better performance
+                  Both the raw source and the finished Opus artifact are
+                  cached separately, content-addressed, with LRU eviction
+                  against a configurable size cap
                 </p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">
                   <HiOutlineVolumeUp />
                 </div>
-                <h3 className="feature-title">Volume Management</h3>
+                <h3 className="feature-title">Live Volume Ducking</h3>
                 <p className="feature-description">
-                  Normalizes volume across tracks with automatic ducking when
-                  people speak
+                  Automatically lowers music while people are talking, with a
+                  configurable target level, per server
                 </p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">
                   <HiOutlineExternalLink />
                 </div>
-                <h3 className="feature-title">Custom Shortcuts</h3>
+                <h3 className="feature-title">Saved Favorites</h3>
                 <p className="feature-description">
-                  Users can add custom shortcuts (aliases) for quick access
+                  Save frequent queries as named favorites with /favorites
+                  create, use, list, and remove
                 </p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">
                   <HiOutlineMusicNote />
                 </div>
-                <h3 className="feature-title">Starchild Music API</h3>
+                <h3 className="feature-title">Songbird Music API</h3>
                 <p className="feature-description">
-                  Streams directly from the Starchild Music API, no YouTube or
-                  Spotify required
+                  Streams directly from the Songbird Music API, no YouTube or
+                  Spotify dependency required
                 </p>
               </div>
               <div className="feature-card">
@@ -537,20 +657,20 @@ function App() {
                 <div className="feature-icon">
                   <HiOutlinePlay />
                 </div>
-                <h3 className="feature-title">Direct MP3 Playback</h3>
+                <h3 className="feature-title">Direct File Playback</h3>
                 <p className="feature-description">
-                  Play MP3 files directly when selected, bypassing unnecessary
-                  processing for optimal performance
+                  Upload a file with /file to play it directly, bypassing
+                  search entirely
                 </p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">
                   <HiOutlineLink />
                 </div>
-                <h3 className="feature-title">YouTube URL Support</h3>
+                <h3 className="feature-title">YouTube Link Resolving</h3>
                 <p className="feature-description">
-                  Paste YouTube URLs to instantly queue and play your favorite
-                  tracks
+                  Paste a YouTube link and ISOBEL resolves its title, then
+                  finds and streams the matching track from Songbird
                 </p>
               </div>
               <div className="feature-card">
@@ -559,10 +679,48 @@ function App() {
                 </div>
                 <h3 className="feature-title">Smart Queue Management</h3>
                 <p className="feature-description">
-                  Intelligent queue system with shuffle, repeat, and priority
-                  controls for seamless playback
+                  Shuffle, loop track or queue, move, remove, and reorder
+                  tracks for seamless playback
                 </p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="pipeline" className="pipeline">
+          <div className="container">
+            <h2 className="section-title">The Audio Pipeline</h2>
+            <p className="section-subtitle">
+              ISOBEL doesn't just play audio, it picks the cheapest correct
+              path every time
+            </p>
+            <div className="pipeline-steps">
+              {pipelineSteps.map((step) => (
+                <article key={step.number} className="pipeline-step">
+                  <div className="pipeline-step-number">{step.number}</div>
+                  <div className="pipeline-step-head">
+                    {step.icon}
+                    <h3 className="pipeline-step-title">{step.title}</h3>
+                  </div>
+                  <p className="pipeline-step-description">{step.description}</p>
+                </article>
+              ))}
+            </div>
+            <div className="pipeline-notes">
+              {pipelineNotes.map((note) => (
+                <div key={note.title} className="pipeline-note">
+                  {note.icon}
+                  <div>
+                    <div className="pipeline-note-title">{note.title}</div>
+                    <p className="pipeline-note-description">{note.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="tech-stack">
+              {techStack.map((tech) => (
+                <span key={tech} className="tech-badge">{tech}</span>
+              ))}
             </div>
           </div>
         </section>
@@ -639,6 +797,28 @@ function App() {
             <p className="help-note">
               Most playback commands require you to be in a voice channel.
             </p>
+
+            <div className="settings-showcase">
+              <div className="settings-showcase-header">
+                <HiOutlineAdjustments />
+                <h3 className="settings-showcase-title">Every server gets its own dial-in</h3>
+              </div>
+              <p className="settings-showcase-subtitle">
+                All of this is configurable per server from the web dashboard,
+                no code or redeploys required.
+              </p>
+              <div className="settings-grid">
+                {settingsShowcase.map((setting) => (
+                  <div key={setting.label} className="setting-chip">
+                    <div className="setting-chip-head">
+                      <span className="setting-chip-label">{setting.label}</span>
+                      <span className="setting-chip-default">{setting.defaultValue}</span>
+                    </div>
+                    <p className="setting-chip-description">{setting.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
