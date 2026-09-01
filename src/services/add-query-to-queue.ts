@@ -141,7 +141,7 @@ export default class AddQueryToQueue {
     let statusMsg = '';
     let showedEmbed = false;
 
-    if (player.voiceConnection === null) {
+    if (!player.isConnected()) {
       await player.connect(targetVoiceChannel);
 
       // Resume / start playback

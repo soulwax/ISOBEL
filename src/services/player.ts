@@ -23,7 +23,7 @@ import { inject } from 'inversify';
 import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug, { createNamespacedDebug } from '../utils/debug.js';
@@ -195,6 +195,16 @@ export default class Player {
   }
 
   async connect(channel: VoiceChannel): Promise<void> {
+    // A control can bring a paused player back after Discord has dropped its
+    // connection. Dispose of that stale connection before creating a fresh one
+    // so it cannot race the new connection's reconnect handler.
+    if (this.voiceConnection) {
+      this.allowReconnect = false;
+      this.clearReconnectTimer();
+      this.voiceConnection.destroy();
+      this.voiceConnection = null;
+    }
+
     // Always get freshest default volume setting value
     const settings = await getGuildSettings(this.guildId);
     const {defaultVolume = DEFAULT_VOLUME} = settings;
@@ -233,6 +243,11 @@ export default class Player {
     });
 
     await entersState(this.voiceConnection, VoiceConnectionStatus.Ready, 20_000);
+  }
+
+  /** Whether the player has a usable Discord voice connection right now. */
+  isConnected(): boolean {
+    return this.voiceConnection?.state.status === VoiceConnectionStatus.Ready;
   }
 
   disconnect(): void {
@@ -429,6 +444,9 @@ export default class Player {
       } else {
         this.status = STATUS.IDLE;
         this.audioPlayer?.stop(true);
+        this.stopTrackingPosition();
+        this.stopEmbedUpdates();
+        await this.showPlaybackFinishedMessage();
 
         const settings = await getGuildSettings(this.guildId);
 
@@ -509,6 +527,11 @@ export default class Player {
 
   canGoForward(skip: number) {
     return (this.queuePosition + skip - 1) < this.queue.length;
+  }
+
+  /** Whether there is an actual following track, rather than only the queue end. */
+  canGoToNextSong(): boolean {
+    return this.queuePosition + 1 < this.queue.length;
   }
 
   manualForward(skip: number): void {
@@ -888,7 +911,13 @@ export default class Player {
     const trackEndSeconds = song.length + (song.offset ?? 0);
     const isFullTrackRequest = !options.seek
       && (options.to === undefined || options.to >= trackEndSeconds);
-    const cachedOpusPath = await this.getCachedOpusPath(song);
+    // Opus artifacts are deliberately cached at unity gain so one artifact can
+    // be reused. They can only be passed straight to Discord at 100%; at every
+    // lower volume, run the source through ffmpeg so the selected 10% control
+    // level is actually audible rather than being treated as full volume.
+    const cachedOpusPath = this.getVolume() === VOLUME_MAX
+      ? await this.getCachedOpusPath(song)
+      : null;
     if (cachedOpusPath) {
       if (isFullTrackRequest) {
         this.playbackPath = 'cache';
@@ -1076,6 +1105,23 @@ export default class Player {
     this.nowPlayingMessage = message;
   }
 
+  /** Replaces the stale song card with a useful restart/add-more prompt. */
+  private async showPlaybackFinishedMessage(): Promise<void> {
+    if (!this.nowPlayingMessage || this.getCurrent()) {
+      return;
+    }
+
+    try {
+      await this.nowPlayingMessage.edit({
+        content: null,
+        embeds: [buildPlaybackFinishedEmbed(this)],
+        components: buildPlaybackControls(this),
+      });
+    } catch (error) {
+      debug(`Failed to update finished playback message: ${formatError(error)}`);
+    }
+  }
+
   /**
    * Returns the message currently rendering the now-playing embed, if any.
    */
@@ -1172,8 +1218,9 @@ export default class Player {
       return;
     }
 
-    if (this.voiceConnection.listenerCount(VoiceConnectionStatus.Disconnected) === 0) {
-      this.voiceConnection.on(VoiceConnectionStatus.Disconnected, this.onVoiceConnectionDisconnect.bind(this));
+    const voiceConnection = this.voiceConnection;
+    if (voiceConnection.listenerCount(VoiceConnectionStatus.Disconnected) === 0) {
+      voiceConnection.on(VoiceConnectionStatus.Disconnected, () => this.onVoiceConnectionDisconnect(voiceConnection));
     }
 
     if (!this.audioPlayer) {
@@ -1199,7 +1246,14 @@ export default class Player {
     this.audioPlayer.on('error', errorHandler);
   }
 
-  private onVoiceConnectionDisconnect(): void {
+  private onVoiceConnectionDisconnect(connection: VoiceConnection): void {
+    // A manual rejoin can destroy an old connection after a new one has already
+    // become ready. Ignore that stale event so it cannot schedule a reconnect
+    // for (and then tear down) the new connection.
+    if (connection !== this.voiceConnection) {
+      return;
+    }
+
     if (!this.allowReconnect || !this.currentChannel) {
       this.disconnect();
       return;

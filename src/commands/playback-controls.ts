@@ -1,7 +1,7 @@
 // File: src/commands/playback-controls.ts
 
 import { SlashCommandBuilder } from '@discordjs/builders';
-import { ActionRowBuilder, type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, MessageFlags, ModalBuilder, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { ActionRowBuilder, type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, MessageFlags, ModalBuilder, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextInputBuilder, TextInputStyle, type VoiceChannel } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { URL } from 'node:url';
 import type PlayerManager from '../managers/player.js';
@@ -76,7 +76,8 @@ export default class PlaybackControls implements Command {
       return;
     }
 
-    if (!getMemberVoiceChannel(interaction.member as GuildMember)) {
+    const memberVoiceChannel = getMemberVoiceChannel(interaction.member as GuildMember)?.[0];
+    if (!memberVoiceChannel) {
       await interaction.reply({content: errorMsg('You must be in a voice channel'), flags: MessageFlags.Ephemeral});
       return;
     }
@@ -84,11 +85,14 @@ export default class PlaybackControls implements Command {
     switch (interaction.customId) {
       case 'playback:toggle':
         await interaction.deferUpdate();
-        if (player.status === STATUS.PLAYING) {
+        if (player.status === STATUS.PLAYING && player.isConnected()) {
           await this.runPlayerAction(interaction, () => player.pause());
         } else {
           // Resuming can rebuild the stream, which takes longer than the 3s ack window.
-          await this.runPlayerAction(interaction, () => player.play());
+          await this.runPlayerAction(interaction, async () => {
+            await this.connectToMemberIfNeeded(player, memberVoiceChannel);
+            await player.play();
+          });
         }
 
         break;
@@ -99,16 +103,28 @@ export default class PlaybackControls implements Command {
         }
 
         await interaction.deferUpdate();
-        await this.runPlayerAction(interaction, () => player.back());
+        await this.runPlayerAction(interaction, async () => {
+          const reconnected = await this.connectToMemberIfNeeded(player, memberVoiceChannel);
+          await player.back();
+          if (reconnected && player.status !== STATUS.PLAYING) {
+            await player.play();
+          }
+        });
         break;
       case 'playback:next':
-        if (!player.canGoForward(1)) {
+        if (!player.canGoToNextSong()) {
           await interaction.reply({content: errorMsg('No next song in queue'), flags: MessageFlags.Ephemeral});
           return;
         }
 
         await interaction.deferUpdate();
-        await this.runPlayerAction(interaction, () => player.forward(1));
+        await this.runPlayerAction(interaction, async () => {
+          const reconnected = await this.connectToMemberIfNeeded(player, memberVoiceChannel);
+          await player.forward(1);
+          if (reconnected && player.status !== STATUS.PLAYING) {
+            await player.play();
+          }
+        });
         break;
       case 'playback:rewind':
       case 'playback:fastforward': {
@@ -121,7 +137,10 @@ export default class PlaybackControls implements Command {
         }
 
         await interaction.deferUpdate();
-        await this.runPlayerAction(interaction, () => player.seek(target));
+        await this.runPlayerAction(interaction, async () => {
+          await this.connectToMemberIfNeeded(player, memberVoiceChannel);
+          await player.seek(target);
+        });
         break;
       }
 
@@ -182,7 +201,8 @@ export default class PlaybackControls implements Command {
     }
 
     if (interaction.customId === 'playback:seek') {
-      if (!getMemberVoiceChannel(interaction.member as GuildMember)) {
+      const memberVoiceChannel = getMemberVoiceChannel(interaction.member as GuildMember)?.[0];
+      if (!memberVoiceChannel) {
         await interaction.reply({content: errorMsg('You must be in a voice channel'), flags: MessageFlags.Ephemeral});
         return;
       }
@@ -199,6 +219,7 @@ export default class PlaybackControls implements Command {
       await interaction.deferReply({flags: MessageFlags.Ephemeral});
       const player = this.playerManager.get(interaction.guild.id);
       try {
+        await this.connectToMemberIfNeeded(player, memberVoiceChannel);
         await player.seek(seconds);
         await interaction.editReply('⏩ Seeked');
       } catch (error: unknown) {
@@ -211,7 +232,8 @@ export default class PlaybackControls implements Command {
       return;
     }
 
-    if (!getMemberVoiceChannel(interaction.member as GuildMember)) {
+    const memberVoiceChannel = getMemberVoiceChannel(interaction.member as GuildMember)?.[0];
+    if (!memberVoiceChannel) {
       await interaction.reply({content: errorMsg('You must be in a voice channel'), flags: MessageFlags.Ephemeral});
       return;
     }
@@ -234,7 +256,8 @@ export default class PlaybackControls implements Command {
         addedInChannelId: interaction.channelId,
         requestedBy: interaction.user.id,
       }, {immediate: false});
-      if (player.status === STATUS.IDLE) {
+      await this.connectToMemberIfNeeded(player, memberVoiceChannel);
+      if (player.status !== STATUS.PLAYING) {
         await player.play();
       }
       await interaction.reply({content: `**${mp3Song.title}** added from MP3 URL`, flags: MessageFlags.Ephemeral});
@@ -448,6 +471,20 @@ export default class PlaybackControls implements Command {
         // The interaction may already be gone; nothing else we can do.
       }
     }
+  }
+
+  /**
+   * A now-playing message outlives a deliberate disconnect. Transport controls
+   * should therefore restore playback in the clicker's voice channel instead
+   * of failing against the missing connection.
+   */
+  private async connectToMemberIfNeeded(player: Player, channel: VoiceChannel): Promise<boolean> {
+    if (player.isConnected()) {
+      return false;
+    }
+
+    await player.connect(channel);
+    return true;
   }
 
   /**

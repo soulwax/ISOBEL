@@ -189,36 +189,65 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   const timeline = currentlyPlaying.isLive
     ? '🔴 `LIVE BROADCAST`'
     : currentlyPlaying.length > 0
-      ? `\`${prettyTime(player.getPosition())}\` ⏪ ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)} ⏩ \`${prettyTime(currentlyPlaying.length)}\``
+      ? `\`${prettyTime(player.getPosition())}\`  ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)}  \`${prettyTime(currentlyPlaying.length)}\``
       : `\`${prettyTime(player.getPosition())}\`  •  ⏱️ · duration unavailable`;
-  const metadata = truncate(`${title} — ${artist} — ${album}`, 220);
+  const subtitle = album === 'Unknown album'
+    ? `by **${artist}**`
+    : `by **${artist}**  •  *${album}*`;
 
   const message = new EmbedBuilder();
   message
     .setColor(status.color)
-    .setTitle('ISOBEL — MUSIC')
+    .setAuthor({name: `${status.emoji}  ISOBEL  •  ${status.label.toUpperCase()}`})
+    .setTitle(truncate(title, 256))
     .setDescription([
-      `**${metadata}** — wished by <@${requestedBy}>`,
+      subtitle,
       '',
       timeline,
-      '',
-      `**${getVolumeEmoji(volume)} Volume ${Number.isFinite(volume) ? `${volume}%` : '-'}   ${loop.emoji} Repeat ${loop.label}**`,
     ].join('\n'));
 
   if (songUrl) {
     message.setURL(songUrl);
   }
 
-  message.setFooter({
-    text: [`Queue: ${getQueueInfo(player)}`, playlist?.title, getSourceLabel(currentlyPlaying)].filter(Boolean).join('  •  '),
-  });
+  message
+    .addFields(
+      {name: 'STATE', value: `Requested by <@${requestedBy}>`, inline: true},
+      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
+      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+    )
+    .setFooter({
+      text: [getSourceLabel(currentlyPlaying), `${getQueueInfo(player)} queued`, playlist?.title].filter(Boolean).join('  •  '),
+    });
 
   if (thumbnailUrl) {
-    // The cover sits beside the wide playback readout, like a compact player.
-    message.setThumbnail(thumbnailUrl);
+    // Keep the card visually dominant; Discord renders every component row
+    // beneath this full-width image, never inside the embed itself.
+    message.setImage(thumbnailUrl);
   }
 
   return message;
+};
+
+/** Replaces a stale now-playing card while preserving the same three-part rhythm. */
+export const buildPlaybackFinishedEmbed = (player: Player): EmbedBuilder => {
+  const volume = player.getVolume();
+  const loop = getLoopPresentation(player);
+
+  return new EmbedBuilder()
+    .setColor(EMBED_COLOR.idle)
+    .setAuthor({name: '⏹️  ISOBEL  •  QUEUE COMPLETE'})
+    .setTitle('Playback finished')
+    .setDescription([
+      player.canGoBack() ? '⏮️ Replay a previous track  •  🔎 Add something new' : '🔎 Add something new',
+      'Join a voice channel first and ISOBEL will come to you.',
+    ].join('\n\n'))
+    .addFields(
+      {name: 'STATE', value: 'Queue complete', inline: true},
+      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
+      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+    )
+    .setFooter({text: '⏮️ Replay  •  🔎 Add music'});
 };
 
 export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {
@@ -255,7 +284,9 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
     .setStyle(ButtonStyle.Secondary)
     .setEmoji('⏭️');
 
-  // Row 2 - playback settings and exit. This mirrors the five-button transport row.
+  // The three-button middle row is the visual and functional core: quieter,
+  // stop, louder. Framed by two five-button rows, 5:3 is the nearest compact
+  // Fibonacci ratio Discord's component grid permits.
   const loopButton = new ButtonBuilder()
     .setCustomId('playback:loop')
     .setStyle(loop.isOn ? ButtonStyle.Success : ButtonStyle.Secondary)
@@ -281,7 +312,7 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
     .setStyle(ButtonStyle.Danger)
     .setEmoji('⏹️');
 
-  // Library actions stay visible and direct; a menu made them easy to miss.
+  // The lower five-button row holds modes and library actions.
   const searchButton = new ButtonBuilder()
     .setCustomId('playback:search')
     .setStyle(ButtonStyle.Secondary)
@@ -297,37 +328,33 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
     .setStyle(ButtonStyle.Secondary)
     .setEmoji('⏱️');
 
-  const transportButtons = [
-    ...(player.canGoBack() ? [previousButton] : []),
-    ...(canSeek ? [rewindButton] : []),
-    ...(currentSong ? [toggleButton] : []),
-    ...(canSeek ? [fastForwardButton] : []),
-    ...(player.canGoForward(1) ? [nextButton] : []),
-  ];
-  const playbackButtons = [
-    ...(currentSong ? [loopButton] : []),
-    ...(player.queueSize() >= 2 ? [shuffleButton] : []),
-    ...(currentSong && volume > VOLUME_MIN ? [volumeDownButton] : []),
-    ...(currentSong && volume < VOLUME_MAX ? [volumeUpButton] : []),
-    ...(currentSong ? [stopButton] : []),
-  ];
-  const utilityButtons = [
-    ...(currentSong ? [searchButton, queueButton] : []),
-    ...(canSeek ? [seekButton] : []),
-  ];
+  // Keep every symbol in a fixed position. Disabled icons preserve the
+  // composition and make unavailable actions immediately legible.
+  previousButton.setDisabled(!player.canGoBack());
+  rewindButton.setDisabled(!canSeek);
+  toggleButton.setDisabled(!currentSong);
+  fastForwardButton.setDisabled(!canSeek);
+  nextButton.setDisabled(!player.canGoToNextSong());
+  loopButton.setDisabled(!currentSong);
+  shuffleButton.setDisabled(player.queueSize() < 2);
+  volumeDownButton.setDisabled(!currentSong || volume <= VOLUME_MIN);
+  volumeUpButton.setDisabled(!currentSong || volume >= VOLUME_MAX);
+  stopButton.setDisabled(!currentSong);
+  searchButton.setDisabled(false);
+  queueButton.setDisabled(!currentSong);
+  seekButton.setDisabled(!canSeek);
+
+  // The 5–3–5 layout is retained after disconnecting or completing a queue.
+  // A disconnected player keeps its queue, so its enabled transport action
+  // will reconnect it to the person who presses it.
+  const transportButtons = [previousButton, rewindButton, toggleButton, fastForwardButton, nextButton];
+  const coreButtons = [volumeDownButton, stopButton, volumeUpButton];
+  const utilityButtons = [loopButton, shuffleButton, searchButton, queueButton, seekButton];
   const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
 
-  if (transportButtons.length > 0) {
-    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(transportButtons));
-  }
-
-  if (playbackButtons.length > 0) {
-    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(playbackButtons));
-  }
-
-  if (utilityButtons.length > 0) {
-    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(utilityButtons));
-  }
+  rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(transportButtons));
+  rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(coreButtons));
+  rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(utilityButtons));
 
   const suggestions = player.getAiSuggestions();
   if (suggestions.length > 0) {
