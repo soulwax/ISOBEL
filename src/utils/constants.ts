@@ -63,6 +63,17 @@ export const STREAM_READ_BURST_SECONDS = 15;
 export const STREAM_READ_RATE = 1.5;
 
 /**
+ * Minimum ffmpeg version that understands -readrate_initial_burst.
+ *
+ * Older ffmpeg (Debian bookworm's apt package is 5.1.x, Ubuntu 22.04's is
+ * 4.4.x) doesn't just ignore the flag, it refuses to start at all with
+ * "Unrecognized option", which breaks every non-cached track. Detected once
+ * at startup so we can fall back to plain -readrate on those hosts instead.
+ */
+export const FFMPEG_READRATE_BURST_MIN_MAJOR = 6;
+export const FFMPEG_READRATE_BURST_MIN_MINOR = 1;
+
+/**
  * Upper bound for the Opus encoder, in kbps.
  *
  * The voice channel advertises its own bitrate and that wins when it is lower.

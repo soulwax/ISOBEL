@@ -17,6 +17,7 @@ import { isUserInVoice } from './utils/channels.js';
 import { DISCORD_API_VERSION } from './utils/constants.js';
 import debug from './utils/debug.js';
 import errorMsg from './utils/error-msg.js';
+import { supportsReadrateInitialBurst } from './utils/ffmpeg-capabilities.js';
 import registerCommandsOnGuild from './utils/register-commands-on-guild.js';
 import { serializeGlobalCommand } from './utils/serialize-command.js';
 
@@ -124,6 +125,7 @@ export default class Bot {
     }
 
     debug(generateDependencyReport());
+    await supportsReadrateInitialBurst();
 
     spinner.text = '📡 syncing guild database records...';
     await Promise.all(this.client.guilds.cache.map(guild => registerGuildInDatabase(guild)));

@@ -28,6 +28,7 @@ import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COU
 import ByteCounter from '../utils/byte-counter.js';
 import debug, { createNamespacedDebug } from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
+import { supportsReadrateInitialBurst } from '../utils/ffmpeg-capabilities.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import type FileCacheProvider from './file-cache.js';
 import type SongbirdNext from './songbird-next.js';
@@ -1380,6 +1381,20 @@ export default class Player {
         ? (this.getVolume() / VOLUME_MAX).toString()
         : undefined);
 
+    // Determine if input is a file path or URL
+    const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
+
+    // Network inputs burst a cushion, then settle to a rate that keeps
+    // rebuilding it. Reading at exactly 1x (-re) leaves nothing buffered, so
+    // any jitter becomes an underrun. Local files are already instant.
+    // The initial-burst flag needs ffmpeg 6.1+; older builds hard-fail on it
+    // instead of ignoring it, so it's only added when actually supported.
+    const readAhead = isFile
+      ? []
+      : (await supportsReadrateInitialBurst())
+        ? ['-readrate', STREAM_READ_RATE.toString(), '-readrate_initial_burst', STREAM_READ_BURST_SECONDS.toString()]
+        : ['-readrate', STREAM_READ_RATE.toString()];
+
     return new Promise((resolve, reject) => {
       const capacitor = new WriteStream();
 
@@ -1391,16 +1406,6 @@ export default class Player {
       const returnedStream = capacitor.createReadStream();
       let hasReturnedStreamClosed = false;
       let hasResolved = false;
-
-      // Determine if input is a file path or URL
-      const isFile = !options.url.startsWith('http://') && !options.url.startsWith('https://');
-
-      // Network inputs burst a cushion, then settle to a rate that keeps
-      // rebuilding it. Reading at exactly 1x (-re) leaves nothing buffered, so
-      // any jitter becomes an underrun. Local files are already instant.
-      const readAhead = isFile
-        ? []
-        : ['-readrate', STREAM_READ_RATE.toString(), '-readrate_initial_burst', STREAM_READ_BURST_SECONDS.toString()];
 
       // Concatenate rather than replace: seeking passes -ss, which previously
       // discarded the pacing flags entirely and made seek behave differently

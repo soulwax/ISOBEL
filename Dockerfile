@@ -1,6 +1,6 @@
 # File: Dockerfile
 
-FROM node:25-bookworm-slim AS base
+FROM node:25-trixie-slim AS base
 
 # Install pnpm directly (avoids corepack integrity check failures in Docker)
 # Keep in sync with the "packageManager" field in package.json.
