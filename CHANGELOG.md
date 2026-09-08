@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Known issues
+
+- **Cold start stream** - Initial stream startup may experience delays due to cold-start latency.
+- **Bad pauses and lags** - Users may experience unexpected pauses and lag during playback.
+- **Settings cannot be saved** - Invalid settings rejected by the API may leave users unable to save configuration changes for a few moments, possibly until oxmgr restarts the process.
+
 ## [3.1.0] - 2026-02-28
 
 ### Added
