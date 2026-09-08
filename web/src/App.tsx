@@ -116,7 +116,6 @@ function App() {
         "/favorites create|use|list|remove",
         "/yt query:<text>",
         "/file file:<upload>",
-        "/playback-controls",
       ],
     },
     {

@@ -1,7 +1,9 @@
 import { ApplicationIntegrationType, InteractionContextType, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
 import type Command from '../commands/index.js';
 
-type SlashCommand = Command['slashCommand'];
+// Non-nullable: Command['slashCommand'] is optional because component-only
+// handlers omit it, but nothing without one ever reaches serialization.
+type SlashCommand = NonNullable<Command['slashCommand']>;
 
 export const serializeGlobalCommand = (command: SlashCommand): RESTPostAPIChatInputApplicationCommandsJSONBody => ({
   ...command.toJSON(),

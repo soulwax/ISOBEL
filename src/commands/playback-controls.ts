@@ -1,7 +1,6 @@
 // File: src/commands/playback-controls.ts
 
-import { SlashCommandBuilder } from '@discordjs/builders';
-import { ActionRowBuilder, type ButtonInteraction, type ChatInputCommandInteraction, type GuildMember, MessageFlags, ModalBuilder, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextInputBuilder, TextInputStyle, type VoiceChannel } from 'discord.js';
+import { ActionRowBuilder, type ButtonInteraction, type GuildMember, MessageFlags, ModalBuilder, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextInputBuilder, TextInputStyle, type VoiceChannel } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import { URL } from 'node:url';
 import type PlayerManager from '../managers/player.js';
@@ -17,35 +16,38 @@ import type Command from './index.js';
 
 type PlaybackComponentInteraction = ButtonInteraction | StringSelectMenuInteraction;
 
+/**
+ * Routes the now-playing embed's buttons, modals and select menus.
+ *
+ * Deliberately has no slashCommand: there is nothing useful to run as
+ * `/playback-controls`, and registering one only gave users a command that
+ * timed out with "the application did not respond".
+ */
 @injectable()
 export default class PlaybackControls implements Command {
   private static readonly aiSuggestionValuePrefix = 'ai-suggest:';
 
-  public readonly slashCommand = new SlashCommandBuilder()
-    .setName('playback-controls')
-    .setDescription('internal playback controls');
-
   public readonly handledButtonIds = [
-    // Row 1: transport
-    'playback:prev',
-    'playback:rewind',
-    'playback:toggle',
-    'playback:fastforward',
-    'playback:next',
-    // Row 2: mix
+    // Row 1: modes and transport
     'playback:loop',
     'playback:shuffle',
+    'playback:prev',
+    'playback:toggle',
+    'playback:next',
+    // Row 2: stop, queue, volume
+    'playback:stop',
+    'playback:queue',
     'playback:volume-down',
     'playback:volume-up',
-    'playback:stop',
-    // Row 3: secondary actions
-    'playback:actions',
-    // Keep the prior button and modal IDs registered so existing messages keep
-    // working until Discord replaces them with the redesigned controls.
-    'playback:search',
-    'playback:queue',
-    'playback:seek',
+    // The AI suggestion select menu, when there are suggestions to show.
     'playback:suggest',
+    // No longer rendered, but kept registered (along with their modals) so
+    // already-sent now-playing messages keep working when someone presses
+    // them. Removable once those messages have aged out.
+    'playback:rewind',
+    'playback:fastforward',
+    'playback:search',
+    'playback:seek',
   ] as const;
 
   private readonly playerManager: PlayerManager;
@@ -57,10 +59,6 @@ export default class PlaybackControls implements Command {
   ) {
     this.playerManager = playerManager;
     this.addQueryToQueue = addQueryToQueue;
-  }
-
-  public async execute(_interaction: ChatInputCommandInteraction): Promise<void> {
-    // This command exists only for button handling.
   }
 
   public async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
@@ -279,11 +277,6 @@ export default class PlaybackControls implements Command {
       return;
     }
 
-    if (interaction.customId === 'playback:actions') {
-      await this.handleSecondaryAction(interaction);
-      return;
-    }
-
     if (interaction.customId !== 'playback:suggest') {
       return;
     }
@@ -380,41 +373,6 @@ export default class PlaybackControls implements Command {
       embeds: [buildQueueEmbed(player, 1, QUEUE_PAGE_SIZE_DEFAULT)],
       flags: MessageFlags.Ephemeral,
     });
-  }
-
-  /** Opens the compact action menu's selected utility without changing playback. */
-  private async handleSecondaryAction(interaction: StringSelectMenuInteraction): Promise<void> {
-    if (!interaction.guild || !interaction.member) {
-      return;
-    }
-
-    const [action] = interaction.values;
-    const player = this.playerManager.get(interaction.guild.id);
-
-    if (action === 'queue') {
-      await this.showQueue(interaction, player);
-      return;
-    }
-
-    if (!getMemberVoiceChannel(interaction.member as GuildMember)) {
-      await interaction.reply({content: errorMsg('You must be in a voice channel'), flags: MessageFlags.Ephemeral});
-      return;
-    }
-
-    if (action === 'search') {
-      await this.showSearchModal(interaction);
-      return;
-    }
-
-    if (action === 'seek') {
-      const song = player.getCurrent();
-      if (!song || song.isLive || song.length <= 0) {
-        await interaction.reply({content: errorMsg('This track can\'t be seeked'), flags: MessageFlags.Ephemeral});
-        return;
-      }
-
-      await this.showSeekModal(interaction);
-    }
   }
 
   private async showSearchModal(interaction: PlaybackComponentInteraction): Promise<void> {

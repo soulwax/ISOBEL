@@ -28,6 +28,11 @@ import { serializeGlobalCommand } from './utils/serialize-command.js';
 const BOT_REQUIRED_PERMISSIONS = 36700160;
 const applicationCommandsRoute = (applicationId: string): `/applications/${string}/commands` => `/applications/${applicationId}/commands`;
 
+/** A command Discord can actually be told about, as opposed to a component-only handler. */
+type RegisteredCommand = Command & {slashCommand: NonNullable<Command['slashCommand']>};
+
+const hasSlashCommand = (command: Command): command is RegisteredCommand => Boolean(command.slashCommand);
+
 @injectable()
 export default class Bot {
   private readonly client: Client;
@@ -35,7 +40,7 @@ export default class Bot {
   private readonly healthServer: HealthServer;
   private readonly playerManager: PlayerManager;
   private readonly shouldRegisterCommandsOnBot: boolean;
-  private readonly commandsByName = new Collection<string, Command>();
+  private readonly commandsByName = new Collection<string, RegisteredCommand>();
   private readonly commandsByButtonId = new Collection<string, Command>();
 
   constructor(
@@ -78,15 +83,19 @@ export default class Bot {
 
   private loadCommands(): void {
     for (const command of container.getAll<Command>(TYPES.Command)) {
-      try {
-        command.slashCommand.toJSON();
-      } catch (error) {
-        debug(error);
-        throw new Error(`Could not serialize /${command.slashCommand.name ?? ''} to JSON`);
-      }
+      // Component-only handlers have no slash command to register or dispatch;
+      // they earn their place in the container through handledButtonIds alone.
+      if (hasSlashCommand(command)) {
+        try {
+          command.slashCommand.toJSON();
+        } catch (error) {
+          debug(error);
+          throw new Error(`Could not serialize /${command.slashCommand.name ?? ''} to JSON`);
+        }
 
-      if (command.slashCommand.name) {
-        this.commandsByName.set(command.slashCommand.name, command);
+        if (command.slashCommand.name) {
+          this.commandsByName.set(command.slashCommand.name, command);
+        }
       }
 
       if (command.handledButtonIds) {

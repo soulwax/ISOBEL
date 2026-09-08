@@ -142,7 +142,11 @@ export default async (guild: Guild): Promise<void> => {
       rest,
       applicationId: client.user!.id,
       guildId: guild.id,
-      commands: container.getAll<Command>(TYPES.Command).map(command => command.slashCommand),
+      // Component-only handlers (the playback embed's buttons) have no slash
+      // command and must not be registered as one.
+      commands: container.getAll<Command>(TYPES.Command)
+        .map(command => command.slashCommand)
+        .filter((slashCommand): slashCommand is NonNullable<typeof slashCommand> => Boolean(slashCommand)),
     });
   }
 };
