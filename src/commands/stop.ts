@@ -26,7 +26,7 @@ export default class implements Command {
 
     // Stop playback and clear queue regardless of connection status
     // This allows stopping even if already disconnected
-    player.stop();
+    await player.stop();
     await interaction.reply('Stopped');
   }
 }

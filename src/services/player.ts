@@ -23,7 +23,7 @@ import { inject } from 'inversify';
 import { pipeline } from 'node:stream/promises';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlaybackFinishedControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug, { createNamespacedDebug } from '../utils/debug.js';
@@ -630,11 +630,22 @@ export default class Player {
     return this.queueSize() === 0;
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopEmbedUpdates();
     this.disconnect();
-    this.queuePosition = 0;
-    this.queue = [];
+
+    // Drop the upcoming queue - that's what /stop is actually meant to clear -
+    // but keep everything up to whatever was last playing, so the finished
+    // embed's Replay button has a song to go back to instead of nothing.
+    const lastPlayedIndex = Math.min(this.queuePosition, this.queue.length - 1);
+    this.queue = lastPlayedIndex >= 0 ? this.queue.slice(0, lastPlayedIndex + 1) : [];
+    this.queuePosition = this.queue.length;
+    this.status = STATUS.IDLE;
+
+    // /stop doesn't otherwise touch the now-playing message, so without this
+    // it would sit there showing the old (now non-functional) full control
+    // set instead of switching to the Replay-only finished state.
+    await this.showPlaybackFinishedMessage();
   }
 
   move(from: number, to: number): QueuedSong {
@@ -1119,7 +1130,7 @@ export default class Player {
       await this.nowPlayingMessage.edit({
         content: null,
         embeds: [buildPlaybackFinishedEmbed(this)],
-        components: buildPlaybackControls(this),
+        components: buildPlaybackFinishedControls(this),
       });
     } catch (error) {
       debug(`Failed to update finished playback message: ${formatError(error)}`);

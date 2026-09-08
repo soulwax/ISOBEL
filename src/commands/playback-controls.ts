@@ -9,7 +9,7 @@ import type AddQueryToQueue from '../services/add-query-to-queue.js';
 import type Player from '../services/player.js';
 import { MediaSource, STATUS, type SongMetadata } from '../services/player.js';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed, buildQueueEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlaybackFinishedControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed, buildQueueEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel } from '../utils/channels.js';
 import { QUEUE_PAGE_SIZE_DEFAULT, SEEK_STEP_SECONDS, VOLUME_MAX, VOLUME_MIN, VOLUME_STEP } from '../utils/constants.js';
 import errorMsg, { formatError } from '../utils/error-msg.js';
@@ -350,7 +350,11 @@ export default class PlaybackControls implements Command {
         }
       } else {
         player.setNowPlayingMessage(null);
-        const payload = {content: '⏹️ Playback stopped.', embeds: [], components: []};
+        const payload = {
+          content: null,
+          embeds: [buildPlaybackFinishedEmbed(player)],
+          components: buildPlaybackFinishedControls(player),
+        };
 
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply(payload);
