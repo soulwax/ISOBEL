@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { discordGuilds, discordUsers, guildMembers } from '../db/schema.js';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout';
 
 interface DiscordProfile {
   id?: unknown;
@@ -20,7 +21,7 @@ interface SyncDiscordDataOptions {
 }
 
 async function fetchDiscordProfile(accessToken: string): Promise<DiscordProfile | null> {
-  const response = await fetch('https://discord.com/api/v10/users/@me', {
+  const response = await fetchWithTimeout('https://discord.com/api/v10/users/@me', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -71,7 +72,7 @@ export async function syncDiscordData({
       },
     });
 
-  const guildsResponse = await fetch('https://discord.com/api/v10/users/@me/guilds', {
+  const guildsResponse = await fetchWithTimeout('https://discord.com/api/v10/users/@me/guilds', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

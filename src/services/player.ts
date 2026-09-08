@@ -945,8 +945,11 @@ export default class Player {
       });
     }
 
-    // If we need to seek, we must have a local file first.
-    if (options.seek || options.to) {
+    // A real seek needs a local file first so ffmpeg can trim it; a plain play
+    // just happens to carry a `to` equal to the track's own end (every song
+    // gets an offset) and should take the direct-stream fast path below like
+    // any other fresh play, not pay for a full download it doesn't need.
+    if (!isFullTrackRequest) {
       const mp3Path = await this.downloadAndCacheMP3(song);
 
       const ffmpegInputOptions: string[] = [];

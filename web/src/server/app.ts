@@ -22,6 +22,7 @@ import {
 } from "../db/schema.js";
 import { getEnv, validateEnv } from "../lib/env.js";
 import { AuthorizationError, NotFoundError } from "../lib/errors.js";
+import { fetchWithTimeout } from "../lib/fetch-with-timeout.js";
 import { logger } from "../lib/logger.js";
 import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
@@ -604,7 +605,7 @@ export function createApp(options: CreateAppOptions = {}) {
     const botHealthUrl = getBotHealthUrl();
 
     try {
-      const upstreamResponse = await fetch(botHealthUrl, {
+      const upstreamResponse = await fetchWithTimeout(botHealthUrl, {
         headers: {
           accept: "application/json",
         },

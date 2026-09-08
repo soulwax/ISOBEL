@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parse } from 'dotenv';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.js';
 import { logger } from '../lib/logger.js';
 import { getBotHealthUrl } from './bot-health-url.js';
 
@@ -63,7 +64,7 @@ async function getBotGuildsFromDiscord(): Promise<BotGuild[] | null> {
   }
 
   try {
-    const response = await fetch('https://discord.com/api/v10/users/@me/guilds', {
+    const response = await fetchWithTimeout('https://discord.com/api/v10/users/@me/guilds', {
       headers: {
         accept: 'application/json',
         Authorization: `Bot ${discordToken}`,
@@ -96,7 +97,7 @@ async function getBotGuildsFromHealth(): Promise<BotGuild[] | null> {
   const botHealthUrl = getBotHealthUrl();
 
   try {
-    const response = await fetch(botHealthUrl, {
+    const response = await fetchWithTimeout(botHealthUrl, {
       headers: {
         accept: 'application/json',
       },
@@ -154,7 +155,7 @@ export async function leaveBotGuild(guildId: string): Promise<{ ok: true } | { o
   }
 
   try {
-    const response = await fetch(`https://discord.com/api/v10/users/@me/guilds/${guildId}`, {
+    const response = await fetchWithTimeout(`https://discord.com/api/v10/users/@me/guilds/${guildId}`, {
       method: 'DELETE',
       headers: {
         accept: 'application/json',

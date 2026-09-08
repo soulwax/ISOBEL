@@ -239,7 +239,7 @@ export const buildPlaybackFinishedEmbed = (player: Player): EmbedBuilder => {
     .setAuthor({name: '⏹️  ISOBEL  •  QUEUE COMPLETE'})
     .setTitle('Playback finished')
     .setDescription([
-      player.canGoBack() ? '⏮️ Replay a previous track  •  🔎 Add something new' : '🔎 Add something new',
+      player.canGoBack() ? '⏮️ Replay a previous track  •  Use /play to add something new' : 'Use /play to add something new',
       'Join a voice channel first and ISOBEL will come to you.',
     ].join('\n\n'))
     .addFields(
@@ -247,46 +247,33 @@ export const buildPlaybackFinishedEmbed = (player: Player): EmbedBuilder => {
       {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
       {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
     )
-    .setFooter({text: '⏮️ Replay  •  🔎 Add music'});
+    .setFooter({text: '⏮️ Replay  •  /play to add music'});
 };
 
 export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {
   const isPlaying = player.status === STATUS.PLAYING;
   const currentSong = player.getCurrent();
-  const canSeek = Boolean(currentSong) && !currentSong!.isLive && currentSong!.length > 0;
   const volume = player.getVolume();
   const loop = getLoopPresentation(player);
 
-  // Row 1 - primary transport. Icon-only buttons deliberately keep all five
-  // controls equal in size, with play/pause held in the visual centre.
+  // Row 1 - primary transport, play/pause held in the visual centre.
+  // Rewind/fast-forward were dropped as rarely used; /seek covers that need.
   const previousButton = new ButtonBuilder()
     .setCustomId('playback:prev')
     .setStyle(ButtonStyle.Secondary)
     .setEmoji('⏮️');
-
-  const rewindButton = new ButtonBuilder()
-    .setCustomId('playback:rewind')
-    .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏪');
 
   const toggleButton = new ButtonBuilder()
     .setCustomId('playback:toggle')
     .setStyle(ButtonStyle.Primary)
     .setEmoji(isPlaying ? '⏸️' : '▶️');
 
-  const fastForwardButton = new ButtonBuilder()
-    .setCustomId('playback:fastforward')
-    .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏩');
-
   const nextButton = new ButtonBuilder()
     .setCustomId('playback:next')
     .setStyle(ButtonStyle.Secondary)
     .setEmoji('⏭️');
 
-  // The three-button middle row is the visual and functional core: quieter,
-  // stop, louder. Framed by two five-button rows, 5:3 is the nearest compact
-  // Fibonacci ratio Discord's component grid permits.
+  // The middle row is the volume/stop core: quieter, stop, louder.
   const loopButton = new ButtonBuilder()
     .setCustomId('playback:loop')
     .setStyle(loop.isOn ? ButtonStyle.Success : ButtonStyle.Secondary)
@@ -312,44 +299,31 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
     .setStyle(ButtonStyle.Danger)
     .setEmoji('⏹️');
 
-  // The lower five-button row holds modes and library actions.
-  const searchButton = new ButtonBuilder()
-    .setCustomId('playback:search')
-    .setStyle(ButtonStyle.Secondary)
-    .setEmoji('🔎');
-
+  // The lower row holds modes and the queue. Search/seek were dropped as
+  // rarely used - /play and /seek cover the same actions from the slash menu.
   const queueButton = new ButtonBuilder()
     .setCustomId('playback:queue')
     .setStyle(ButtonStyle.Secondary)
     .setEmoji('📜');
 
-  const seekButton = new ButtonBuilder()
-    .setCustomId('playback:seek')
-    .setStyle(ButtonStyle.Secondary)
-    .setEmoji('⏱️');
-
   // Keep every symbol in a fixed position. Disabled icons preserve the
   // composition and make unavailable actions immediately legible.
   previousButton.setDisabled(!player.canGoBack());
-  rewindButton.setDisabled(!canSeek);
   toggleButton.setDisabled(!currentSong);
-  fastForwardButton.setDisabled(!canSeek);
   nextButton.setDisabled(!player.canGoToNextSong());
   loopButton.setDisabled(!currentSong);
   shuffleButton.setDisabled(player.queueSize() < 2);
   volumeDownButton.setDisabled(!currentSong || volume <= VOLUME_MIN);
   volumeUpButton.setDisabled(!currentSong || volume >= VOLUME_MAX);
   stopButton.setDisabled(!currentSong);
-  searchButton.setDisabled(false);
   queueButton.setDisabled(!currentSong);
-  seekButton.setDisabled(!canSeek);
 
-  // The 5–3–5 layout is retained after disconnecting or completing a queue.
+  // The 3–3–3 layout is retained after disconnecting or completing a queue.
   // A disconnected player keeps its queue, so its enabled transport action
   // will reconnect it to the person who presses it.
-  const transportButtons = [previousButton, rewindButton, toggleButton, fastForwardButton, nextButton];
+  const transportButtons = [previousButton, toggleButton, nextButton];
   const coreButtons = [volumeDownButton, stopButton, volumeUpButton];
-  const utilityButtons = [loopButton, shuffleButton, searchButton, queueButton, seekButton];
+  const utilityButtons = [loopButton, shuffleButton, queueButton];
   const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
 
   rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(transportButtons));
