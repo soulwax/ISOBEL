@@ -21,10 +21,11 @@ import { WriteStream } from 'fs-capacitor';
 import { hashSync } from 'hasha';
 import { inject } from 'inversify';
 import { pipeline } from 'node:stream/promises';
+import pLimit from 'p-limit';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlaybackFinishedControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, BACKGROUND_ENCODE_CONCURRENCY, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug, { createNamespacedDebug } from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
@@ -36,6 +37,10 @@ import type StarchildAPI from './starchild-api.js';
 
 // Enable with DEBUG=ISOBEL:audio to watch the encoder cushion in real time.
 const debugAudio = createNamespacedDebug('audio');
+
+// Shared by every guild's player: prefetch encodes queue here rather than all
+// running at once and starving live playback of CPU.
+const backgroundEncodeLimit = pLimit(BACKGROUND_ENCODE_CONCURRENCY);
 
 const configureFfmpeggy = (): void => {
   const ffmpeggy = FFmpeggy as unknown as {
@@ -733,66 +738,10 @@ export default class Player {
     }
 
     const transcodePromise = (async () => {
+      // Fetching the source is network-bound, so it happens before queueing:
+      // an encode slot is only worth holding for the part that burns CPU.
       const sourcePath = await this.downloadAndCacheMP3(song);
-      const {stream: writeStream, committed} = this.fileCache.createWriteStream(hash);
-
-      const ff = new FFmpeggy({
-        input: sourcePath,
-        pipe: true,
-        outputOptions: [
-          '-vn',
-          '-c:a', 'libopus',
-          '-b:a', `${bitrateKbps}k`,
-          '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
-          '-ac', DISCORD_CHANNEL_COUNT.toString(),
-          '-packet_loss', OPUS_EXPECTED_PACKET_LOSS_PERCENT.toString(),
-          '-fec', '1',
-          '-f', 'webm',
-        ],
-        overwriteExisting: true,
-      });
-
-      // A partial encode must never reach the cache: the write stream commits on
-      // close and only rejects empty files, so anything short of a clean exit
-      // has to destroy it rather than let it close normally.
-      const exited = new Promise<void>((resolve, reject) => {
-        ff.on('exit', (code: number | null, error?: Error) => {
-          if (code === 0 && !error) {
-            resolve();
-            return;
-          }
-
-          reject(error ?? new Error(`ffmpeg exited with code ${String(code)}`));
-        });
-
-        ff.on('error', (error: Error) => {
-          reject(error);
-        });
-      });
-
-      // Nothing consumes this rejection when the encode fails below.
-      void committed.catch(() => undefined);
-
-      // run() resolves once the process is spawned, not when it finishes, so
-      // the pipeline has to be started before awaiting either.
-      const written = pipeline(ff.toStream() as unknown as Readable, writeStream);
-      await ff.run();
-
-      try {
-        await exited;
-        await written;
-      } catch (error) {
-        writeStream.destroy(error instanceof Error ? error : new Error(String(error)));
-        throw error;
-      }
-
-      const finalPath = await committed;
-      if (!finalPath) {
-        throw new Error(`Empty Opus encode for ${song.title}`);
-      }
-
-      debugAudio(`cached opus artifact for ${song.title} at ${bitrateKbps}k`);
-      return finalPath;
+      return backgroundEncodeLimit(async () => this.encodeOpusArtifact(song, bitrateKbps, hash, sourcePath));
     })();
 
     this.opusCacheInFlight.set(hash, transcodePromise);
@@ -801,6 +750,69 @@ export default class Player {
     } finally {
       this.opusCacheInFlight.delete(hash);
     }
+  }
+
+  /** The CPU-bound half of transcodeAndCacheOpus, run under backgroundEncodeLimit. */
+  private async encodeOpusArtifact(song: QueuedSong, bitrateKbps: number, hash: string, sourcePath: string): Promise<string> {
+    const {stream: writeStream, committed} = this.fileCache.createWriteStream(hash);
+
+    const ff = new FFmpeggy({
+      input: sourcePath,
+      pipe: true,
+      outputOptions: [
+        '-vn',
+        '-c:a', 'libopus',
+        '-b:a', `${bitrateKbps}k`,
+        '-ar', DISCORD_SAMPLE_RATE_HZ.toString(),
+        '-ac', DISCORD_CHANNEL_COUNT.toString(),
+        '-packet_loss', OPUS_EXPECTED_PACKET_LOSS_PERCENT.toString(),
+        '-fec', '1',
+        '-f', 'webm',
+      ],
+      overwriteExisting: true,
+    });
+
+    // A partial encode must never reach the cache: the write stream commits on
+    // close and only rejects empty files, so anything short of a clean exit
+    // has to destroy it rather than let it close normally.
+    const exited = new Promise<void>((resolve, reject) => {
+      ff.on('exit', (code: number | null, error?: Error) => {
+        if (code === 0 && !error) {
+          resolve();
+          return;
+        }
+
+        reject(error ?? new Error(`ffmpeg exited with code ${String(code)}`));
+      });
+
+      ff.on('error', (error: Error) => {
+        reject(error);
+      });
+    });
+
+    // Nothing consumes this rejection when the encode fails below.
+    void committed.catch(() => undefined);
+
+    // run() resolves once the process is spawned, not when it finishes, so
+    // the pipeline has to be started before awaiting either.
+    const written = pipeline(ff.toStream() as unknown as Readable, writeStream);
+    await ff.run();
+
+    try {
+      await exited;
+      await written;
+    } catch (error) {
+      writeStream.destroy(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+
+    const finalPath = await committed;
+    if (!finalPath) {
+      throw new Error(`Empty Opus encode for ${song.title}`);
+    }
+
+    debugAudio(`cached opus artifact for ${song.title} at ${bitrateKbps}k`);
+    return finalPath;
   }
 
   /**
@@ -1101,7 +1113,12 @@ export default class Player {
         ? null
         : Number((producedSeconds - (resource.playbackDuration / 1000)).toFixed(1));
 
-      debugAudio(`guild=${this.guildId} path=${this.playbackPath} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+      // Guarded rather than left to the logger: this runs once a second for
+      // every playing guild, and the template would otherwise be built (and
+      // redacted) even with the namespace switched off.
+      if (debugAudio.enabled) {
+        debugAudio(`guild=${this.guildId} path=${this.playbackPath} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+      }
     }, PLAYBACK_TELEMETRY_INTERVAL_MS);
   }
 

@@ -74,6 +74,18 @@ export const FFMPEG_READRATE_BURST_MIN_MAJOR = 6;
 export const FFMPEG_READRATE_BURST_MIN_MINOR = 1;
 
 /**
+ * How many background Opus encodes may run at once, across every guild.
+ *
+ * Warming the next track spawns a full ffmpeg encode that competes for CPU
+ * with the encoders feeding live playback. The per-guild in-flight maps only
+ * deduplicate the same track, so without a shared ceiling every guild
+ * changing song at once starts its own encode and starves the event loop -
+ * the "cushion is healthy but playback still stalls" case. Prefetching is by
+ * definition not urgent, so it gets a deliberately small share.
+ */
+export const BACKGROUND_ENCODE_CONCURRENCY = 2;
+
+/**
  * Upper bound for the Opus encoder, in kbps.
  *
  * The voice channel advertises its own bitrate and that wins when it is lower.
