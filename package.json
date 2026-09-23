@@ -36,7 +36,7 @@
     "env:set-database-url": "tsx src/scripts/run-with-database-url.ts",
     "release": "release-it",
     "build": "tsc",
-    "go": "pnpm run deploy:all:oxmgr",
+    "go": "pnpm prisma generate && pnpm run deploy:all:oxmgr",
     "build:bot": "pnpm run build",
     "build:all": "pnpm run build && pnpm run web:build",
     "verify:env": "tsx src/scripts/verify-environment.ts",
