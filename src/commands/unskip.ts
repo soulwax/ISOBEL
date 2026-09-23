@@ -32,9 +32,8 @@ export default class implements Command {
         content: 'back \'er up\'',
         embeds: player.getCurrent() ? [buildPlayingMessageEmbed(player)] : [],
       });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_: unknown) {
-      throw new Error('no song to go back to');
+    } catch (error: unknown) {
+      throw new Error('no song to go back to', {cause: error});
     }
   }
 }

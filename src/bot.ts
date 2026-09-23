@@ -90,7 +90,7 @@ export default class Bot {
           command.slashCommand.toJSON();
         } catch (error) {
           debug(error);
-          throw new Error(`Could not serialize /${command.slashCommand.name ?? ''} to JSON`);
+          throw new Error(`Could not serialize /${command.slashCommand.name ?? ''} to JSON`, {cause: error});
         }
 
         if (command.slashCommand.name) {

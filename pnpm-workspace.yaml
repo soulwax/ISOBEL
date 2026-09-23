@@ -15,7 +15,9 @@ allowBuilds:
   '@discordjs/opus': true
   '@prisma/engines': true
   esbuild: true
+  msgpackr-extract: true
   prisma: true
+  workerd: true
 
 onlyBuiltDependencies:
   - '@discordjs/opus'

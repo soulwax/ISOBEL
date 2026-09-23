@@ -68,8 +68,8 @@ export default class AddQueryToQueue {
     await interaction.deferReply({ flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined });
 
     // For play command, only add one song regardless of playlist limit
-    let newSongs: SongMetadata[] = [];
-    let extraMsg = '';
+    let newSongs: SongMetadata[];
+    let extraMsg: string;
 
     if (songsOverride && songsOverride.length > 0) {
       newSongs = songsOverride;

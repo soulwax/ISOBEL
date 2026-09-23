@@ -309,10 +309,10 @@ export default class GetSongs {
       };
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as {code: string}).code === 'ENOENT') {
-        throw new Error('yt-dlp is not installed or not in PATH');
+        throw new Error('yt-dlp is not installed or not in PATH', {cause: error});
       }
       debug(`yt-dlp failed for ${input}: ${formatError(error)}`);
-      throw new Error('sorry, no matching song found for that YouTube link');
+      throw new Error('sorry, no matching song found for that YouTube link', {cause: error});
     }
   }
 }

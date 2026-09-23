@@ -5,7 +5,7 @@ import {
   type AudioPlayerState,
   AudioPlayerStatus, type AudioResource,
   createAudioPlayer,
-  createAudioResource, type DiscordGatewayAdapterCreator,
+  createAudioResource,
   entersState,
   joinVoiceChannel,
   StreamType,
@@ -232,7 +232,7 @@ export default class Player {
       channelId: channel.id,
       guildId: channel.guild.id,
       selfDeaf: false,
-      adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
+      adapterCreator: channel.guild.voiceAdapterCreator,
     });
 
     this.allowReconnect = true;
@@ -908,7 +908,7 @@ export default class Player {
       try {
         const { stream: writeStream, committed } = this.fileCache.createWriteStream(hash);
         const downloadStream = this.starchildAPI.getStream(song.url, {
-          kbps: AUDIO_BITRATE_KBPS as number,
+          kbps: AUDIO_BITRATE_KBPS,
         });
 
         // Wait for pipeline to complete
@@ -1060,7 +1060,7 @@ export default class Player {
     // Warming the Opus artifact too means the next play skips the encoder.
     this.safeAsync(this.warmArtifacts(song));
     const streamUrl = this.starchildAPI.getStreamUrl(song.url, {
-      kbps: AUDIO_BITRATE_KBPS as number,
+      kbps: AUDIO_BITRATE_KBPS,
     });
     return this.createReadStreamWithRetry({
       url: streamUrl,
@@ -1526,7 +1526,7 @@ export default class Player {
 
       if (options?.cache) {
         const { stream: cacheStream } = this.fileCache.createWriteStream(this.getHashForCache(options.cacheKey));
-        capacitor.createReadStream().pipe(cacheStream as unknown as NodeJS.WritableStream);
+        capacitor.createReadStream().pipe(cacheStream);
       }
 
       const returnedStream = capacitor.createReadStream();
@@ -1589,7 +1589,7 @@ export default class Player {
       this.activeStreamByteRate = outputFormat === 'pcm'
         ? PCM_BYTES_PER_SECOND
         : (opusBitrateKbps * 1000) / 8;
-      ff.toStream().pipe(meter).pipe(capacitor as unknown as NodeJS.WritableStream);
+      ff.toStream().pipe(meter).pipe(capacitor);
 
       ff
         .on('error', (error: Error) => {

@@ -79,8 +79,9 @@ export default class StarchildAPI {
             retries: 2,
             minTimeout: 250,
             maxTimeout: 1500,
-            onFailedAttempt: (error) => {
-              debug(`Search retry ${error.attemptNumber} failed: ${formatError(error)}`);
+            // p-retry passes a context object, not the error itself.
+            onFailedAttempt: ({error, attemptNumber}) => {
+              debug(`Search retry ${attemptNumber} failed: ${formatError(error)}`);
             },
           }
         );

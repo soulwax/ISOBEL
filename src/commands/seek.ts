@@ -43,13 +43,7 @@ export default class implements Command {
 
     const time = interaction.options.getString('time')!;
 
-    let seekTime = 0;
-
-    if (time.includes(':')) {
-      seekTime = parseTime(time);
-    } else {
-      seekTime = durationStringToSeconds(time);
-    }
+    const seekTime = time.includes(':') ? parseTime(time) : durationStringToSeconds(time);
 
     if (seekTime > currentSong.length) {
       throw new Error('can\'t seek past the end of the song');
