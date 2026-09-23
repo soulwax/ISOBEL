@@ -63,6 +63,19 @@ export const STREAM_READ_BURST_SECONDS = 15;
 export const STREAM_READ_RATE = 1.5;
 
 /**
+ * ffmpeg input flags that make network reads resume instead of ending early.
+ *
+ * ffmpeg asks for `Range: bytes=0-`, and Songbird answers every ranged request
+ * with at most 1 MiB (206, `Content-Range: bytes 0-1048575/<total>`). That is
+ * valid HTTP - the client is meant to ask for the next range - but without
+ * -reconnect ffmpeg treats the short read as an I/O error and stops: every
+ * song streamed live cut off after ~26 s (1 MiB of 320 kbps MP3). With it,
+ * ffmpeg re-requests from the byte it stopped at, which also covers dropped
+ * connections mid-track.
+ */
+export const STREAM_RECONNECT_INPUT_OPTIONS = ['-reconnect', '1', '-reconnect_delay_max', '5'] as const;
+
+/**
  * Minimum ffmpeg version that understands -readrate_initial_burst.
  *
  * Older ffmpeg (Debian bookworm's apt package is 5.1.x, Ubuntu 22.04's is
