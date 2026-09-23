@@ -39,7 +39,97 @@ export const QUEUE_PAGE_SIZE_MAX = 30;
 /**
  * Progress bar segment count
  */
-export const PROGRESS_BAR_SEGMENTS = 10;
+export const PROGRESS_BAR_SEGMENTS = 16;
+
+/**
+ * Seconds skipped by the rewind/fast-forward playback buttons
+ */
+export const SEEK_STEP_SECONDS = 15;
+
+/**
+ * Volume percentage step for the volume up/down playback buttons
+ */
+export const VOLUME_STEP = 10;
+
+/**
+ * Read-ahead pacing for network inputs.
+ *
+ * ffmpeg bursts this many seconds of input as fast as the source allows, then
+ * settles to STREAM_READ_RATE. The burst builds a cushion the audio player can
+ * drain during network jitter; the rate keeps rebuilding it without pulling
+ * whole tracks that may be skipped.
+ */
+export const STREAM_READ_BURST_SECONDS = 15;
+export const STREAM_READ_RATE = 1.5;
+
+/**
+ * Minimum ffmpeg version that understands -readrate_initial_burst.
+ *
+ * Older ffmpeg (Debian bookworm's apt package is 5.1.x, Ubuntu 22.04's is
+ * 4.4.x) doesn't just ignore the flag, it refuses to start at all with
+ * "Unrecognized option", which breaks every non-cached track. Detected once
+ * at startup so we can fall back to plain -readrate on those hosts instead.
+ */
+export const FFMPEG_READRATE_BURST_MIN_MAJOR = 6;
+export const FFMPEG_READRATE_BURST_MIN_MINOR = 1;
+
+/**
+ * How many background Opus encodes may run at once, across every guild.
+ *
+ * Warming the next track spawns a full ffmpeg encode that competes for CPU
+ * with the encoders feeding live playback. The per-guild in-flight maps only
+ * deduplicate the same track, so without a shared ceiling every guild
+ * changing song at once starts its own encode and starves the event loop -
+ * the "cushion is healthy but playback still stalls" case. Prefetching is by
+ * definition not urgent, so it gets a deliberately small share.
+ */
+export const BACKGROUND_ENCODE_CONCURRENCY = 2;
+
+/**
+ * Upper bound for the Opus encoder, in kbps.
+ *
+ * The voice channel advertises its own bitrate and that wins when it is lower.
+ * Past this point Opus gains very little on 48 kHz stereo music, while the
+ * larger packets cost more on a lossy link than the fidelity is worth.
+ */
+export const OPUS_MAX_BITRATE_KBPS = 128;
+
+/**
+ * Fallback bitrate in kbps when the voice channel's own bitrate is unknown.
+ * Matches Discord's default for unboosted guilds.
+ */
+export const OPUS_FALLBACK_BITRATE_KBPS = 64;
+
+/**
+ * Expected packet loss percentage used to size libopus in-band FEC.
+ * Only meaningful on the passthrough path, where our packets are the ones
+ * listeners receive.
+ */
+export const OPUS_EXPECTED_PACKET_LOSS_PERCENT = 5;
+
+/**
+ * Discord voice is 48 kHz stereo; state it explicitly rather than letting the
+ * encoder infer it from whatever the source happens to be.
+ */
+export const DISCORD_SAMPLE_RATE_HZ = 48_000;
+export const DISCORD_CHANNEL_COUNT = 2;
+
+/**
+ * Bytes per second of signed 16-bit PCM at Discord's sample rate, used to
+ * convert produced bytes into seconds of cushion on the PCM path.
+ */
+export const PCM_BYTES_PER_SECOND = DISCORD_SAMPLE_RATE_HZ * DISCORD_CHANNEL_COUNT * 2;
+
+/**
+ * How long to wait for further volume changes before respawning the stream on
+ * the passthrough path, so dragging a volume slider respawns once.
+ */
+export const VOLUME_RESPAWN_DEBOUNCE_MS = 400;
+
+/**
+ * How often playback telemetry (buffer cushion, playback drift) is sampled.
+ */
+export const PLAYBACK_TELEMETRY_INTERVAL_MS = 1000;
 
 /**
  * Audio player max missed frames (for livestreams)
@@ -62,12 +152,6 @@ export const NOW_PLAYING_UPDATE_INTERVAL_MS = 5000;
  * Increased to 320kbps for higher fidelity MP3 source
  */
 export const AUDIO_BITRATE_KBPS = 320;
-
-/**
- * Audio bitrate for Opus output (Discord voice requirement)
- * Set to 192kbps for good quality while maintaining compatibility
- */
-export const OPUS_OUTPUT_BITRATE_KBPS = 192;
 
 /**
  * FFmpeg start timeout in milliseconds

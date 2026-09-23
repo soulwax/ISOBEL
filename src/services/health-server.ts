@@ -1,16 +1,24 @@
 // File: src/services/health-server.ts
 
 import { type Client } from 'discord.js';
-import express, { type Express } from 'express';
+import express from 'express';
 import type http from 'http';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
 import debug from '../utils/debug.js';
+import type PlayerManager from '../managers/player.js';
+import type { NowPlayingSnapshot } from './player.js';
 
 interface HealthResponse {
   status: 'ok' | 'not_ready';
   ready: boolean;
   guilds: number;
+  guildList: {
+    id: string;
+    name: string;
+    icon: string | null;
+  }[];
+  nowPlaying: NowPlayingSnapshot[];
   uptime: number;
   uptimeFormatted: string;
   timestamp: string;
@@ -19,22 +27,25 @@ interface HealthResponse {
 @injectable()
 export default class HealthServer {
   private readonly client: Client;
+  private readonly playerManager: PlayerManager;
   private server: http.Server | null = null;
   private readonly defaultHealthPort = 3002;
 
   constructor(
     @inject(TYPES.Client) client: Client,
+    @inject(TYPES.Managers.Player) playerManager: PlayerManager,
   ) {
     this.client = client;
+    this.playerManager = playerManager;
   }
 
   private resolvePort(): number {
-    const configuredPort = process.env.HEALTH_PORT ?? process.env.PORT ?? String(this.defaultHealthPort);
+    const configuredPort = process.env.HEALTH_PORT ?? String(this.defaultHealthPort);
     const parsedPort = Number.parseInt(configuredPort, 10);
     return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
   }
 
-  public async start(): Promise<void> {
+  public start(): void {
     const port = this.resolvePort();
 
     if (this.server) {
@@ -48,10 +59,6 @@ export default class HealthServer {
       const data = this.getHealthData();
       res.status(data.ready ? 200 : 503).json(data);
     });
-
-    // Try to mount the web app (auth + API routes).
-    // The web module is optional; if it isn't installed the bot still serves /health.
-    await this.mountWebApp(app);
 
     const server = app.listen(port, () => {
       debug(`🏥 HTTP server running on http://localhost:${port}`);
@@ -71,18 +78,6 @@ export default class HealthServer {
     }
   }
 
-  private async mountWebApp(app: Express): Promise<void> {
-    try {
-      const { createApp } = await import('isobel-web/server') as { createApp: (options?: Record<string, unknown>) => Express };
-      const webApp = createApp();
-      app.use(webApp);
-      debug('📡 Web routes (auth + API) mounted');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      debug(`Web module not available, running health-only: ${message}`);
-    }
-  }
-
   private getHealthData(): HealthResponse {
     const ready = this.client.isReady();
     const uptime = this.client.uptime ?? 0;
@@ -91,6 +86,12 @@ export default class HealthServer {
       status: ready ? 'ok' : 'not_ready',
       ready,
       guilds: this.client.guilds.cache.size,
+      guildList: this.client.guilds.cache.map(guild => ({
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+      })),
+      nowPlaying: this.playerManager.getNowPlayingSnapshots(),
       uptime,
       uptimeFormatted: this.formatUptime(uptime),
       timestamp: new Date().toISOString(),
@@ -111,16 +112,19 @@ export default class HealthServer {
 
   private formatUptime(uptime: number): string {
     const seconds = Math.floor(uptime / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
 
-    if (days > 0) {
-      return `${days}d ${hours % 24}h ${minutes % 60}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
+    const totalMinutes = Math.floor(seconds / 60);
+    const totalHours = Math.floor(totalMinutes / 60);
+    const totalDays = Math.floor(totalHours / 24);
+
+
+
+    if (totalDays > 0) {
+      return `${totalDays}d ${totalHours % 24}h ${totalMinutes % 60}m`;
+    } else if (totalHours > 0) {
+      return `${totalHours}h ${totalMinutes % 60}m`;
+    } else if (totalMinutes > 0) {
+      return `${totalMinutes}m ${seconds % 60}s`;
     } else {
       return `${seconds}s`;
     }

@@ -43,6 +43,7 @@ EXPOSE 3001
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV ENV_FILE=/config/.env
 
 # Health check (using node instead of wget for Alpine)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

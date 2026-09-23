@@ -13,41 +13,53 @@ interface HealthStatus {
   timestamp?: string;
 }
 
+const PROXIED_HEALTH_ENDPOINT = '/api/bot-health';
+
 export default function HealthIndicator() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkHealth = async () => {
     try {
-      // Call the bot health endpoint directly (CORS is now enabled on the bot side)
-      const botHealthUrl = import.meta.env.VITE_BOT_HEALTH_URL || 'https://isobelhealth.soulwax.dev';
-      const trimmedUrl = botHealthUrl.trim();
-      const healthUrl = trimmedUrl.endsWith('/health')
-        ? trimmedUrl
-        : trimmedUrl.endsWith('/')
-          ? `${trimmedUrl}health`
-          : `${trimmedUrl}/health`;
-      
-      // Simple GET request - no headers or credentials needed, avoids OPTIONS preflight
-      const response = await fetch(healthUrl);
-      
+      const response = await fetch(PROXIED_HEALTH_ENDPOINT, { cache: 'no-store' });
+      const responseText = await response.text();
+
+      let data: HealthStatus | null = null;
+      if (responseText !== '') {
+        try {
+          data = JSON.parse(responseText) as HealthStatus;
+        } catch (error) {
+          console.error('Health check returned invalid JSON', error, responseText);
+        }
+      }
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Health check failed: ${response.status} ${response.statusText}`, errorText);
+        if (data?.status === 'not_ready') {
+          setHealth(data);
+          setIsLoading(false);
+          return;
+        }
+
+        console.error(`Health check failed: ${response.status} ${response.statusText}`, responseText);
         throw new Error(`Health check failed with status ${response.status}`);
       }
-      
-      const data = await response.json();
+
+      if (!data) {
+        throw new Error('Health check returned an empty response');
+      }
+
       setHealth(data);
       setIsLoading(false);
+      return;
     } catch (error) {
       console.error('Health check error:', error);
-      setHealth({
-        status: 'error',
-        ready: false,
-      });
-      setIsLoading(false);
     }
+
+    setHealth({
+      status: 'error',
+      ready: false,
+    });
+    setIsLoading(false);
   };
 
   useEffect(() => {

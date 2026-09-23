@@ -36,11 +36,11 @@ The second big change is that this bot is coming with its own web interface for 
 
 ## Features
 
-- 🎵 **High-Quality Audio**: 320kbps MP3 source with 192kbps Opus output for crystal-clear sound
+- 🎵 **High-Quality Audio**: 320kbps MP3 source, encoded to Opus exactly once and handed to Discord untouched — no decode/re-encode round trip
 - ⏹️ **Animated Progress Bar**: Real-time updating progress bars in Discord embeds
 - 🎥 **Livestream Support**: Stream HLS live audio feeds
 - ⏩ **Seeking**: Seek to any position within a song
-- 💾 **Advanced Caching**: Local MP3 caching for instant playback and better performance
+- 💾 **Advanced Caching**: Caches both the source MP3 *and* the encoded Opus, so a replay costs no CPU at all
 - 📋 **No Vote-to-Skip**: This is anarchy, not a democracy
 - 🎶 **Songbird API**: Streams directly from the Songbird Music API (no YouTube or Spotify required)
 - ↗️ **Custom Shortcuts**: Users can add custom shortcuts (aliases) for quick access
@@ -50,6 +50,56 @@ The second big change is that this bot is coming with its own web interface for 
 - 🌐 **Web Interface**: Optional web UI for managing settings and favorites
 - ✍️ **TypeScript**: Written in TypeScript with full type safety, easily extendable
 - ❤️ **Loyal Packers fan**
+
+## 🔊 The Audio Pipeline
+
+Most self-hosted music bots pipe ffmpeg into discord.js and call it done. That path quietly decodes and
+re-encodes your audio on the way out, and reads the network at exactly 1× so there is nothing buffered when
+the connection hiccups. ISOBEL does neither.
+
+**The way it usually goes:**
+
+```
+MP3 320k ──► ffmpeg ──► Opus ──► decode ──► PCM ──► volume ──► re-encode ──► Discord
+              │                  └──────────── third lossy generation, every 20ms,
+              │                               on the same thread as everything else
+              └─ -re: reads at 1×, so the buffer never gets ahead
+```
+
+**What ISOBEL actually does:**
+
+```
+MP3 320k ──► ffmpeg ──► Opus (cached) ─────────────────────────────────► Discord
+              │            └─ packets pass straight through, untouched
+              └─ bursts 15s ahead, then paces at 1.5×
+```
+
+| | Typical bot | ISOBEL |
+|---|---|---|
+| Lossy generations | 3 | **2** |
+| Opus encodes per play | 2 | **0** (cached) / 1 (first play) |
+| CPU per replay, 4-min track | 10.9s | **0.00s** |
+| Seeking | full re-encode | **remux**, 1.0s, no quality loss |
+| Buffer cushion | ~0s | **~15s** |
+
+- **Opus passthrough.** Asking for Opus input *and* a volume control forces a decoder, a volume transformer
+  and an encoder into the chain — the stream gets torn down to samples and rebuilt for nothing. ISOBEL skips
+  all three and hands Discord the packets ffmpeg produced. Guilds using voice ducking take a single-encode
+  PCM path instead, because live gain genuinely needs PCM.
+- **Encoded once, not once per play.** The cache holds the finished Opus, not just the source. Replaying a
+  track is a file read — no ffmpeg process, no encode, no encoder start latency. Seeking remuxes with
+  `-c:a copy`, so it costs no encode and adds no generation. The next track in the queue is encoded while
+  the current one is still playing.
+- **Encoded for the channel you're in.** Bitrate follows `channel.bitrate` (64/96/128k) instead of a
+  hardcoded number. Encoding above what the channel is provisioned for doesn't raise the ceiling — it just
+  makes packets the link can't carry.
+- **In-band FEC.** Because the packets reach listeners as-is, libopus forward error correction is on, and
+  their clients can rebuild dropped ones. Impossible if something re-encodes downstream.
+- **Measured, not vibes.** `GET /health` reports `cushionSeconds`, `lostPlaybackMs` and `playbackPath` per
+  playing guild. `DEBUG=ISOBEL:audio` prints the same once a second.
+
+Two ceilings are not ours to raise: the Songbird API tops out at 320kbps MP3, and Discord's channel bitrate
+is whatever your boost level says. Everything between those two, we stopped wasting.
 
 ## Table of Contents
 
@@ -185,15 +235,21 @@ BOT_ACTIVITY_TYPE=LISTENING      # Options: PLAYING, LISTENING, WATCHING, STREAM
 BOT_ACTIVITY=music
 # BOT_ACTIVITY_URL=              # Required ONLY if BOT_ACTIVITY_TYPE=STREAMING
 
-# SponsorBlock Integration (optional)
-ENABLE_SPONSORBLOCK=false
-SPONSORBLOCK_TIMEOUT=5
-
 # Advanced Configuration
 # SONGBIRD_NEXT_URL=             # Alternative Songbird API URL
 # REGISTER_COMMANDS_ON_BOT=false # Global vs per-guild command registration
 NODE_ENV=production              # Usually set by PM2/Docker automatically
+
+# Audio Pipeline
+# DEBUG=ISOBEL:audio             # Print cushion/stutter telemetry once a second per playing guild
+# DISABLE_VOICE_KEEPALIVE=true   # Escape hatch: suppress the voice UDP keepalive again.
+                                 # Only set this if long sessions start dropping - the keepalive
+                                 # is what holds the NAT mapping open.
 ```
+
+> **Cache sizing:** `CACHE_LIMIT` now covers both the source MP3 *and* the encoded Opus artifact for each
+> track (roughly +28% per track, e.g. 9.2MB → 11.8MB for 4 minutes). That artifact is what makes replays
+> cost no CPU, so give the cache room rather than trimming it.
 
 ### Web Interface Variables (Optional)
 
@@ -303,8 +359,8 @@ docker compose -f docker-compose.yml -f docker-compose.web.yml down
 docker compose pull
 docker compose up -d
 
-# Rebuild from source
-docker compose build --no-cache
+# Rebuild from source and replace containers
+docker compose up -d --build --force-recreate
 
 # View container status
 docker compose ps
@@ -318,6 +374,8 @@ docker compose down
 # Remove everything INCLUDING data (CAUTION!)
 docker compose down -v
 ```
+
+If you change `.env`, `docker compose build` by itself is not enough. It rebuilds the image, but it does not replace the running container. Use `docker compose restart` for runtime-only env changes, or `docker compose up -d --build --force-recreate` after changing ports or other Compose-level settings. Docker Compose reads `.env` automatically, not `.env.local`.
 
 ### Available Docker Images
 
@@ -337,8 +395,8 @@ For running ISOBEL directly with Node.js on your host machine.
 git clone --recursive https://github.com/soulwax/ISOBEL.git
 cd ISOBEL
 
-# 2. Install dependencies
-pnpm install
+# 2. Install bot dependencies
+pnpm run install:bot
 
 # 3. Configure environment
 cp .env.example .env
@@ -347,9 +405,9 @@ cp .env.example .env
 # 4. Set up database (first time only)
 pnpm prisma:migrate:deploy
 
-# 5. Build and start
+# 5. Build and start the bot
 pnpm build
-pnpm start
+pnpm pm2:start:prod
 ```
 
 ### Running on the Same Machine (Bot + Web)
@@ -357,10 +415,10 @@ pnpm start
 To run both bot and web interface on a single machine without Docker:
 
 ```bash
-# 1. Install all dependencies
+# 1. Install all dependencies explicitly
 pnpm install -r
 
-# 2. Build everything
+# 2. Build everything explicitly
 pnpm build:all
 
 # 3. Start all services with PM2
@@ -385,7 +443,7 @@ pnpm logs:all
 pnpm start                       # Bot only
 pnpm pm2:start:prod          # Bot only (explicit)
 pnpm web:pm2:start:prod      # Web only
-pnpm start:all:prod          # Bot + Web + Auth
+pnpm start:all:prod          # Bot + Web
 
 # Stop services
 pnpm pm2:stop                # Bot only
@@ -399,8 +457,7 @@ pnpm restart:all             # Everything
 
 # View logs
 pnpm pm2:logs                # Bot logs
-pnpm web:pm2:logs:web        # Web logs
-pnpm web:pm2:logs:web        # Web logs
+pnpm web:pm2:logs            # Web logs
 pnpm logs:all                # All logs
 
 # View status
@@ -409,6 +466,34 @@ pm2 monit                       # Real-time monitoring
 
 # Reset PM2 (nuclear option)
 pnpm pm2:reset               # Stops and deletes all processes
+```
+
+### Oxmgr Management Commands
+
+ISOBEL also includes an `oxfile.toml` for running the bot with oxmgr. The npm scripts generate `.oxmgr/oxfile.generated.toml` with the active Node.js path before calling oxmgr, which helps when the oxmgr daemon cannot see your shell-managed Node installation.
+
+```bash
+# Validate the oxmgr config
+pnpm oxmgr:validate
+
+# Build and start/apply the bot process
+pnpm oxmgr:start
+
+# Run in foreground runtime mode
+pnpm oxmgr:runtime
+
+# Manage the running bot
+pnpm oxmgr:status
+pnpm oxmgr:logs
+pnpm oxmgr:restart
+pnpm oxmgr:reload
+pnpm oxmgr:stop
+pnpm oxmgr:delete
+
+# Inspect oxmgr itself
+pnpm oxmgr:list
+pnpm oxmgr:ui
+pnpm oxmgr:doctor
 ```
 
 ### Development Mode
@@ -428,11 +513,16 @@ pnpm dev:all
 
 ```bash
 # Quick deployment
-pnpm deploy                  # Builds and starts everything
+pnpm deploy                  # Build and start bot only
+pnpm deploy:all              # Build and start bot + web
 
 # Or step by step
-pnpm build:all              # Build bot and web
-pnpm start:all:prod         # Start with PM2
+pnpm build                  # Build bot only
+pnpm web:build              # Build web only
+pnpm build:all              # Build bot + web
+pnpm pm2:start:prod         # Start bot only
+pnpm web:pm2:start:prod     # Start web only
+pnpm start:all:prod         # Start bot + web
 pm2 save                       # Save PM2 process list
 pm2 startup                    # Enable PM2 on system boot
 ```
@@ -452,15 +542,19 @@ ISOBEL requires a PostgreSQL database. The database is used to store:
 **Neon (Free tier available):**
 1. Create account at [neon.tech](https://neon.tech)
 2. Create a new project
-3. Copy the connection string
-4. Add to `.env`: `DATABASE_URL=postgresql://...`
+3. Copy the pooled connection string for runtime traffic
+4. Copy the direct connection string for migrations
+5. Add to `.env`:
+   `DATABASE_URL=postgresql://...`
+   `DATABASE_URL_UNPOOLED=postgresql://...`
 
 **Supabase (Free tier available):**
 1. Create account at [supabase.com](https://supabase.com)
 2. Create a new project
 3. Go to Settings → Database → Connection String
-4. Copy the connection pooler URL
-5. Add to `.env`: `DATABASE_URL=postgresql://...`
+4. Copy the connection pooler URL for `DATABASE_URL`
+5. Copy the direct connection URL for `DATABASE_URL_UNPOOLED`
+6. Add both to `.env`
 
 **Railway:**
 1. Create account at [railway.app](https://railway.app)
@@ -501,6 +595,15 @@ pnpm db:reset
 # Generate Prisma client after schema changes
 pnpm prisma:generate
 ```
+
+If your provider gives you both pooled and direct PostgreSQL URLs, use:
+
+```env
+DATABASE_URL=postgresql://pooled-runtime-url
+DATABASE_URL_UNPOOLED=postgresql://direct-migrations-url
+```
+
+ISOBEL uses `DATABASE_URL_UNPOOLED` for Prisma CLI migrations and `DATABASE_URL` for the running bot.
 
 ### Database Verification
 
@@ -599,11 +702,37 @@ pnpm health
 ```json
 {
   "status": "ok",
+  "ready": true,
+  "guilds": 5,
+  "guildList": [{ "id": "844108947002359851", "name": "Symphony of the Mind", "icon": "bc7d1d..." }],
+  "nowPlaying": [
+    {
+      "title": "Isobel",
+      "artist": "Björk",
+      "thumbnailUrl": null,
+      "position": 42,
+      "length": 245,
+      "isLive": false,
+      "cushionSeconds": 14.8,
+      "lostPlaybackMs": 0,
+      "playbackPath": "cache"
+    }
+  ],
   "uptime": 123456,
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "version": "2.12.0"
+  "uptimeFormatted": "2m 3s",
+  "timestamp": "2026-08-30T04:15:00.000Z"
 }
 ```
+
+**Reading the audio telemetry** (the three fields on each `nowPlaying` entry):
+
+| Field | What it means |
+|---|---|
+| `cushionSeconds` | Audio encoded ahead of the player. Should climb toward ~15s after a track starts. Pinned near zero means the read-ahead isn't working. `null` on `"cache"` playback — there is no encoder to run ahead of a file on disk. |
+| `lostPlaybackMs` | Wall time in which playback did not advance, i.e. audible stutter. Should stay at 0. Non-zero *while the cushion is healthy* points at the event loop, not the network. |
+| `playbackPath` | `"cache"` = replayed from the encoded artifact, no ffmpeg. `"remux"` = seeking a cached artifact. `"encode"` = first play, encoding live. |
+
+`DEBUG=ISOBEL:audio` prints the same three once a second per playing guild.
 
 ### Web Health Check
 
@@ -712,6 +841,7 @@ pnpm prisma:generate   # Generate Prisma client
 
 # Building
 pnpm build             # Build bot only
+pnpm web:build         # Build web only
 pnpm build:all         # Build bot + web
 
 # Utilities
@@ -801,15 +931,6 @@ BOT_STATUS=online
 BOT_ACTIVITY_TYPE=STREAMING
 BOT_ACTIVITY=Monstercat
 BOT_ACTIVITY_URL=https://www.twitch.tv/monstercat
-```
-
-### SponsorBlock Integration
-
-Automatically skip non-music segments:
-
-```env
-ENABLE_SPONSORBLOCK=true
-SPONSORBLOCK_TIMEOUT=5
 ```
 
 ### Volume Management

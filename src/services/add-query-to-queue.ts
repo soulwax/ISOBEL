@@ -3,34 +3,21 @@
 import shuffle from 'array-shuffle';
 import { type Attachment, type ChatInputCommandInteraction, type GuildMember, MessageFlags, type ModalSubmitInteraction, type StringSelectMenuInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
-import { SponsorBlock } from 'sponsorblock-api';
 import type PlayerManager from '../managers/player.js';
 import type GetSongs from '../services/get-songs.js';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
-import { ONE_HOUR_IN_SECONDS } from '../utils/constants.js';
-import debug from '../utils/debug.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
-import type Config from './config.js';
-import type KeyValueCacheProvider from './key-value-cache.js';
+import type PlaybackHistory from './playback-history.js';
+import { actorFromInteraction } from './playback-history.js';
 import { MediaSource, STATUS, type SongMetadata } from './player.js';
 
 @injectable()
 export default class AddQueryToQueue {
-  private readonly sponsorBlock?: SponsorBlock;
-  private sponsorBlockDisabledUntil?: Date;
-  private readonly sponsorBlockTimeoutDelay;
-
   constructor(@inject(TYPES.Services.GetSongs) private readonly getSongs: GetSongs,
     @inject(TYPES.Managers.Player) private readonly playerManager: PlayerManager,
-    @inject(TYPES.Config) private readonly config: Config,
-    @inject(TYPES.KeyValueCache) private readonly cache: KeyValueCacheProvider) {
-    this.sponsorBlockTimeoutDelay = config.SPONSORBLOCK_TIMEOUT;
-    this.sponsorBlock = config.ENABLE_SPONSORBLOCK
-      ? new SponsorBlock('echo-sb-integration') // UserID matters only for submissions
-      : undefined;
-  }
+    @inject(TYPES.Services.PlaybackHistory) private readonly history: PlaybackHistory) {}
 
   public async addToQueue({
     query,
@@ -76,7 +63,7 @@ export default class AddQueryToQueue {
 
     const settings = await getGuildSettings(guildId);
 
-    const { queueAddResponseEphemeral } = settings;
+    const { maxQueueSize, queueAddResponseEphemeral } = settings;
 
     await interaction.deferReply({ flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined });
 
@@ -119,33 +106,58 @@ export default class AddQueryToQueue {
       throw new Error('no songs found');
     }
 
-    if (shuffleAdditions && newSongs.length > 1) {
-      newSongs = shuffle(newSongs);
+    const originalSongCount = newSongs.length;
+    if (maxQueueSize > 0) {
+      const remainingQueueSlots = maxQueueSize - player.getActiveQueueSize();
+
+      if (remainingQueueSlots <= 0) {
+        throw new Error(`queue limit reached (${maxQueueSize} tracks)`);
+      }
+
+      if (newSongs.length > remainingQueueSlots) {
+        newSongs = newSongs.slice(0, remainingQueueSlots);
+        extraMsg = extraMsg === ''
+          ? `queue limit: added ${newSongs.length} of ${originalSongCount}`
+          : `${extraMsg}, queue limit: added ${newSongs.length} of ${originalSongCount}`;
+      }
     }
 
-    if (this.config.ENABLE_SPONSORBLOCK && !attachment) {
-      newSongs = await Promise.all(newSongs.map(this.skipNonMusicSegments.bind(this)));
+    if (shuffleAdditions && newSongs.length > 1) {
+      newSongs = shuffle(newSongs);
     }
 
     if (!interaction.channel) {
       throw new Error('Channel information not available');
     }
 
+    const actor = actorFromInteraction(interaction);
     newSongs.forEach(song => {
       player.add({
         ...song,
         addedInChannelId: interaction.channel!.id,
         requestedBy: (interaction.member as GuildMember).user.id,
+        requestedByName: actor.name,
       }, { immediate: addToFrontOfQueue ?? false });
     });
 
     const firstSong = newSongs[0];
+    const queuedDetail = [
+      query ? `query: ${query}` : attachment ? 'from attachment' : null,
+      newSongs.length > 1 ? `${newSongs.length} songs` : null,
+    ].filter(Boolean).join(', ');
+    this.history.recordAction({guildId, guildName: interaction.guild.name}, {
+      // Playlists always go to the back of the queue, whatever was asked for.
+      kind: addToFrontOfQueue && !firstSong.playlist ? 'queue-next' : 'queue',
+      actor,
+      song: firstSong,
+      detail: queuedDetail || null,
+    });
     const firstSongDisplay = `${firstSong.title} - ${firstSong.artist}`;
 
     let statusMsg = '';
     let showedEmbed = false;
 
-    if (player.voiceConnection === null) {
+    if (!player.isConnected()) {
       await player.connect(targetVoiceChannel);
 
       // Resume / start playback
@@ -173,7 +185,7 @@ export default class AddQueryToQueue {
     if (skipCurrentTrack) {
       // Only skip if there are more songs in the queue
       if (player.canGoForward(1)) {
-        await player.forward(1);
+        await player.forward(1, actor);
       } else {
         throw new Error('no song to skip to');
       }
@@ -200,68 +212,6 @@ export default class AddQueryToQueue {
           ? `**${firstSongDisplay}** added to the${addToFrontOfQueue ? ' front of the' : ''} queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
           : `**${firstSongDisplay}** and ${newSongs.length - 1} other songs were added to the queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
       );
-    }
-  }
-
-  private async skipNonMusicSegments(song: SongMetadata) {
-    if (!this.sponsorBlock
-      || (this.sponsorBlockDisabledUntil && new Date() < this.sponsorBlockDisabledUntil)
-      || song.source !== MediaSource.Starchild
-      || !song.url) {
-      return song;
-    }
-
-    try {
-      const segments = await this.cache.wrap(
-        async () => this.sponsorBlock?.getSegments(song.url, ['music_offtopic']),
-        {
-          key: song.url, // Value is too short for hashing
-          expiresIn: ONE_HOUR_IN_SECONDS,
-        },
-      ) ?? [];
-      const skipSegments = segments
-        .sort((a, b) => a.startTime - b.startTime)
-        .reduce((acc: { startTime: number; endTime: number }[], { startTime, endTime }) => {
-          const previousSegment = acc[acc.length - 1];
-          // If segments overlap merge
-          if (previousSegment && previousSegment.endTime > startTime) {
-            acc[acc.length - 1].endTime = endTime;
-          } else {
-            acc.push({ startTime, endTime });
-          }
-
-          return acc;
-        }, []);
-
-      const intro = skipSegments[0];
-      const outro = skipSegments.at(-1);
-      if (outro && outro?.endTime >= song.length - 2) {
-        song.length -= outro.endTime - outro.startTime;
-      }
-
-      if (intro?.startTime <= 2) {
-        song.offset = Math.floor(intro.endTime);
-        song.length -= song.offset;
-      }
-
-      return song;
-    } catch (e) {
-      if (!(e instanceof Error)) {
-        debug(`Unexpected event occurred while fetching skip segments: ${String(e)}`);
-        return song;
-      }
-
-      if (!e.message.includes('404')) {
-        // Don't log 404 response, it just means that there are no segments for given video
-        debug(`Could not fetch skip segments for "${song.url}": ${e.message}`);
-      }
-
-      if (e.message.includes('504')) {
-        // Stop fetching SponsorBlock data when servers are down
-        this.sponsorBlockDisabledUntil = new Date(new Date().getTime() + (this.sponsorBlockTimeoutDelay * 60_000));
-      }
-
-      return song;
     }
   }
 }
