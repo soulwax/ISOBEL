@@ -1,9 +1,10 @@
 # File: Dockerfile
 
-FROM node:25-bookworm-slim AS base
+FROM node:25-trixie-slim AS base
 
-# Enable pnpm via Corepack
-RUN corepack enable && corepack prepare pnpm@10.30.2 --activate
+# Install pnpm directly (avoids corepack integrity check failures in Docker)
+# Keep in sync with the "packageManager" field in package.json.
+RUN npm install -g pnpm@11.5.0
 
 # openssl will be a required package if base is updated to 18.16+ due to node:*-slim base distro change
 # https://github.com/prisma/prisma/issues/19729#issuecomment-1591270599
@@ -41,14 +42,14 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
-# Install deps without lifecycle scripts, then run patch-package explicitly.
-RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm run postinstall
+# Install dependencies with lifecycle scripts so native audio bindings are built.
+RUN pnpm install --frozen-lockfile
 
 # Create a production-only node_modules tree for runtime
 FROM dependencies AS prod-deps
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts && pnpm run postinstall
+RUN pnpm install --prod --frozen-lockfile
 RUN cp -R node_modules /usr/app/prod_node_modules
 
 FROM dependencies AS builder
@@ -92,7 +93,7 @@ ENV DATA_DIR=/data
 ENV NODE_ENV=production
 ENV COMMIT_HASH=$COMMIT_HASH
 ENV BUILD_DATE=$BUILD_DATE
-ENV ENV_FILE=/config
+ENV ENV_FILE=/config/.env
 
 # Use tini as entrypoint for proper signal handling
 ENTRYPOINT ["tini", "--"]

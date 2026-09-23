@@ -4,6 +4,7 @@ import { SlashCommandBuilder } from '@discordjs/builders';
 import { type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
+import { actorFromInteraction } from '../services/playback-history.js';
 import { TYPES } from '../types.js';
 import type Command from './index.js';
 
@@ -26,7 +27,7 @@ export default class implements Command {
 
     // Stop playback and clear queue regardless of connection status
     // This allows stopping even if already disconnected
-    player.stop();
+    await player.stop(actorFromInteraction(interaction));
     await interaction.reply('Stopped');
   }
 }

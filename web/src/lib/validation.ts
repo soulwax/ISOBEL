@@ -15,6 +15,8 @@ export const guildSettingsSchema = z.object({
   defaultQueuePageSize: z.number().int().min(1).max(30).optional(),
   turnDownVolumeWhenPeopleSpeak: z.boolean().optional(),
   turnDownVolumeWhenPeopleSpeakTarget: z.number().int().min(0).max(100).optional(),
+  maxQueueSize: z.number().int().min(0).max(500).optional(),
+  defaultLoopMode: z.number().int().min(0).max(2).optional(),
 }).strict(); // Reject unknown fields
 
 export type GuildSettingsInput = z.infer<typeof guildSettingsSchema>;

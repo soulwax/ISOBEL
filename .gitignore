@@ -119,6 +119,7 @@ dist
 
 .cursor
 .claude
+.oxmgr/
 RELEASING.md
 
 CLAUDE.md

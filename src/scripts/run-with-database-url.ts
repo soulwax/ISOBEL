@@ -6,7 +6,8 @@ import createDatabaseUrl from '../utils/create-database-url.js';
 
 void (async () => {
   const databaseUrl = process.env.DATABASE_URL ?? createDatabaseUrl(DATA_DIR);
-  await execa(process.argv[2], process.argv.slice(3), {
+  const args = process.argv.slice(2).filter((arg) => arg !== '--');
+  await execa(args[0], args.slice(1), {
     preferLocal: true,
     stderr: process.stderr,
     stdout: process.stdout,

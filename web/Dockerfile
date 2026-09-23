@@ -8,7 +8,7 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.30.2 --activate
+RUN npm install -g pnpm@10.30.2
 
 # Copy package files
 COPY package.json ./
@@ -27,7 +27,7 @@ FROM node:24-alpine
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.30.2 --activate
+RUN npm install -g pnpm@10.30.2
 
 # Install production dependencies
 COPY package.json ./
@@ -43,6 +43,7 @@ EXPOSE 3001
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV ENV_FILE=/config/.env
 
 # Health check (using node instead of wget for Alpine)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

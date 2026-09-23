@@ -1,20 +1,24 @@
 // File: src/services/health-server.ts
 
 import { type Client } from 'discord.js';
-import http from 'http';
+import express from 'express';
+import type http from 'http';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../types.js';
 import debug from '../utils/debug.js';
-
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
+import type PlayerManager from '../managers/player.js';
+import type { NowPlayingSnapshot } from './player.js';
 
 interface HealthResponse {
   status: 'ok' | 'not_ready';
   ready: boolean;
   guilds: number;
+  guildList: {
+    id: string;
+    name: string;
+    icon: string | null;
+  }[];
+  nowPlaying: NowPlayingSnapshot[];
   uptime: number;
   uptimeFormatted: string;
   timestamp: string;
@@ -23,67 +27,22 @@ interface HealthResponse {
 @injectable()
 export default class HealthServer {
   private readonly client: Client;
+  private readonly playerManager: PlayerManager;
   private server: http.Server | null = null;
-  private cleanupInterval: NodeJS.Timeout | null = null;
-  private readonly rateLimitMap = new Map<string, RateLimitEntry>();
-  private readonly rateLimitPoints = 10; // 10 requests
-  private readonly rateLimitWindow = 60_000; // per 60 seconds
   private readonly defaultHealthPort = 3002;
-  private static readonly jsonContentType = {'Content-Type': 'application/json'};
 
   constructor(
     @inject(TYPES.Client) client: Client,
+    @inject(TYPES.Managers.Player) playerManager: PlayerManager,
   ) {
     this.client = client;
-  }
-
-  private getClientIdentifier(req: http.IncomingMessage): string {
-    const forwarded = req.headers['x-forwarded-for'];
-
-    const forwardedHeader = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const ip = typeof forwardedHeader === 'string'
-      ? forwardedHeader.split(',')[0].trim()
-      : req.socket.remoteAddress ?? 'unknown';
-
-    return ip;
+    this.playerManager = playerManager;
   }
 
   private resolvePort(): number {
-    const configuredPort = process.env.HEALTH_PORT ?? process.env.PORT ?? String(this.defaultHealthPort);
+    const configuredPort = process.env.HEALTH_PORT ?? String(this.defaultHealthPort);
     const parsedPort = Number.parseInt(configuredPort, 10);
     return Number.isNaN(parsedPort) ? this.defaultHealthPort : parsedPort;
-  }
-
-  private setCorsHeaders(res: http.ServerResponse): void {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  }
-
-  private sendJson(res: http.ServerResponse, statusCode: number, payload: unknown): void {
-    res.writeHead(statusCode, HealthServer.jsonContentType);
-    res.end(JSON.stringify(payload));
-  }
-
-  private checkRateLimit(identifier: string): boolean {
-    const now = Date.now();
-    const entry = this.rateLimitMap.get(identifier);
-
-    if (!entry || now > entry.resetTime) {
-      // Create new entry or reset expired entry
-      this.rateLimitMap.set(identifier, {
-        count: 1,
-        resetTime: now + this.rateLimitWindow,
-      });
-      return true;
-    }
-
-    if (entry.count >= this.rateLimitPoints) {
-      return false;
-    }
-
-    entry.count++;
-    return true;
   }
 
   public start(): void {
@@ -93,67 +52,30 @@ export default class HealthServer {
       this.stop();
     }
 
-    // Clear any existing interval before creating a new one
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
+    const app = express();
 
-    // Clean up old rate limit entries periodically
-    this.cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      for (const [key, entry] of this.rateLimitMap.entries()) {
-        if (now > entry.resetTime) {
-          this.rateLimitMap.delete(key);
-        }
-      }
-    }, this.rateLimitWindow);
-    this.cleanupInterval.unref();
-
-    this.server = http.createServer((req, res) => {
-      this.setCorsHeaders(res);
-
-      if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-      }
-
-      if (req.url !== '/health' || req.method !== 'GET') {
-        this.sendJson(res, 404, {error: 'Not found'});
-        return;
-      }
-
-      const identifier = this.getClientIdentifier(req);
-      if (!this.checkRateLimit(identifier)) {
-        this.sendJson(res, 429, {error: 'Too many requests'});
-        return;
-      }
-
-      const healthData = this.getHealthData();
-      this.sendJson(res, healthData.ready ? 200 : 503, healthData);
+    // Bot health route — mounted first so it takes priority
+    app.get('/health', (_req, res) => {
+      const data = this.getHealthData();
+      res.status(data.ready ? 200 : 503).json(data);
     });
 
-    this.server.on('error', error => {
+    const server = app.listen(port, () => {
+      debug(`🏥 HTTP server running on http://localhost:${port}`);
+    });
+
+    server.on('error', error => {
       debug(`health-server.error: ${this.normalizeError(error).message}`);
     });
 
-    this.server.listen(port, () => {
-      debug(`🏥 Health server running on http://localhost:${port}`);
-    });
+    this.server = server;
   }
 
   public stop(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-
     if (this.server) {
       this.server.close();
       this.server = null;
     }
-
-    this.rateLimitMap.clear();
   }
 
   private getHealthData(): HealthResponse {
@@ -164,6 +86,12 @@ export default class HealthServer {
       status: ready ? 'ok' : 'not_ready',
       ready,
       guilds: this.client.guilds.cache.size,
+      guildList: this.client.guilds.cache.map(guild => ({
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+      })),
+      nowPlaying: this.playerManager.getNowPlayingSnapshots(),
       uptime,
       uptimeFormatted: this.formatUptime(uptime),
       timestamp: new Date().toISOString(),
@@ -184,16 +112,19 @@ export default class HealthServer {
 
   private formatUptime(uptime: number): string {
     const seconds = Math.floor(uptime / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
 
-    if (days > 0) {
-      return `${days}d ${hours % 24}h ${minutes % 60}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
+    const totalMinutes = Math.floor(seconds / 60);
+    const totalHours = Math.floor(totalMinutes / 60);
+    const totalDays = Math.floor(totalHours / 24);
+
+
+
+    if (totalDays > 0) {
+      return `${totalDays}d ${totalHours % 24}h ${totalMinutes % 60}m`;
+    } else if (totalHours > 0) {
+      return `${totalHours}h ${totalMinutes % 60}m`;
+    } else if (totalMinutes > 0) {
+      return `${totalMinutes}m ${seconds % 60}s`;
     } else {
       return `${seconds}s`;
     }

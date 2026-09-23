@@ -88,12 +88,15 @@ export default class StarchildAPI {
         return response.data.slice(0, lim).map((track) => ({
           title: track.title,
           artist: track.artist.name,
+          album: track.album.title,
           url: track.id.toString(), // Use Deezer ID for streaming
           length: track.duration,
           offset: 0,
           playlist: null,
           isLive: false,
-          thumbnailUrl: track.album.cover_medium ?? track.album.cover ?? null,
+          // Prefer the largest cover available. Discord still decides the
+          // thumbnail's rendered size, but it stays crisp on high-density UI.
+          thumbnailUrl: track.album.cover_big ?? track.album.cover_medium ?? track.album.cover ?? null,
           source: MediaSource.Starchild,
         }));
       },

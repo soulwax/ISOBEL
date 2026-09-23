@@ -5,7 +5,7 @@ import { type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
 import { TYPES } from '../types.js';
-import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import type Command from './index.js';
 
 @injectable()
@@ -29,6 +29,7 @@ export default class implements Command {
 
     const message = await interaction.reply({
       embeds: [buildPlayingMessageEmbed(player)],
+      components: buildPlaybackControls(player),
       fetchReply: true,
     });
     

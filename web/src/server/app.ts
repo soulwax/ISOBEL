@@ -4,25 +4,41 @@ import { loadEnvWithSafeguard } from '../lib/load-env.js';
 loadEnvWithSafeguard();
 
 import { join } from 'path';
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 // Lazy import handlers to avoid initialization errors at module load time
 // import { handlers } from "../auth/index.js";
+import { syncDiscordData } from "../auth/discord-sync.js";
 import { db } from "../db/index.js";
 import {
+  accounts,
   discordGuilds,
   discordUsers,
+  guildOrderPreferences,
   guildMembers,
   settings,
 } from "../db/schema.js";
 import { getEnv, validateEnv } from "../lib/env.js";
 import { AuthorizationError, NotFoundError } from "../lib/errors.js";
+import { fetchWithTimeout } from "../lib/fetch-with-timeout.js";
 import { logger } from "../lib/logger.js";
-import { canManageGuildSettings, validateGuildId } from "../lib/utils.js";
+import { hasAdministratorPermission, validateDiscordId, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
+import {
+  getActionHistory,
+  getHistorySummary,
+  getPlayHistory,
+  HISTORY_ACTIONS,
+  type HistoryAction,
+  type HistoryFilters,
+  isHistoryAvailable,
+} from "./admin-history.js";
+import { getBotHealthUrl } from "./bot-health-url.js";
+import { getBotGuilds, leaveBotGuild, type BotGuild } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
+import { ensureSuperUserTable, isSuperUserIdentity } from "./superuser.js";
 
 // Validate environment variables at startup (only in non-Vercel environments)
 if (process.env.VERCEL !== '1') {
@@ -44,14 +60,380 @@ export interface CreateAppOptions {
   buildDir?: string;
 }
 
+interface BotHealthResponse {
+  status: "ok" | "not_ready" | "error";
+  ready: boolean;
+  guilds?: number;
+  uptime?: number;
+  uptimeFormatted?: string;
+  timestamp?: string;
+}
+
+async function isSessionSuperUser(session: AuthenticatedRequest["session"]): Promise<boolean> {
+  if (!session?.user?.id) {
+    return false;
+  }
+
+  const discordUser = await db
+    .select({
+      id: discordUsers.id,
+      email: discordUsers.email,
+    })
+    .from(discordUsers)
+    .where(eq(discordUsers.userId, session.user.id))
+    .limit(1);
+
+  return await isSuperUserIdentity({
+    email: session.user.email ?? discordUser[0]?.email,
+    discordId: session.user.discordId ?? discordUser[0]?.id,
+  });
+}
+
+async function refreshDiscordMemberships(session: AuthenticatedRequest["session"]): Promise<void> {
+  if (!session?.user?.id) {
+    return;
+  }
+
+  const discordAccount = await db
+    .select()
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, session.user.id),
+        eq(accounts.provider, 'discord')
+      )
+    )
+    .limit(1);
+
+  if (!discordAccount[0]?.access_token) {
+    return;
+  }
+
+  try {
+    await syncDiscordData({
+      authUserId: session.user.id,
+      discordUserId: discordAccount[0].providerAccountId,
+      accessToken: discordAccount[0].access_token,
+    });
+  } catch (error) {
+    logger.warn("Failed to refresh Discord guild cache", {
+      error: error instanceof Error ? error.message : String(error),
+      userId: session.user.id,
+    });
+  }
+}
+
+function getTrustProxySetting(): number | boolean {
+  if (process.env.VERCEL) {
+    return 1;
+  }
+
+  const configuredValue = process.env.TRUST_PROXY?.trim().toLowerCase();
+
+  if (!configuredValue || configuredValue === "false" || configuredValue === "0") {
+    return false;
+  }
+
+  if (configuredValue === "true") {
+    return 1;
+  }
+
+  const proxyHops = Number.parseInt(configuredValue, 10);
+  return Number.isNaN(proxyHops) ? 1 : proxyHops;
+}
+
+async function ensureDiscordGuildDeletedAtColumn(): Promise<void> {
+  const columns = await db.execute<{ exists: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'discord_guild'
+        AND column_name = 'deletedAt'
+    ) AS "exists"
+  `);
+
+  if (!columns[0]?.exists) {
+    await db.execute(sql`
+      ALTER TABLE "discord_guild" ADD COLUMN "deletedAt" timestamp
+    `);
+  }
+}
+
+async function ensureGuildOrderPreferenceTable(): Promise<void> {
+  const tableExists = await db.execute<{ exists: boolean }>(sql`
+    SELECT to_regclass('public.guild_order_preference') IS NOT NULL AS "exists"
+  `);
+
+  if (!tableExists[0]?.exists) {
+    await db.execute(sql`
+      CREATE TABLE "guild_order_preference" (
+        "userId" text PRIMARY KEY NOT NULL,
+        "guildOrder" text DEFAULT '[]' NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+  }
+
+  const constraintExists = await db.execute<{ exists: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints
+      WHERE constraint_schema = 'public'
+        AND table_name = 'guild_order_preference'
+        AND constraint_name = 'guild_order_preference_userId_user_id_fk'
+    ) AS "exists"
+  `);
+
+  if (!constraintExists[0]?.exists) {
+    await db.execute(sql`
+      ALTER TABLE "guild_order_preference"
+      ADD CONSTRAINT "guild_order_preference_userId_user_id_fk"
+      FOREIGN KEY ("userId") REFERENCES "public"."user"("id")
+      ON DELETE cascade ON UPDATE no action
+    `);
+  }
+}
+
+function normalizeGuildOrder(guildOrder: unknown): string[] {
+  if (!Array.isArray(guildOrder)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of guildOrder) {
+    if (typeof value !== "string" || !validateGuildId(value) || seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  return normalized;
+}
+
+async function getGuildOrderPreference(userId: string): Promise<string[]> {
+  await ensureGuildOrderPreferenceTable();
+
+  const rows = await db
+    .select({ guildOrder: guildOrderPreferences.guildOrder })
+    .from(guildOrderPreferences)
+    .where(eq(guildOrderPreferences.userId, userId))
+    .limit(1);
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  try {
+    return normalizeGuildOrder(JSON.parse(rows[0].guildOrder));
+  } catch {
+    return [];
+  }
+}
+
+function applyGuildOrder<T extends { id: string }>(guilds: T[], guildOrder: string[]): T[] {
+  if (guildOrder.length === 0) {
+    return guilds;
+  }
+
+  const indexByGuildId = new Map(guildOrder.map((guildId, index) => [guildId, index]));
+
+  return [...guilds].sort((left, right) => {
+    const leftIndex = indexByGuildId.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = indexByGuildId.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+
+    return 0;
+  });
+}
+
+async function ensureDiscordGuildRow(guildId: string, botGuilds: BotGuild[] | null): Promise<boolean> {
+  const existingGuild = await db
+    .select({ id: discordGuilds.id })
+    .from(discordGuilds)
+    .where(eq(discordGuilds.id, guildId))
+    .limit(1);
+
+  if (existingGuild.length > 0) {
+    return true;
+  }
+
+  const botGuild = botGuilds?.find((guild) => guild.id === guildId);
+
+  if (!botGuild) {
+    return false;
+  }
+
+  await db
+    .insert(discordGuilds)
+    .values({
+      id: botGuild.id,
+      name: botGuild.name,
+      icon: botGuild.icon,
+      ownerId: "",
+      owner: false,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: discordGuilds.id,
+      set: {
+        name: botGuild.name,
+        icon: botGuild.icon,
+        deletedAt: null,
+        updatedAt: new Date(),
+      },
+    });
+
+  return true;
+}
+
+async function upsertBotGuildRows(botGuilds: BotGuild[] | null): Promise<void> {
+  if (!botGuilds || botGuilds.length === 0) {
+    return;
+  }
+
+  await ensureDiscordGuildDeletedAtColumn();
+
+  const updatedAt = new Date();
+  await db
+    .insert(discordGuilds)
+    .values(botGuilds.map((guild) => ({
+      id: guild.id,
+      name: guild.name,
+      icon: guild.icon,
+      ownerId: "",
+      owner: false,
+      deletedAt: null,
+      updatedAt,
+    })))
+    .onConflictDoUpdate({
+      target: discordGuilds.id,
+      set: {
+        name: sql`excluded.name`,
+        icon: sql`excluded.icon`,
+        deletedAt: null,
+        updatedAt: sql`excluded."updatedAt"`,
+      },
+    });
+}
+
+async function getDeletedGuildIds(): Promise<Set<string>> {
+  await ensureDiscordGuildDeletedAtColumn();
+
+  const deletedGuilds = await db
+    .select({ id: discordGuilds.id })
+    .from(discordGuilds)
+    .where(sql`${discordGuilds.deletedAt} IS NOT NULL`);
+
+  return new Set(deletedGuilds.map((guild) => guild.id));
+}
+
+async function reconcileDeletedBotGuilds(botGuilds: BotGuild[] | null): Promise<void> {
+  if (!botGuilds) {
+    return;
+  }
+
+  await ensureDiscordGuildDeletedAtColumn();
+
+  const liveGuildIds = botGuilds.map((guild) => guild.id);
+
+  if (liveGuildIds.length === 0) {
+    await db.execute(sql`
+      UPDATE "discord_guild"
+      SET "deletedAt" = COALESCE("deletedAt", now()),
+          "updatedAt" = now()
+      WHERE "deletedAt" IS NULL
+    `);
+    return;
+  }
+
+  const liveGuildIdValues = sql.join(liveGuildIds.map((guildId) => sql`${guildId}`), sql`, `);
+
+  await db.execute(sql`
+    UPDATE "discord_guild"
+    SET "deletedAt" = COALESCE("deletedAt", now()),
+        "updatedAt" = now()
+    WHERE "deletedAt" IS NULL
+      AND "id" NOT IN (${liveGuildIdValues})
+  `);
+}
+
+const HISTORY_DAY_RANGES = new Set([1, 7, 30, 90, 365, 0]);
+
+function readQueryString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
+/** Parses the shared admin history filters, or returns an error message. */
+function parseHistoryFilters(query: express.Request["query"]): HistoryFilters | string {
+  const days = Number.parseInt(readQueryString(query.days) ?? "30", 10);
+  if (!HISTORY_DAY_RANGES.has(days)) {
+    return "Invalid days range";
+  }
+
+  const guildId = readQueryString(query.guildId);
+  if (guildId && !validateGuildId(guildId)) {
+    return "Invalid guild ID format";
+  }
+
+  const userId = readQueryString(query.userId);
+  if (userId && !validateDiscordId(userId)) {
+    return "Invalid user ID format";
+  }
+
+  return { days, guildId, userId };
+}
+
+function parsePage(query: express.Request["query"]): { before?: number; limit: number } {
+  const before = Number.parseInt(readQueryString(query.before) ?? "", 10);
+  const limit = Number.parseInt(readQueryString(query.limit) ?? "50", 10);
+
+  return {
+    before: Number.isSafeInteger(before) && before > 0 ? before : undefined,
+    limit: Number.isFinite(limit) ? Math.min(100, Math.max(1, limit)) : 50,
+  };
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function getOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+
+    if (isLocalHostname(url.hostname)) {
+      url.protocol = "http:";
+    }
+
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
   const { serveStatic = false, buildDir = join(process.cwd(), 'build') } = options;
   const FRONTEND_URL = getEnv("NEXTAUTH_URL", "http://localhost:3001");
+  const PUBLIC_AUTH_ORIGIN = getOrigin(FRONTEND_URL);
+  void ensureSuperUserTable();
+  void ensureDiscordGuildDeletedAtColumn();
+  void ensureGuildOrderPreferenceTable();
 
-  // Trust proxy for Vercel (needed for correct protocol detection)
-  if (process.env.VERCEL) {
-    app.set('trust proxy', true);
+  // Trust only explicitly configured proxy hops so auth callbacks and
+  // rate-limiting use forwarded headers when running behind Vercel, Vite,
+  // nginx, or another reverse proxy.
+  const trustProxy = getTrustProxySetting();
+  if (trustProxy) {
+    app.set('trust proxy', trustProxy);
   }
 
   // Security headers
@@ -80,6 +462,29 @@ export function createApp(options: CreateAppOptions = {}) {
     store: process.env.VERCEL ? undefined : undefined, // Use default memory store
   });
 
+  // Admin history gets its own bucket: filtering and paging through it would
+  // otherwise eat the shared API allowance and lock the dashboard itself out.
+  const adminLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const requireSuperUser: express.RequestHandler = async (req, res, next): Promise<void> => {
+    try {
+      if (!(await isSessionSuperUser((req as AuthenticatedRequest).session))) {
+        res.status(403).json({ error: "Superuser access required" });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
@@ -93,18 +498,18 @@ export function createApp(options: CreateAppOptions = {}) {
   // CORS middleware - improved security
   app.use((req, res, next): void => {
     const origin = req.headers.origin;
-    
+
     // Define allowed origins based on environment
     const allowedOrigins = process.env.NODE_ENV === 'production'
       ? [FRONTEND_URL] // Strict in production
       : [
-          FRONTEND_URL,
-          "http://localhost:3001",
-          "http://localhost:3000",
-          "http://127.0.0.1:3001",
-          "http://127.0.0.1:3000",
-        ];
-    
+        FRONTEND_URL,
+        "http://localhost:3001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3000",
+      ];
+
     // In development, be more permissive: allow any localhost origin or requests without origin
     if (process.env.NODE_ENV === "development") {
       if (origin) {
@@ -136,11 +541,11 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
     }
-    
-    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Credentials", "true");
-    
+
     if (req.method === "OPTIONS") {
       res.sendStatus(200);
       return;
@@ -159,11 +564,11 @@ export function createApp(options: CreateAppOptions = {}) {
       } catch (importError) {
         const errorMessage = importError instanceof Error ? importError.message : String(importError);
         const errorStack = importError instanceof Error ? importError.stack : undefined;
-        logger.error("Failed to import auth handlers", { 
+        logger.error("Failed to import auth handlers", {
           error: errorMessage,
           stack: errorStack,
         });
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Authentication service unavailable",
           ...(process.env.NODE_ENV === 'development' && { details: errorMessage })
         });
@@ -184,11 +589,15 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
-      // Build full URL using originalUrl which contains the full path
-      // Check X-Forwarded-Proto for Vercel/proxy environments
-      const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+      // Build the public URL Auth.js should use for OAuth callbacks. The API
+      // may be reached through an internal port like localhost:3003, but
+      // Discord must receive the browser-facing origin from NEXTAUTH_URL.
       const host = req.get("x-forwarded-host") || req.get("host") || "localhost:3001";
-      const fullUrl = `${protocol}://${host}${req.originalUrl}`;
+      const forwardedProtocol = req.get("x-forwarded-proto") || req.protocol || "https";
+      const hostname = host.split(":")[0] ?? host;
+      const protocol = isLocalHostname(hostname) ? "http" : forwardedProtocol;
+      const requestOrigin = PUBLIC_AUTH_ORIGIN ?? `${protocol}://${host}`;
+      const fullUrl = `${requestOrigin}${req.originalUrl}`;
 
       // Convert Express req to Web Request for Auth.js
       const headers = new Headers();
@@ -239,17 +648,17 @@ export function createApp(options: CreateAppOptions = {}) {
       // Enhanced error logging
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
-      logger.error("Auth handler error", { 
+      logger.error("Auth handler error", {
         error: errorMessage,
         stack: errorStack,
         path: req.path,
         method: req.method,
         url: req.originalUrl,
       });
-      
+
       // Send more detailed error in development
       if (process.env.NODE_ENV === 'development') {
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Internal server error",
           message: errorMessage,
           path: req.path,
@@ -257,6 +666,32 @@ export function createApp(options: CreateAppOptions = {}) {
       } else {
         res.status(500).json({ error: "Internal server error" });
       }
+    }
+  });
+
+  app.get("/api/bot-health", apiLimiter, async (_req, res): Promise<void> => {
+    const botHealthUrl = getBotHealthUrl();
+
+    try {
+      const upstreamResponse = await fetchWithTimeout(botHealthUrl, {
+        headers: {
+          accept: "application/json",
+        },
+      });
+
+      const data = await upstreamResponse.json() as BotHealthResponse;
+
+      res.setHeader("Cache-Control", "no-store");
+      res.status(upstreamResponse.status).json(data);
+    } catch (error) {
+      logger.warn("Bot health proxy request failed", {
+        error: error instanceof Error ? error.message : String(error),
+        botHealthUrl,
+      });
+      res.status(503).json({
+        status: "error",
+        ready: false,
+      } satisfies BotHealthResponse);
     }
   });
 
@@ -269,12 +704,83 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
+      const isSuperUser = await isSessionSuperUser(session);
+      const botGuilds = await getBotGuilds();
+      await upsertBotGuildRows(botGuilds);
+      await reconcileDeletedBotGuilds(botGuilds);
+      const deletedGuildIds = await getDeletedGuildIds();
+      const guildOrder = await getGuildOrderPreference(session.user.id);
+      const botGuildIds = botGuilds ? new Set(botGuilds.map((guild) => guild.id)) : null;
+      const botGuildById = botGuilds
+        ? new Map(botGuilds.map((guild) => [guild.id, guild]))
+        : null;
+
+      if (isSuperUser) {
+        if (botGuilds) {
+          res.json({
+            guilds: applyGuildOrder(
+              botGuilds.filter((guild) => !deletedGuildIds.has(guild.id)),
+              guildOrder
+            ),
+          });
+          return;
+        }
+
+        const storedGuilds = await db
+          .select({
+            id: discordGuilds.id,
+            name: discordGuilds.name,
+            icon: discordGuilds.icon,
+          })
+          .from(discordGuilds)
+          .where(isNull(discordGuilds.deletedAt));
+
+        res.json({ guilds: applyGuildOrder(storedGuilds, guildOrder) });
+        return;
+      }
+
+      await refreshDiscordMemberships(session);
+
       // Get Discord user ID
-      const discordUser = await db
+      let discordUser = await db
         .select()
         .from(discordUsers)
         .where(eq(discordUsers.userId, session.user.id))
         .limit(1);
+
+      if (discordUser.length === 0) {
+        const discordAccount = await db
+          .select()
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.userId, session.user.id),
+              eq(accounts.provider, 'discord')
+            )
+          )
+          .limit(1);
+
+        if (discordAccount.length > 0 && discordAccount[0].access_token) {
+          try {
+            await syncDiscordData({
+              authUserId: session.user.id,
+              discordUserId: discordAccount[0].providerAccountId,
+              accessToken: discordAccount[0].access_token,
+            });
+          } catch (error) {
+            logger.warn("Failed to refresh Discord guild cache", {
+              error: error instanceof Error ? error.message : String(error),
+              userId: session.user.id,
+            });
+          }
+
+          discordUser = await db
+            .select()
+            .from(discordUsers)
+            .where(eq(discordUsers.userId, session.user.id))
+            .limit(1);
+        }
+      }
 
       if (discordUser.length === 0) {
         res.json({ guilds: [] });
@@ -283,7 +789,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
       const discordUserId = discordUser[0].id;
 
-      // Get all guilds the user is a member of
+      // Get only guilds where the user has Discord's ADMINISTRATOR permission.
       const userGuilds = await db
         .select({
           id: discordGuilds.id,
@@ -295,9 +801,121 @@ export function createApp(options: CreateAppOptions = {}) {
         .innerJoin(discordGuilds, eq(guildMembers.guildId, discordGuilds.id))
         .where(eq(guildMembers.userId, discordUserId));
 
-      res.json({ guilds: userGuilds });
+      const manageableGuilds = userGuilds
+        .filter((guild) => hasAdministratorPermission(guild.permissions))
+        .filter((guild) => !deletedGuildIds.has(guild.id))
+        .filter((guild) => !botGuildIds || botGuildIds.has(guild.id))
+        .map((guild) => {
+          const botGuild = botGuildById?.get(guild.id);
+          return {
+            ...guild,
+            name: botGuild?.name ?? guild.name,
+            icon: botGuild?.icon ?? guild.icon,
+          };
+        });
+
+      res.json({
+        guilds: applyGuildOrder(manageableGuilds, guildOrder),
+      });
     } catch (error) {
       logger.error("Error fetching guilds", { error, userId: (req as AuthenticatedRequest).session?.user?.id });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/guilds/:guildId", apiLimiter, requireAuth, async (req, res): Promise<void> => {
+    const guildId = req.params.guildId as string;
+
+    try {
+      if (!validateGuildId(guildId)) {
+        res.status(400).json({ error: "Invalid guild ID format" });
+        return;
+      }
+
+      const session = (req as AuthenticatedRequest).session;
+      if (!session?.user?.id) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const isSuperUser = await isSessionSuperUser(session);
+      if (!isSuperUser) {
+        throw new AuthorizationError("Only superusers can make the bot leave a server");
+      }
+
+      const botGuilds = await getBotGuilds();
+      await ensureDiscordGuildRow(guildId, botGuilds);
+
+      const leaveResult = await leaveBotGuild(guildId);
+      if (!leaveResult.ok) {
+        res.status(leaveResult.status).json({ error: leaveResult.message });
+        return;
+      }
+
+      const botGuild = botGuilds?.find((guild) => guild.id === guildId);
+      const deletedAt = new Date();
+      await db
+        .insert(discordGuilds)
+        .values({
+          id: guildId,
+          name: botGuild?.name ?? `Deleted server ${guildId}`,
+          icon: botGuild?.icon ?? null,
+          ownerId: "",
+          owner: false,
+          deletedAt,
+          updatedAt: deletedAt,
+        })
+        .onConflictDoUpdate({
+          target: discordGuilds.id,
+          set: {
+            name: botGuild?.name ?? sql`${discordGuilds.name}`,
+            icon: botGuild?.icon ?? sql`${discordGuilds.icon}`,
+            deletedAt,
+            updatedAt: deletedAt,
+          },
+        });
+
+      res.json({ ok: true });
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        res.status(403).json({ error: error.message });
+        return;
+      }
+
+      logger.error("Error leaving guild", { error, guildId });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/guilds/order", apiLimiter, requireAuth, async (req, res): Promise<void> => {
+    try {
+      const session = (req as AuthenticatedRequest).session;
+      if (!session?.user?.id) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const guildOrder = normalizeGuildOrder((req.body as { guildOrder?: unknown }).guildOrder);
+      await ensureGuildOrderPreferenceTable();
+
+      await db
+        .insert(guildOrderPreferences)
+        .values({
+          userId: session.user.id,
+          guildOrder: JSON.stringify(guildOrder),
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: guildOrderPreferences.userId,
+          set: {
+            guildOrder: JSON.stringify(guildOrder),
+            updatedAt: new Date(),
+          },
+        });
+
+      res.json({ guildOrder });
+    } catch (error) {
+      logger.error("Error saving guild order", { error, userId: (req as AuthenticatedRequest).session?.user?.id });
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -318,6 +936,19 @@ export function createApp(options: CreateAppOptions = {}) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
+      const isSuperUser = await isSessionSuperUser(session);
+      const botGuilds = await getBotGuilds();
+
+      if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
+
+      const deletedGuildIds = await getDeletedGuildIds();
+      if (deletedGuildIds.has(guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
 
       // Verify user is a member of this guild
       const discordUser = await db
@@ -326,24 +957,40 @@ export function createApp(options: CreateAppOptions = {}) {
         .where(eq(discordUsers.userId, session.user.id))
         .limit(1);
 
-      if (discordUser.length === 0) {
+      if (!isSuperUser && discordUser.length === 0) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
 
-      const member = await db
-        .select()
-        .from(guildMembers)
-        .where(
-          and(
-            eq(guildMembers.guildId, guildId),
-            eq(guildMembers.userId, discordUser[0].id)
+      if (!isSuperUser) {
+        const member = await db
+          .select()
+          .from(guildMembers)
+          .where(
+            and(
+              eq(guildMembers.guildId, guildId),
+              eq(guildMembers.userId, discordUser[0].id)
+            )
           )
-        )
-        .limit(1);
+          .limit(1);
 
-      if (member.length === 0) {
-        res.status(403).json({ error: "You are not a member of this server" });
+        if (member.length === 0) {
+          res.status(403).json({ error: "You are not a member of this server" });
+          return;
+        }
+
+        if (!hasAdministratorPermission(member[0].permissions)) {
+          throw new AuthorizationError("You must be a server administrator to view settings");
+        }
+      }
+
+      const guildRowExists = await ensureDiscordGuildRow(guildId, botGuilds);
+      if (!guildRowExists) {
+        res.status(botGuilds ? 404 : 503).json({
+          error: botGuilds
+            ? "Server is not managed by this bot"
+            : "Unable to verify this server with Discord right now",
+        });
         return;
       }
 
@@ -389,9 +1036,9 @@ export function createApp(options: CreateAppOptions = {}) {
       // Validate request body
       const validationResult = guildSettingsSchema.safeParse(req.body);
       if (!validationResult.success) {
-        res.status(400).json({ 
-          error: "Invalid settings data", 
-          details: validationResult.error.errors 
+        res.status(400).json({
+          error: "Invalid settings data",
+          details: validationResult.error.errors
         });
         return;
       }
@@ -403,6 +1050,19 @@ export function createApp(options: CreateAppOptions = {}) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
+      const isSuperUser = await isSessionSuperUser(session);
+      const botGuilds = await getBotGuilds();
+
+      if (botGuilds && !botGuilds.some((guild) => guild.id === guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
+
+      const deletedGuildIds = await getDeletedGuildIds();
+      if (deletedGuildIds.has(guildId)) {
+        res.status(404).json({ error: "Server is not managed by this bot" });
+        return;
+      }
 
       // Verify user is a member of this guild
       const discordUser = await db
@@ -411,30 +1071,41 @@ export function createApp(options: CreateAppOptions = {}) {
         .where(eq(discordUsers.userId, session.user.id))
         .limit(1);
 
-      if (discordUser.length === 0) {
+      if (!isSuperUser && discordUser.length === 0) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
 
-      const member = await db
-        .select()
-        .from(guildMembers)
-        .where(
-          and(
-            eq(guildMembers.guildId, guildId),
-            eq(guildMembers.userId, discordUser[0].id)
+      if (!isSuperUser) {
+        const member = await db
+          .select()
+          .from(guildMembers)
+          .where(
+            and(
+              eq(guildMembers.guildId, guildId),
+              eq(guildMembers.userId, discordUser[0].id)
+            )
           )
-        )
-        .limit(1);
+          .limit(1);
 
-      if (member.length === 0) {
-        res.status(403).json({ error: "You are not a member of this server" });
-        return;
+        if (member.length === 0) {
+          res.status(403).json({ error: "You are not a member of this server" });
+          return;
+        }
+
+        if (!hasAdministratorPermission(member[0].permissions)) {
+          throw new AuthorizationError("You must be a server administrator to modify settings");
+        }
       }
 
-      // Check if user has permission to manage guild settings
-      if (!canManageGuildSettings(member[0].permissions)) {
-        throw new AuthorizationError("You do not have permission to modify settings");
+      const guildRowExists = await ensureDiscordGuildRow(guildId, botGuilds);
+      if (!guildRowExists) {
+        res.status(botGuilds ? 404 : 503).json({
+          error: botGuilds
+            ? "Server is not managed by this bot"
+            : "Unable to verify this server with Discord right now",
+        });
+        return;
       }
 
       // Check if settings exist, create if not
@@ -483,92 +1154,78 @@ export function createApp(options: CreateAppOptions = {}) {
     }
   });
 
-  // Health check endpoint - proxies to the bot's health server
-  app.get("/api/health", async (_req, res): Promise<void> => {
-    const botHealthUrl = getEnv("BOT_HEALTH_URL", "https://isobelhealth.soulwax.dev");
-    
-    // Normalize URL: handle trailing slash and /health path
-    let healthUrl = botHealthUrl.trim();
-    
-    // If /health is already in the URL, use it as-is
-    if (healthUrl.endsWith('/health')) {
-      // Already has /health, use as-is
-    } else if (healthUrl.endsWith('/')) {
-      // Has trailing slash, append 'health' (no leading slash)
-      healthUrl = `${healthUrl}health`;
-    } else {
-      // No trailing slash, append '/health'
-      healthUrl = `${healthUrl}/health`;
-    }
-
+  // Superuser admin: playback history recorded by the bot.
+  app.get("/api/admin/history/summary", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
     try {
-      logger.info(`Fetching bot health from ${healthUrl}`, { 
-        botHealthUrl, 
-        constructedUrl: healthUrl,
-        envVar: process.env.BOT_HEALTH_URL 
-      });
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        logger.warn("Health check timeout, aborting...", { url: healthUrl });
-        controller.abort();
-      }, 5000); // 5 second timeout
-
-      const response = await fetch(healthUrl, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'isobel-web/1.0',
-        },
-      });
-      clearTimeout(timeoutId);
-      
-      logger.info(`Bot health response status: ${response.status}`, { 
-        url: healthUrl,
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unable to read error response');
-        logger.warn(`Bot health check failed`, {
-          url: healthUrl,
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText.substring(0, 200), // Limit error text length
-        });
-        res.status(response.status).json({
-          status: "error",
-          ready: false,
-          error: `Bot health check failed with status ${response.status}: ${response.statusText}`,
-          url: healthUrl,
-        });
+      const filters = parseHistoryFilters(req.query);
+      if (typeof filters === "string") {
+        res.status(400).json({ error: filters });
         return;
       }
 
-      const data = await response.json();
-      logger.debug(`Bot health check successful`, { data });
-      res.json(data);
+      if (!(await isHistoryAvailable())) {
+        res.json({ available: false });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ available: true, ...(await getHistorySummary(filters)) });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorName = error instanceof Error ? error.name : 'UnknownError';
-      
-      logger.error("Error checking bot health", { 
-        error: errorMessage,
-        errorName,
-        url: healthUrl,
-        botHealthUrl,
-        envVar: process.env.BOT_HEALTH_URL,
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      
-      res.status(503).json({
-        status: "error",
-        ready: false,
-        error: `Unable to connect to bot health server: ${errorMessage}`,
-        url: healthUrl,
-        errorName,
-      });
+      logger.error("Error fetching history summary", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/history/plays", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const filters = parseHistoryFilters(req.query);
+      if (typeof filters === "string") {
+        res.status(400).json({ error: filters });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ plays: [], nextCursor: null });
+        return;
+      }
+
+      const search = readQueryString(req.query.search)?.slice(0, 100);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await getPlayHistory({ ...filters, ...parsePage(req.query), search }));
+    } catch (error) {
+      logger.error("Error fetching play history", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/history/actions", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const filters = parseHistoryFilters(req.query);
+      if (typeof filters === "string") {
+        res.status(400).json({ error: filters });
+        return;
+      }
+
+      const action = readQueryString(req.query.action);
+      if (action && !(HISTORY_ACTIONS as readonly string[]).includes(action)) {
+        res.status(400).json({ error: "Invalid action" });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ actions: [], nextCursor: null });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await getActionHistory({
+        ...filters,
+        ...parsePage(req.query),
+        action: action as HistoryAction | undefined,
+      }));
+    } catch (error) {
+      logger.error("Error fetching action history", { error });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

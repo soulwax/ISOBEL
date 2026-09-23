@@ -2,8 +2,8 @@
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import type Player from '../services/player.js';
-import { STATUS, type QueuedSong } from '../services/player.js';
-import { PROGRESS_BAR_SEGMENTS } from './constants.js';
+import { MediaSource, STATUS, type QueuedSong } from '../services/player.js';
+import { PROGRESS_BAR_SEGMENTS, VOLUME_MAX, VOLUME_MIN } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
 import { truncate } from './string.js';
 import { prettyTime } from './time.js';
@@ -17,6 +17,16 @@ const getMaxSongTitleLength = (title: string) => {
 const EXTERNAL_PLAYER_URL = process.env.EXTERNAL_PLAYER_URL?.trim() ?? '';
 const SONG_LINK_TEMPLATE = process.env.SONG_LINK_URL_TEMPLATE?.trim() ?? '';
 const AI_SUGGESTION_VALUE_PREFIX = 'ai-suggest:';
+
+const EMBED_COLOR = {
+  playing: 0x57F287,
+  paused: 0xFEE75C,
+  idle: 0x4E5058,
+} as const;
+
+// The now-playing card has room for a fuller timeline than the compact queue
+// preview, which continues to use PROGRESS_BAR_SEGMENTS.
+const PLAYING_PROGRESS_BAR_SEGMENTS = 30;
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
@@ -44,9 +54,13 @@ const buildSongLink = (artist: string, title: string): string | null => {
   return buildSongLinkFromTemplate(SONG_LINK_TEMPLATE, encodedArtist, encodedTitle, encodedQuery);
 };
 
-const getSongTitle = ({title, artist}: QueuedSong, shouldTruncate = false) => {
-  const cleanSongTitle = title.replace(/\[.*\]/, '').trim() || 'Unknown title';
-  const cleanArtist = artist.trim() || 'Unknown artist';
+const getCleanSongParts = ({title, artist}: QueuedSong) => ({
+  title: title.replace(/\[.*\]/, '').trim() || 'Unknown title',
+  artist: artist.trim() || 'Unknown artist',
+});
+
+const getSongTitle = (song: QueuedSong, shouldTruncate = false) => {
+  const {title: cleanSongTitle, artist: cleanArtist} = getCleanSongParts(song);
 
   const linkText = `${cleanSongTitle} - ${cleanArtist}`;
   const songTitle = shouldTruncate ? truncate(linkText, getMaxSongTitleLength(linkText)) : linkText;
@@ -68,6 +82,57 @@ const getQueueInfo = (player: Player) => {
   return queueSize === 1 ? '1 song' : `${queueSize} songs`;
 };
 
+const getStatusPresentation = (player: Player) => {
+  switch (player.status) {
+    case STATUS.PLAYING:
+      return {label: 'Now Playing', emoji: '▶️', color: EMBED_COLOR.playing};
+    case STATUS.PAUSED:
+      return {label: 'Paused', emoji: '⏸️', color: EMBED_COLOR.paused};
+    default:
+      return {label: 'Idle', emoji: '⏹️', color: EMBED_COLOR.idle};
+  }
+};
+
+const getLoopPresentation = (player: Player) => {
+  if (player.loopCurrentSong) {
+    return {label: 'Track', emoji: '🔂', isOn: true};
+  }
+
+  if (player.loopCurrentQueue) {
+    return {label: 'Queue', emoji: '🔁', isOn: true};
+  }
+
+  return {label: 'Off', emoji: '🔁', isOn: false};
+};
+
+// Resolved lazily: player.ts and build-embed.ts import each other, so `MediaSource`
+// isn't initialised yet while this module is being evaluated.
+const getSourceLabel = (song: QueuedSong): string => {
+  switch (song.source) {
+    case MediaSource.Starchild:
+      return 'Starchild';
+    case MediaSource.HLS:
+      return 'Live stream';
+    case MediaSource.YouTube:
+      return 'YouTube';
+    case MediaSource.DiscordAttachment:
+      return 'Direct file';
+    default:
+      return 'Unknown source';
+  }
+};
+
+const getVolumeEmoji = (volume: number) => {
+  if (volume === 0) {
+    return '🔇';
+  }
+
+  return volume < 50 ? '🔉' : '🔊';
+};
+
+/**
+ * Renders the two-line playback readout: progress bar on top, metadata below.
+ */
 const getPlayerUI = (player: Player) => {
   const song = player.getCurrent();
 
@@ -75,14 +140,30 @@ const getPlayerUI = (player: Player) => {
     return '';
   }
 
-  const position = player.getPosition();
-  const button = player.status === STATUS.PLAYING ? '⏹️' : '▶️';
-  const progressBar = getProgressBar(PROGRESS_BAR_SEGMENTS, position / song.length);
-  const elapsedTime = song.isLive ? 'live' : `${prettyTime(position)}/${prettyTime(song.length)}`;
-  const loop = player.loopCurrentSong ? '🔂' : player.loopCurrentQueue ? '🔁' : '';
   const volume = player.getVolume();
-  const vol = Number.isFinite(volume) ? `${volume}%` : '-';
-  return `${button} ${progressBar} \`[${elapsedTime}]\`🔉 ${vol} ${loop}`;
+  const meta: string[] = [];
+
+  if (song.isLive) {
+    meta.push('🔴 `LIVE`');
+  } else {
+    const position = player.getPosition();
+    meta.push(`\`${prettyTime(position)} / ${prettyTime(song.length)}\``);
+  }
+
+  meta.push(`${getVolumeEmoji(volume)} \`${Number.isFinite(volume) ? `${volume}%` : '-'}\``);
+
+  const loop = getLoopPresentation(player);
+  if (loop.isOn) {
+    meta.push(`${loop.emoji} \`${loop.label}\``);
+  }
+
+  if (song.isLive) {
+    return meta.join(' • ');
+  }
+
+  const progress = song.length > 0 ? player.getPosition() / song.length : 0;
+
+  return `${getProgressBar(PROGRESS_BAR_SEGMENTS, progress)}\n${meta.join(' • ')}`;
 };
 
 /**
@@ -98,75 +179,155 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
     throw new Error('No playing song found');
   }
 
-  const {artist, thumbnailUrl, requestedBy} = currentlyPlaying;
+  const {thumbnailUrl, requestedBy, playlist} = currentlyPlaying;
+  const {title, artist} = getCleanSongParts(currentlyPlaying);
+  const status = getStatusPresentation(player);
+  const songUrl = buildSongLink(artist, title);
+  const volume = player.getVolume();
+  const loop = getLoopPresentation(player);
+  const album = currentlyPlaying.album?.trim() ?? 'Unknown album';
+  const timeline = currentlyPlaying.isLive
+    ? '🔴 `LIVE BROADCAST`'
+    : currentlyPlaying.length > 0
+      ? `\`${prettyTime(player.getPosition())}\`  ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)}  \`${prettyTime(currentlyPlaying.length)}\``
+      : `\`${prettyTime(player.getPosition())}\`  •  ⏱️ · duration unavailable`;
+  const subtitle = album === 'Unknown album'
+    ? `by **${artist}**`
+    : `by **${artist}**  •  *${album}*`;
+
   const message = new EmbedBuilder();
   message
-    .setColor(player.status === STATUS.PLAYING ? 'DarkGreen' : 'DarkRed')
-    .setTitle(player.status === STATUS.PLAYING ? 'Now Playing' : 'Paused')
-    .setDescription(`
-      **${getSongTitle(currentlyPlaying)}**
-      Requested by: <@${requestedBy}>\n
-      ${getPlayerUI(player)}
-    `)
-    .setFooter({text: `Source: ${artist}`});
+    .setColor(status.color)
+    .setAuthor({name: `${status.emoji}  ISOBEL  •  ${status.label.toUpperCase()}`})
+    .setTitle(truncate(title, 256))
+    .setDescription([
+      subtitle,
+      '',
+      timeline,
+    ].join('\n'));
+
+  if (songUrl) {
+    message.setURL(songUrl);
+  }
+
+  message
+    .addFields(
+      {name: 'STATE', value: `Requested by <@${requestedBy}>`, inline: true},
+      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
+      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+    )
+    .setFooter({
+      text: [getSourceLabel(currentlyPlaying), `${getQueueInfo(player)} queued`, playlist?.title].filter(Boolean).join('  •  '),
+    });
 
   if (thumbnailUrl) {
-    message.setThumbnail(thumbnailUrl);
+    // Keep the card visually dominant; Discord renders every component row
+    // beneath this full-width image, never inside the embed itself.
+    message.setImage(thumbnailUrl);
   }
 
   return message;
 };
 
+/** Replaces a stale now-playing card while preserving the same three-part rhythm. */
+export const buildPlaybackFinishedEmbed = (player: Player): EmbedBuilder => {
+  const volume = player.getVolume();
+  const loop = getLoopPresentation(player);
+
+  return new EmbedBuilder()
+    .setColor(EMBED_COLOR.idle)
+    .setAuthor({name: '⏹️  ISOBEL  •  QUEUE COMPLETE'})
+    .setTitle('Playback finished')
+    .setDescription([
+      player.canGoBack() ? '⏮️ Replay a previous track  •  Use /play to add something new' : 'Use /play to add something new',
+      'Join a voice channel first and ISOBEL will come to you.',
+    ].join('\n\n'))
+    .addFields(
+      {name: 'STATE', value: 'Queue complete', inline: true},
+      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
+      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+    )
+    .setFooter({text: '⏮️ Replay  •  /play to add music'});
+};
+
 export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {
   const isPlaying = player.status === STATUS.PLAYING;
-  const canBack = player.canGoBack();
-  const canSkip = player.canGoForward(1);
+  const currentSong = player.getCurrent();
+  const volume = player.getVolume();
+  const loop = getLoopPresentation(player);
+
+  // Row 1 - modes and transport, play/pause held in the visual centre.
+  // Rewind/fast-forward were dropped as rarely used; /seek covers that need.
+  const loopButton = new ButtonBuilder()
+    .setCustomId('playback:loop')
+    .setStyle(loop.isOn ? ButtonStyle.Success : ButtonStyle.Secondary)
+    .setEmoji(loop.emoji);
+
+  const shuffleButton = new ButtonBuilder()
+    .setCustomId('playback:shuffle')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('🔀');
+
+  const previousButton = new ButtonBuilder()
+    .setCustomId('playback:prev')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('⏮️');
 
   const toggleButton = new ButtonBuilder()
     .setCustomId('playback:toggle')
-    .setStyle(ButtonStyle.Secondary)
-    .setLabel(isPlaying ? 'Pause' : 'Resume')
+    .setStyle(ButtonStyle.Primary)
     .setEmoji(isPlaying ? '⏸️' : '▶️');
-
-  const prevButton = new ButtonBuilder()
-    .setCustomId('playback:prev')
-    .setStyle(ButtonStyle.Secondary)
-    .setLabel('Previous')
-    .setEmoji('⏮️')
-    .setDisabled(!canBack);
 
   const nextButton = new ButtonBuilder()
     .setCustomId('playback:next')
-    .setStyle(ButtonStyle.Primary)
-    .setLabel('Next')
-    .setEmoji('⏭️')
-    .setDisabled(!canSkip);
-
-  const searchButton = new ButtonBuilder()
-    .setCustomId('playback:search')
     .setStyle(ButtonStyle.Secondary)
-    .setLabel('Search')
-    .setEmoji('🔎');
+    .setEmoji('⏭️');
 
+  // Row 2 - stop, the queue, and volume. Search/seek were dropped as rarely
+  // used - /play and /seek cover the same actions from the slash menu.
   const stopButton = new ButtonBuilder()
     .setCustomId('playback:stop')
     .setStyle(ButtonStyle.Danger)
-    .setLabel('Stop')
     .setEmoji('⏹️');
 
-  const primaryRow = new ActionRowBuilder<ButtonBuilder>()
-    .addComponents(toggleButton, prevButton, nextButton, searchButton, stopButton);
-
-  const seekButton = new ButtonBuilder()
-    .setCustomId('playback:seek')
+  const queueButton = new ButtonBuilder()
+    .setCustomId('playback:queue')
     .setStyle(ButtonStyle.Secondary)
-    .setLabel('Seek')
-    .setEmoji('⏩');
+    .setEmoji('📜');
 
-  const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
-    .addComponents(seekButton);
+  const volumeDownButton = new ButtonBuilder()
+    .setCustomId('playback:volume-down')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('🔉');
 
-  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [primaryRow, secondaryRow];
+  const volumeUpButton = new ButtonBuilder()
+    .setCustomId('playback:volume-up')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('🔊');
+
+  // Keep every symbol in a fixed position. Disabled icons preserve the
+  // composition and make unavailable actions immediately legible.
+  loopButton.setDisabled(!currentSong);
+  shuffleButton.setDisabled(player.queueSize() < 2);
+  previousButton.setDisabled(!player.canGoBack());
+  toggleButton.setDisabled(!currentSong);
+  nextButton.setDisabled(!player.canGoToNextSong());
+  stopButton.setDisabled(!currentSong);
+  queueButton.setDisabled(!currentSong);
+  volumeDownButton.setDisabled(!currentSong || volume <= VOLUME_MIN);
+  volumeUpButton.setDisabled(!currentSong || volume >= VOLUME_MAX);
+
+  // The 5–4 layout is retained after disconnecting or completing a queue.
+  // A disconnected player keeps its queue, so its enabled transport action
+  // will reconnect it to the person who presses it. A fully finished queue
+  // (nothing left to go back to either) instead gets buildPlaybackFinishedControls.
+  const primaryButtons = [loopButton, shuffleButton, previousButton, toggleButton, nextButton];
+  const secondaryButtons = [stopButton, queueButton, volumeDownButton, volumeUpButton];
+  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
+
+  rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(primaryButtons));
+  rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(secondaryButtons));
+
   const suggestions = player.getAiSuggestions();
   if (suggestions.length > 0) {
     const options = suggestions.slice(0, 5).map((value, index) => ({
@@ -176,7 +337,7 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
 
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('playback:suggest')
-      .setPlaceholder('Suggested by AI')
+      .setPlaceholder('✨ Suggested by AI')
       .addOptions(options);
 
     rows.push(
@@ -186,6 +347,29 @@ export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBu
   }
 
   return rows;
+};
+
+/**
+ * Controls for a finished/disconnected queue: nothing is playing and there's
+ * nothing queued next, so every button in buildPlaybackControls would be
+ * disabled except (maybe) previous. Show only that one, relabelled, instead -
+ * it reuses the existing playback:prev handler, which already reconnects to
+ * whoever clicks it before replaying, so pressing it puts both the presser
+ * and the bot back in a voice channel with the last song playing again.
+ */
+export const buildPlaybackFinishedControls = (player: Player): ActionRowBuilder<ButtonBuilder>[] => {
+  if (!player.canGoBack()) {
+    return [];
+  }
+
+  const replayButton = new ButtonBuilder()
+    .setCustomId('playback:prev')
+    .setStyle(ButtonStyle.Primary)
+    .setEmoji('⏮️')
+    .setLabel('Replay')
+    .setDisabled(false);
+
+  return [new ActionRowBuilder<ButtonBuilder>().addComponents(replayButton)];
 };
 
 /**
@@ -227,29 +411,32 @@ export const buildQueueEmbed = (player: Player, page: number, pageSize: number):
     })
     .join('\n');
 
-  const {artist, thumbnailUrl, playlist, requestedBy} = currentlyPlaying;
-  const playlistTitle = playlist ? `(${playlist.title})` : '';
+  const {thumbnailUrl, playlist, requestedBy} = currentlyPlaying;
+  const status = getStatusPresentation(player);
   const totalLength = player.getQueue().reduce((accumulator, current) => accumulator + current.length, 0);
 
   const message = new EmbedBuilder();
 
-  let description = `**${getSongTitle(currentlyPlaying)}**\n`;
-  description += `Requested by: <@${requestedBy}>\n\n`;
-  description += `${getPlayerUI(player)}\n\n`;
+  const description = [
+    `**${getSongTitle(currentlyPlaying)}**`,
+    getPlayerUI(player),
+    `-# Requested by <@${requestedBy}>`,
+  ];
 
   if (player.getQueue().length > 0) {
-    description += '**Up next:**\n';
-    description += queuedSongs;
+    description.push('', '**Up next**', queuedSongs);
   }
 
   message
-    .setTitle(player.status === STATUS.PLAYING ? `Now Playing ${player.loopCurrentSong ? '(loop on)' : ''}` : 'Queued songs')
-    .setColor(player.status === STATUS.PLAYING ? 'DarkGreen' : 'NotQuiteBlack')
-    .setDescription(description)
+    .setTitle(`${status.emoji} ${status.label}`)
+    .setColor(status.color)
+    .setDescription(description.join('\n'))
     .addFields([{name: 'In queue', value: getQueueInfo(player), inline: true}, {
       name: 'Total length', value: `${totalLength > 0 ? prettyTime(totalLength) : '-'}`, inline: true,
     }, {name: 'Page', value: `${page} out of ${maxQueuePage}`, inline: true}])
-    .setFooter({text: `Source: ${artist} ${playlistTitle}`});
+    .setFooter({
+      text: [`Source: ${getSourceLabel(currentlyPlaying)}`, playlist?.title].filter(Boolean).join(' • '),
+    });
 
   if (thumbnailUrl) {
     message.setThumbnail(thumbnailUrl);

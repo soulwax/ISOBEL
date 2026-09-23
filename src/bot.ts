@@ -6,7 +6,7 @@ import { type AutocompleteInteraction, type ButtonInteraction, type ChatInputCom
 import { inject, injectable } from 'inversify';
 import ora, { type Ora } from 'ora';
 import type Command from './commands/index.js';
-import handleGuildCreate from './events/guild-create.js';
+import handleGuildCreate, { registerGuildInDatabase } from './events/guild-create.js';
 import handleVoiceStateUpdate from './events/voice-state-update.js';
 import container from './inversify.config.js';
 import type PlayerManager from './managers/player.js';
@@ -17,7 +17,9 @@ import { isUserInVoice } from './utils/channels.js';
 import { DISCORD_API_VERSION } from './utils/constants.js';
 import debug from './utils/debug.js';
 import errorMsg from './utils/error-msg.js';
+import { supportsReadrateInitialBurst } from './utils/ffmpeg-capabilities.js';
 import registerCommandsOnGuild from './utils/register-commands-on-guild.js';
+import { serializeGlobalCommand } from './utils/serialize-command.js';
 
 /**
  * Bot permissions constant (required permissions for the bot)
@@ -26,6 +28,11 @@ import registerCommandsOnGuild from './utils/register-commands-on-guild.js';
 const BOT_REQUIRED_PERMISSIONS = 36700160;
 const applicationCommandsRoute = (applicationId: string): `/applications/${string}/commands` => `/applications/${applicationId}/commands`;
 
+/** A command Discord can actually be told about, as opposed to a component-only handler. */
+type RegisteredCommand = Command & {slashCommand: NonNullable<Command['slashCommand']>};
+
+const hasSlashCommand = (command: Command): command is RegisteredCommand => Boolean(command.slashCommand);
+
 @injectable()
 export default class Bot {
   private readonly client: Client;
@@ -33,7 +40,7 @@ export default class Bot {
   private readonly healthServer: HealthServer;
   private readonly playerManager: PlayerManager;
   private readonly shouldRegisterCommandsOnBot: boolean;
-  private readonly commandsByName = new Collection<string, Command>();
+  private readonly commandsByName = new Collection<string, RegisteredCommand>();
   private readonly commandsByButtonId = new Collection<string, Command>();
 
   constructor(
@@ -76,15 +83,19 @@ export default class Bot {
 
   private loadCommands(): void {
     for (const command of container.getAll<Command>(TYPES.Command)) {
-      try {
-        command.slashCommand.toJSON();
-      } catch (error) {
-        debug(error);
-        throw new Error(`Could not serialize /${command.slashCommand.name ?? ''} to JSON`);
-      }
+      // Component-only handlers have no slash command to register or dispatch;
+      // they earn their place in the container through handledButtonIds alone.
+      if (hasSlashCommand(command)) {
+        try {
+          command.slashCommand.toJSON();
+        } catch (error) {
+          debug(error);
+          throw new Error(`Could not serialize /${command.slashCommand.name ?? ''} to JSON`);
+        }
 
-      if (command.slashCommand.name) {
-        this.commandsByName.set(command.slashCommand.name, command);
+        if (command.slashCommand.name) {
+          this.commandsByName.set(command.slashCommand.name, command);
+        }
       }
 
       if (command.handledButtonIds) {
@@ -123,13 +134,17 @@ export default class Bot {
     }
 
     debug(generateDependencyReport());
+    await supportsReadrateInitialBurst();
+
+    spinner.text = '📡 syncing guild database records...';
+    await Promise.all(this.client.guilds.cache.map(guild => registerGuildInDatabase(guild)));
 
     const rest = new REST({version: DISCORD_API_VERSION}).setToken(this.config.DISCORD_TOKEN);
     if (this.shouldRegisterCommandsOnBot) {
       spinner.text = '📡 updating commands on bot...';
       await rest.put(
         applicationCommandsRoute(user.id),
-        {body: this.commandsByName.map(command => command.slashCommand.toJSON())},
+        {body: this.commandsByName.map(command => serializeGlobalCommand(command.slashCommand))},
       );
     } else {
       spinner.text = '📡 updating commands in all guilds...';
@@ -167,6 +182,11 @@ export default class Bot {
    */
   private async handleInteraction(interaction: Interaction): Promise<void> {
     try {
+      if (!interaction.inGuild()) {
+        debug('Ignoring interaction outside a guild to avoid sending direct messages');
+        return;
+      }
+
       if (interaction.isChatInputCommand()) {
         await this.handleCommandInteraction(interaction);
       } else if (interaction.isButton()) {
@@ -195,7 +215,6 @@ export default class Bot {
     }
 
     if (!interaction.guild) {
-      await interaction.reply(errorMsg('you can\'t use this bot in a DM'));
       return;
     }
 
@@ -282,6 +301,10 @@ export default class Bot {
   private async handleInteractionError(interaction: Interaction, error: unknown): Promise<void> {
     const normalizedError = this.normalizeError(error);
     debug(normalizedError);
+
+    if (!interaction.inGuild()) {
+      return;
+    }
 
     // This can fail if the message was deleted, and we don't want to crash the whole bot
     try {

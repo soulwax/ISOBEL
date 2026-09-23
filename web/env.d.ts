@@ -3,6 +3,6 @@
 // File: web/env.d.ts
 
 interface ImportMetaEnv {
-  readonly VITE_BOT_HEALTH_URL?: string;
   readonly VITE_AUTH_API_URL?: string;
+  readonly VITE_DISCORD_CLIENT_ID?: string;
 }
