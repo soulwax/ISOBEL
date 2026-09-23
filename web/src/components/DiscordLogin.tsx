@@ -3,7 +3,12 @@
 import { useAuth } from '../hooks/useAuth';
 import './DiscordLogin.css';
 
-export default function DiscordLogin() {
+interface DiscordLoginProps {
+  /** Makes the Super Admin badge open the admin section. */
+  onOpenAdmin?: () => void;
+}
+
+export default function DiscordLogin({ onOpenAdmin }: DiscordLoginProps) {
   const { session, loading, signIn, signOut, isAuthenticated } = useAuth();
 
   if (loading) {
@@ -26,6 +31,18 @@ export default function DiscordLogin() {
             />
           )}
           <span className="user-name">{session.user.name || 'User'}</span>
+          {session.user.isSuperUser && (onOpenAdmin ? (
+            <button
+              type="button"
+              className="superuser-badge superuser-badge-button"
+              onClick={onOpenAdmin}
+              title="Open playback history"
+            >
+              Super Admin
+            </button>
+          ) : (
+            <span className="superuser-badge">Super Admin</span>
+          ))}
         </div>
         <button onClick={signOut} className="login-button logout-button">
           Logout

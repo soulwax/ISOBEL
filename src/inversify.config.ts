@@ -14,6 +14,7 @@ import PlayerManager from './managers/player.js';
 import AddQueryToQueue from './services/add-query-to-queue.js';
 import GetSongs from './services/get-songs.js';
 import HealthServer from './services/health-server.js';
+import PlaybackHistory from './services/playback-history.js';
 import SongbirdNext from './services/songbird-next.js';
 import StarchildAPI from './services/starchild-api.js';
 
@@ -72,6 +73,7 @@ container.bind<AddQueryToQueue>(TYPES.Services.AddQueryToQueue).to(AddQueryToQue
 container.bind<StarchildAPI>(TYPES.Services.StarchildAPI).to(StarchildAPI).inSingletonScope();
 container.bind<HealthServer>(TYPES.Services.HealthServer).to(HealthServer).inSingletonScope();
 container.bind<SongbirdNext>(TYPES.Services.SongbirdNext).to(SongbirdNext).inSingletonScope();
+container.bind<PlaybackHistory>(TYPES.Services.PlaybackHistory).to(PlaybackHistory).inSingletonScope();
 
 // Commands
 [

@@ -7,11 +7,11 @@
  * Run with: pnpm verify:env
  */
 
-import { config } from 'dotenv';
+import { loadEnvFiles } from '../utils/load-env.js';
 import { validateBotEnvironment } from '../utils/env-validation.js';
 
 // Load environment variables
-config();
+loadEnvFiles();
 
 console.log('🔍 Verifying ISOBEL environment configuration...\n');
 

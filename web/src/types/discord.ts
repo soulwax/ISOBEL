@@ -6,6 +6,7 @@ export interface DiscordUser {
   email?: string;
   image?: string;
   discordId?: string;
+  isSuperUser?: boolean;
 }
 
 export interface DiscordGuild {
@@ -26,6 +27,8 @@ export interface GuildSettingsData {
   defaultQueuePageSize: number;
   turnDownVolumeWhenPeopleSpeak: boolean;
   turnDownVolumeWhenPeopleSpeakTarget: number;
+  maxQueueSize: number;
+  defaultLoopMode: number;
 }
 
 export interface AppSession {

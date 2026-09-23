@@ -10,6 +10,111 @@ import { TYPES } from '../types.js';
 import { prisma } from '../utils/db.js';
 import registerCommandsOnGuild from '../utils/register-commands-on-guild.js';
 
+let ensureDiscordGuildTablePromise: Promise<void> | null = null;
+
+async function ensureDiscordGuildTable(): Promise<void> {
+  ensureDiscordGuildTablePromise ??= (async () => {
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS "discord_guild" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "icon" text,
+        "iconHash" text,
+        "splash" text,
+        "discoverySplash" text,
+        "ownerId" text NOT NULL,
+        "owner" boolean DEFAULT false NOT NULL,
+        "permissions" text,
+        "region" text,
+        "afkChannelId" text,
+        "afkTimeout" integer,
+        "widgetEnabled" boolean,
+        "widgetChannelId" text,
+        "verificationLevel" integer,
+        "defaultMessageNotifications" integer,
+        "explicitContentFilter" integer,
+        "roles" text,
+        "emojis" text,
+        "features" text,
+        "mfaLevel" integer,
+        "applicationId" text,
+        "systemChannelId" text,
+        "systemChannelFlags" integer,
+        "rulesChannelId" text,
+        "maxMembers" integer,
+        "maxPresences" integer,
+        "vanityUrlCode" text,
+        "description" text,
+        "banner" text,
+        "premiumTier" integer,
+        "premiumSubscriptionCount" integer,
+        "preferredLocale" text,
+        "publicUpdatesChannelId" text,
+        "maxVideoChannelUsers" integer,
+        "maxStageVideoChannelUsers" integer,
+        "approximateMemberCount" integer,
+        "approximatePresenceCount" integer,
+        "nsfwLevel" integer,
+        "joinedAt" timestamp,
+        "deletedAt" timestamp,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )
+    `;
+
+    await prisma.$executeRaw`
+      ALTER TABLE "discord_guild" ADD COLUMN IF NOT EXISTS "deletedAt" timestamp
+    `;
+  })();
+
+  await ensureDiscordGuildTablePromise;
+}
+
+async function upsertDiscordGuild(guild: Guild): Promise<void> {
+  await ensureDiscordGuildTable();
+
+  await prisma.$executeRaw`
+    INSERT INTO "discord_guild" (
+      "id",
+      "name",
+      "icon",
+      "ownerId",
+      "owner",
+      "features",
+      "preferredLocale",
+      "joinedAt",
+      "deletedAt",
+      "updatedAt"
+    )
+    VALUES (
+      ${guild.id},
+      ${guild.name},
+      ${guild.icon},
+      ${guild.ownerId},
+      false,
+      ${JSON.stringify([...guild.features])},
+      ${guild.preferredLocale},
+      ${guild.joinedAt},
+      NULL,
+      now()
+    )
+    ON CONFLICT ("id") DO UPDATE SET
+      "name" = EXCLUDED."name",
+      "icon" = EXCLUDED."icon",
+      "ownerId" = EXCLUDED."ownerId",
+      "features" = EXCLUDED."features",
+      "preferredLocale" = EXCLUDED."preferredLocale",
+      "joinedAt" = COALESCE("discord_guild"."joinedAt", EXCLUDED."joinedAt"),
+      "deletedAt" = NULL,
+      "updatedAt" = now()
+  `;
+}
+
+export async function registerGuildInDatabase(guild: Guild): Promise<void> {
+  await upsertDiscordGuild(guild);
+  await createGuildSettings(guild.id);
+}
+
 export async function createGuildSettings(guildId: string): Promise<Setting> {
   return prisma.setting.upsert({
     where: {
@@ -23,7 +128,7 @@ export async function createGuildSettings(guildId: string): Promise<Setting> {
 }
 
 export default async (guild: Guild): Promise<void> => {
-  await createGuildSettings(guild.id);
+  await registerGuildInDatabase(guild);
 
   const config = container.get<Config>(TYPES.Config);
 
@@ -37,33 +142,11 @@ export default async (guild: Guild): Promise<void> => {
       rest,
       applicationId: client.user!.id,
       guildId: guild.id,
-      commands: container.getAll<Command>(TYPES.Command).map(command => command.slashCommand),
+      // Component-only handlers (the playback embed's buttons) have no slash
+      // command and must not be registered as one.
+      commands: container.getAll<Command>(TYPES.Command)
+        .map(command => command.slashCommand)
+        .filter((slashCommand): slashCommand is NonNullable<typeof slashCommand> => Boolean(slashCommand)),
     });
   }
-
-  const owner = await guild.fetchOwner();
-  await owner.send(`👋 Hi! Someone (probably you) just invited me to a server you own.
-
-I'm ISOBEL, a Discord music bot that streams high-quality audio from the Starchild Music API. Here's what I can do:
-
-🎵 **Music Playback**
-• Play songs with \`/play\` - search for tracks or use HLS stream URLs
-• Play uploads with \`/file\` - attach an mp3 directly from Discord
-• Queue management - view, shuffle, remove, and move songs in the queue
-• Favorites system - save and quickly access your favorite tracks
-• Looping - loop the current song or entire queue
-• Seeking - jump to any position in a track
-
-🎛️ **Controls**
-• Play, pause, resume, skip, and stop playback
-• Volume control with automatic ducking when people speak
-• Smart queue management with pagination
-
-⚙️ **Configuration**
-• Customize playlist limits, auto-announcements, and more with \`/config\`
-• Set default volume, queue page size, and voice activity settings
-
-By default, I'm usable by all guild members in all guild channels. To change this, check out the wiki page on permissions: https://github.com/soulwax/ISOBEL/wiki/Configuring-Bot-Permissions
-
-For more information, visit my homepage: https://echo.soulwax.dev`);
 };

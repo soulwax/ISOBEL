@@ -11,9 +11,10 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"pnpm run dev:client\" \"pnpm run dev:server\" --names \"vite,api\" --prefix-colors \"cyan,yellow\"",
+    "dev:client": "vite",
     "dev:server": "tsx watch src/server/index.ts",
-    "dev:all": "concurrently \"pnpm run dev\" \"pnpm run dev:server\" --names \"vite,api\" --prefix-colors \"cyan,yellow\"",
+    "dev:all": "pnpm run dev",
     "build": "tsc -b && vite build",
     "build:prod": "pnpm run build",
     "vercel-build": "pnpm run build",
@@ -28,17 +29,17 @@
     "pm2:restart:web": "pm2 restart ecosystem.config.cjs --only isobel-web --update-env",
     "pm2:stop:web": "pm2 stop isobel-web",
     "pm2:delete:web": "pm2 delete isobel-web",
-    "pm2:start": "pm2 start ecosystem.config.cjs",
-    "pm2:start:dev": "pm2 start ecosystem.config.cjs --env development",
-    "pm2:start:prod": "pm2 start ecosystem.config.cjs --env production",
+    "pm2:start": "pnpm run pm2:start:prod",
+    "pm2:start:dev": "pm2 start ecosystem.config.cjs --only isobel-web --env development",
+    "pm2:start:prod": "pm2 start ecosystem.config.cjs --only isobel-web --env production",
     "pm2:stop": "pm2 stop isobel-web",
     "pm2:restart": "pm2 restart isobel-web --update-env",
     "pm2:reload": "pm2 reload isobel-web --update-env",
     "pm2:delete": "pm2 delete isobel-web",
-    "pm2:logs": "pm2 logs",
+    "pm2:logs": "pm2 logs isobel-web",
     "pm2:logs:web": "pm2 logs isobel-web",
     "pm2:monit": "pm2 monit",
-    "pm2:status": "pm2 status",
+    "pm2:status": "pm2 describe isobel-web",
     "pm2:flush": "pm2 flush",
     "pm2:save": "pm2 save",
     "pm2:resurrect": "pm2 resurrect",
@@ -54,6 +55,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.1",
     "helmet": "^7.2.0",
+    "lucide-react": "^1.14.0",
     "postgres": "^3.4.8",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -80,5 +82,5 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
   },
-  "packageManager": "pnpm@10.30.2"
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
 }

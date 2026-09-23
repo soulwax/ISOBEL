@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Audio: ffmpeg compatibility** – `-readrate_initial_burst` needs ffmpeg 6.1+, but Debian bookworm ships 5.1 and Ubuntu 22.04 ships 4.4, and those builds refuse to start rather than ignoring the flag — every non-cached track failed. The version is now detected once at startup (`src/utils/ffmpeg-capabilities.ts`) and falls back to plain `-readrate`.
+- **Audio: cold start** – Every uncached play was downloading the whole source to disk before any audio could start. `getStream()` treated the always-present `to` (each track carries an offset) as a seek; it now uses `isFullTrackRequest`, so ordinary plays take the direct-stream path the code already had.
+- **Audio: voice encryption** – Added `sodium-native`, so `@discordjs/voice` uses its first-choice native backend instead of falling through to WASM `libsodium-wrappers` on every packet.
+- **Web: settings could not be saved until a restart** – No server-side fetch to Discord or the bot health endpoint had a timeout, and `getBotGuilds()` single-flights callers through one shared promise, so one hung upstream wedged every later settings save. New `web/src/lib/fetch-with-timeout.ts` (8s) applied to all of them.
+
+### Changed
+- **Playback embed:** 13 buttons reduced to 9 in a 5–4 layout. Removed rewind, fast-forward, search and seek — `/play`, `/seek` and `/fseek` cover the same actions. Handlers for the old IDs are kept so already-sent messages keep working.
+- **Playback embed:** A finished queue now shows a single **Replay** button that reconnects to whoever presses it and replays the last track, instead of a full row of disabled controls. `Player.stop()` keeps played history rather than wiping the queue, so there is something to replay.
+- **Audio:** Background prefetch encodes are capped across all guilds (`BACKGROUND_ENCODE_CONCURRENCY`); previously every guild changing track at once started its own ffmpeg encode and starved live playback of CPU.
+- **Docker:** Base image moved from `node:25-bookworm-slim` to `node:25-trixie-slim` (ffmpeg 5.1 → 7.1).
+- **Debug logging:** Redaction now runs behind the enabled check, and `DebugLogger` exposes `.enabled` so hot paths skip building messages for a disabled namespace.
+- **Web:** Landing page redesign — new typography, more compact sections, and new "Audio Pipeline" and per-server settings sections.
+
+### Removed
+- **Commands:** `/playback-controls` is no longer registered as a slash command. It never did anything when invoked — it exists purely to route the playback embed's button, modal and select interactions.
+- **Dead code:** The `playback:actions` select-menu handler, which nothing had rendered since an earlier control redesign.
+
+### Known issues
+- **Bad pauses and lags** – Users may experience unexpected pauses and lag during playback. Several contributing causes are fixed above; the remaining suspect is event-loop contention from one Node process serving every guild. Use `GET /health` (`cushionSeconds`, `lostPlaybackMs`) to tell network from CPU.
+
 ## [3.1.0] - 2026-02-28
 
 ### Added

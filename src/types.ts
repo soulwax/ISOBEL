@@ -17,5 +17,6 @@ export const TYPES = {
     StarchildAPI: Symbol('StarchildAPI'),
     HealthServer: Symbol('HealthServer'),
     SongbirdNext: Symbol('SongbirdNext'),
+    PlaybackHistory: Symbol('PlaybackHistory'),
   },
 };

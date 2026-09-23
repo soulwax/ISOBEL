@@ -37,6 +37,34 @@
   font-size: 0.9rem;
 }
 
+.superuser-badge {
+  border: 1px solid rgba(88, 101, 242, 0.55);
+  border-radius: 4px;
+  color: var(--text-primary);
+  background: rgba(88, 101, 242, 0.18);
+  padding: 0.1875rem 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.superuser-badge-button {
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.superuser-badge-button:hover {
+  background: rgba(88, 101, 242, 0.35);
+  border-color: rgba(88, 101, 242, 0.85);
+}
+
+.superuser-badge-button:focus-visible {
+  outline: 2px solid var(--discord-blurple);
+  outline-offset: 2px;
+}
+
 .login-button {
   padding: 0.5rem 1rem;
   border: none;
@@ -86,6 +114,12 @@
 
 @media (max-width: 768px) {
   .user-name {
+    display: none;
+  }
+
+  /* The plain badge is decoration; the button is the only way into the admin
+     section on phones, where the guild rail is hidden. */
+  .superuser-badge:not(.superuser-badge-button) {
     display: none;
   }
   

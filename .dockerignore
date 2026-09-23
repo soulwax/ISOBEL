@@ -2,6 +2,7 @@
 # Dependencies (will be reinstalled)
 
 node_modules
+web
 web/node_modules
 
 # Build artifacts (will be regenerated)

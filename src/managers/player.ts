@@ -2,7 +2,8 @@
 
 import { inject, injectable } from 'inversify';
 import type FileCacheProvider from '../services/file-cache.js';
-import Player from '../services/player.js';
+import type PlaybackHistory from '../services/playback-history.js';
+import Player, { type NowPlayingSnapshot } from '../services/player.js';
 import type SongbirdNext from '../services/songbird-next.js';
 import type StarchildAPI from '../services/starchild-api.js';
 import { TYPES } from '../types.js';
@@ -13,28 +14,37 @@ export default class PlayerManager {
   private readonly fileCache: FileCacheProvider;
   private readonly starchildAPI: StarchildAPI;
   private readonly songbirdNext: SongbirdNext;
+  private readonly history: PlaybackHistory;
 
   constructor(
     @inject(TYPES.FileCache) fileCache: FileCacheProvider,
     @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI,
-    @inject(TYPES.Services.SongbirdNext) songbirdNext: SongbirdNext
+    @inject(TYPES.Services.SongbirdNext) songbirdNext: SongbirdNext,
+    @inject(TYPES.Services.PlaybackHistory) history: PlaybackHistory
   ) {
     this.guildPlayers = new Map();
     this.fileCache = fileCache;
     this.starchildAPI = starchildAPI;
     this.songbirdNext = songbirdNext;
+    this.history = history;
   }
 
   get(guildId: string): Player {
     let player = this.guildPlayers.get(guildId);
 
     if (!player) {
-      player = new Player(this.fileCache, guildId, this.starchildAPI, this.songbirdNext);
+      player = new Player(this.fileCache, guildId, this.starchildAPI, this.songbirdNext, this.history);
 
       this.guildPlayers.set(guildId, player);
     }
 
     return player;
+  }
+
+  getNowPlayingSnapshots(): NowPlayingSnapshot[] {
+    return [...this.guildPlayers.values()]
+      .map(player => player.getNowPlayingSnapshot())
+      .filter((snapshot): snapshot is NowPlayingSnapshot => snapshot !== null);
   }
 
   /**
