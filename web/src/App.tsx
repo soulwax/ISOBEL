@@ -23,6 +23,7 @@ import {
 import { Scale } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./App.css";
+import AdminHistory from "./components/AdminHistory";
 import HealthIndicator from "./components/HealthIndicator";
 import DiscordLogin from "./components/DiscordLogin";
 import DiscordGuildsSidebar from "./components/DiscordGuildsSidebar";
@@ -75,8 +76,10 @@ function formatPlaybackTime(seconds: number) {
 function App() {
   const [selectedGuild, setSelectedGuild] = useState<DiscordGuild | null>(null);
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack[]>([]);
-  const { isAuthenticated } = useAuth();
+  const [showAdmin, setShowAdmin] = useState(false);
+  const { session, isAuthenticated } = useAuth();
   const activeSelectedGuild = isAuthenticated ? selectedGuild : null;
+  const adminOpen = showAdmin && Boolean(session?.user?.isSuperUser);
 
   const helpSections = [
     {
@@ -269,6 +272,12 @@ function App() {
   ];
 
   useEffect(() => {
+    if (adminOpen) {
+      document.title = "Playback History | ISOBEL Admin";
+      setMetaContent("robots", "noindex, nofollow, noarchive");
+      return;
+    }
+
     if (isAuthenticated && activeSelectedGuild) {
       document.title = `${activeSelectedGuild.name} Settings | ISOBEL Dashboard`;
       setMetaContent("robots", "noindex, nofollow, noarchive");
@@ -292,7 +301,7 @@ function App() {
     document.title = DEFAULT_META_TITLE;
     setMetaContent("robots", DEFAULT_ROBOTS_CONTENT);
     setMetaContent("description", DEFAULT_META_DESCRIPTION);
-  }, [activeSelectedGuild, isAuthenticated]);
+  }, [activeSelectedGuild, adminOpen, isAuthenticated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -326,7 +335,14 @@ function App() {
   }, []);
 
   const handleGuildSelect = (guild: DiscordGuild) => {
+    setShowAdmin(false);
     setSelectedGuild(guild);
+  };
+
+  const handleOpenAdmin = () => {
+    setSelectedGuild(null);
+    setShowAdmin(true);
+    window.scrollTo({ top: 0 });
   };
 
   const handleGuildLeave = (guildId: string) => {
@@ -335,6 +351,7 @@ function App() {
 
   const handleBack = () => {
     setSelectedGuild(null);
+    setShowAdmin(false);
   };
 
   return (
@@ -352,10 +369,14 @@ function App() {
         <DiscordGuildsSidebar 
           onGuildSelect={handleGuildSelect}
           onGuildLeave={handleGuildLeave}
+          onOpenAdmin={handleOpenAdmin}
+          adminActive={adminOpen}
           selectedGuildId={activeSelectedGuild?.id}
         />
       )}
-      {activeSelectedGuild ? (
+      {adminOpen ? (
+        <AdminHistory onBack={handleBack} />
+      ) : activeSelectedGuild ? (
         <GuildSettings
           guild={activeSelectedGuild}
           onBack={handleBack}
@@ -399,7 +420,7 @@ function App() {
             >
               GitHub
             </a>
-            <DiscordLogin />
+            <DiscordLogin onOpenAdmin={handleOpenAdmin} />
           </div>
         </div>
       </nav>

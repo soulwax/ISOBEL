@@ -1,6 +1,7 @@
 // File: web/src/components/DiscordGuildsSidebar.tsx
 
 import { type DragEvent, useEffect, useRef, useState } from 'react';
+import { HiOutlineChartBar } from 'react-icons/hi';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL } from '../lib/api-paths';
 import type { DiscordGuild } from '../types/discord';
@@ -9,10 +10,12 @@ import './DiscordGuildsSidebar.css';
 interface DiscordGuildsSidebarProps {
   onGuildSelect?: (guild: DiscordGuild) => void;
   onGuildLeave?: (guildId: string) => void;
+  onOpenAdmin?: () => void;
+  adminActive?: boolean;
   selectedGuildId?: string | null;
 }
 
-export default function DiscordGuildsSidebar({ onGuildSelect, onGuildLeave, selectedGuildId }: DiscordGuildsSidebarProps) {
+export default function DiscordGuildsSidebar({ onGuildSelect, onGuildLeave, onOpenAdmin, adminActive, selectedGuildId }: DiscordGuildsSidebarProps) {
   const { session, isAuthenticated } = useAuth();
   const [guilds, setGuilds] = useState<DiscordGuild[]>([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +269,10 @@ export default function DiscordGuildsSidebar({ onGuildSelect, onGuildLeave, sele
   };
 
   return (
-    <nav className="discord-guilds-sidebar" aria-label="Discord servers">
+    <nav
+      className={`discord-guilds-sidebar${session?.user?.isSuperUser ? ' has-admin-actions' : ''}`}
+      aria-label="Discord servers"
+    >
       <div className="sidebar-content">
         {loading ? (
           <div className="sidebar-loading" aria-live="polite">
@@ -335,6 +341,21 @@ export default function DiscordGuildsSidebar({ onGuildSelect, onGuildLeave, sele
       </div>
       {session?.user?.isSuperUser && (
         <div className="rail-actions">
+          {onOpenAdmin && (
+            <button
+              className={`rail-action-button rail-action-admin${adminActive ? ' active' : ''}`}
+              type="button"
+              aria-label="Playback history"
+              aria-current={adminActive ? 'page' : undefined}
+              onClick={onOpenAdmin}
+              onMouseEnter={(event) => scheduleTooltip({ id: 'admin', name: 'Playback history', icon: null }, event.currentTarget)}
+              onMouseLeave={clearTooltip}
+              onFocus={(event) => scheduleTooltip({ id: 'admin', name: 'Playback history', icon: null }, event.currentTarget)}
+              onBlur={clearTooltip}
+            >
+              <HiOutlineChartBar aria-hidden="true" />
+            </button>
+          )}
           <button
             className="rail-action-button rail-action-danger"
             type="button"

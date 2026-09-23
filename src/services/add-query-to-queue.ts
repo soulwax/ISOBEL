@@ -9,12 +9,15 @@ import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
+import type PlaybackHistory from './playback-history.js';
+import { actorFromInteraction } from './playback-history.js';
 import { MediaSource, STATUS, type SongMetadata } from './player.js';
 
 @injectable()
 export default class AddQueryToQueue {
   constructor(@inject(TYPES.Services.GetSongs) private readonly getSongs: GetSongs,
-    @inject(TYPES.Managers.Player) private readonly playerManager: PlayerManager) {}
+    @inject(TYPES.Managers.Player) private readonly playerManager: PlayerManager,
+    @inject(TYPES.Services.PlaybackHistory) private readonly history: PlaybackHistory) {}
 
   public async addToQueue({
     query,
@@ -127,15 +130,28 @@ export default class AddQueryToQueue {
       throw new Error('Channel information not available');
     }
 
+    const actor = actorFromInteraction(interaction);
     newSongs.forEach(song => {
       player.add({
         ...song,
         addedInChannelId: interaction.channel!.id,
         requestedBy: (interaction.member as GuildMember).user.id,
+        requestedByName: actor.name,
       }, { immediate: addToFrontOfQueue ?? false });
     });
 
     const firstSong = newSongs[0];
+    const queuedDetail = [
+      query ? `query: ${query}` : attachment ? 'from attachment' : null,
+      newSongs.length > 1 ? `${newSongs.length} songs` : null,
+    ].filter(Boolean).join(', ');
+    this.history.recordAction({guildId, guildName: interaction.guild.name}, {
+      // Playlists always go to the back of the queue, whatever was asked for.
+      kind: addToFrontOfQueue && !firstSong.playlist ? 'queue-next' : 'queue',
+      actor,
+      song: firstSong,
+      detail: queuedDetail || null,
+    });
     const firstSongDisplay = `${firstSong.title} - ${firstSong.artist}`;
 
     let statusMsg = '';
@@ -169,7 +185,7 @@ export default class AddQueryToQueue {
     if (skipCurrentTrack) {
       // Only skip if there are more songs in the queue
       if (player.canGoForward(1)) {
-        await player.forward(1);
+        await player.forward(1, actor);
       } else {
         throw new Error('no song to skip to');
       }

@@ -228,6 +228,29 @@
   opacity: 0.55;
 }
 
+.discord-guilds-sidebar.has-admin-actions .sidebar-content {
+  /* Room for the second rail button. */
+  padding-bottom: 8rem;
+}
+
+.rail-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rail-action-admin:hover,
+.rail-action-admin:focus-visible,
+.rail-action-admin.active {
+  background: var(--discord-blurple);
+  color: var(--text-primary);
+}
+
+.rail-action-admin.active {
+  border-radius: 14px;
+}
+
 .rail-action-danger:hover:not(:disabled),
 .rail-action-danger:focus-visible:not(:disabled) {
   background: #da373c;

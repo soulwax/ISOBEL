@@ -32,6 +32,8 @@ import { formatError } from '../utils/error-msg.js';
 import { supportsReadrateInitialBurst } from '../utils/ffmpeg-capabilities.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import type FileCacheProvider from './file-cache.js';
+import type PlaybackHistory from './playback-history.js';
+import { type PlaybackActor, type PlayEndReason } from './playback-history.js';
 import type SongbirdNext from './songbird-next.js';
 import type StarchildAPI from './starchild-api.js';
 
@@ -97,6 +99,8 @@ export interface SongMetadata {
 export interface QueuedSong extends SongMetadata {
   addedInChannelId: Snowflake;
   requestedBy: string;
+  /** Display name at request time, kept for the playback history. */
+  requestedByName?: string;
 }
 
 export enum STATUS {
@@ -187,17 +191,23 @@ export default class Player {
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private allowReconnect = false;
+  // The SongPlay history row for what is playing right now, if any. The id is
+  // a promise because the insert runs in the background.
+  private activePlay: {song: QueuedSong; id: Promise<number | null>} | null = null;
+  private readonly history: PlaybackHistory;
 
   constructor(
     fileCache: FileCacheProvider,
     guildId: string,
     @inject(TYPES.Services.StarchildAPI) starchildAPI: StarchildAPI,
-    @inject(TYPES.Services.SongbirdNext) songbirdNext: SongbirdNext
+    @inject(TYPES.Services.SongbirdNext) songbirdNext: SongbirdNext,
+    @inject(TYPES.Services.PlaybackHistory) history: PlaybackHistory
   ) {
     this.fileCache = fileCache;
     this.guildId = guildId;
     this.starchildAPI = starchildAPI;
     this.songbirdNext = songbirdNext;
+    this.history = history;
   }
 
   async connect(channel: VoiceChannel): Promise<void> {
@@ -257,6 +267,7 @@ export default class Player {
   }
 
   disconnect(): void {
+    this.endPlayRecord('disconnected');
     this.allowReconnect = false;
     this.clearReconnectTimer();
     this.reconnectAttempts = 0;
@@ -391,6 +402,13 @@ export default class Player {
       this.nowPlaying = currentSong;
       this.playbackErrorAttempts = 0;
 
+      // Compared by queue entry, not isNewSong: loop-queue re-adds the same
+      // object, and each pass through it is a separate play.
+      if (this.activePlay?.song !== currentSong) {
+        this.endPlayRecord('finished');
+        this.beginPlayRecord(currentSong);
+      }
+
       const isNewSong = previousSong !== currentSong;
 
       // Always reset position when starting a different queued song.
@@ -441,7 +459,18 @@ export default class Player {
     this.stopEmbedUpdates();
   }
 
-  async forward(skip: number): Promise<void> {
+  /**
+   * @param actor who asked for the skip; omitted when the player advances on
+   * its own (track ended, playback error).
+   */
+  async forward(skip: number, actor?: PlaybackActor): Promise<void> {
+    if (this.canGoForward(skip)) {
+      const ended = this.endPlayRecord(actor ? 'skipped' : 'finished', actor);
+      if (actor) {
+        this.recordAction('skip', actor, ended, skip > 1 ? `skipped ${skip} songs` : null);
+      }
+    }
+
     this.manualForward(skip);
 
     try {
@@ -554,8 +583,13 @@ export default class Player {
     return this.queuePosition - 1 >= 0;
   }
 
-  async back(): Promise<void> {
+  async back(actor?: PlaybackActor): Promise<void> {
     if (this.canGoBack()) {
+      const ended = this.endPlayRecord('back', actor);
+      if (actor) {
+        this.recordAction('back', actor, ended);
+      }
+
       this.queuePosition--;
       this.positionInSeconds = 0;
       this.stopTrackingPosition();
@@ -635,7 +669,13 @@ export default class Player {
     return this.queueSize() === 0;
   }
 
-  async stop(): Promise<void> {
+  async stop(actor?: PlaybackActor): Promise<void> {
+    // Before disconnect(), which would otherwise close the play as 'disconnected'.
+    const ended = this.endPlayRecord('stopped', actor);
+    if (actor) {
+      this.recordAction('stop', actor, ended);
+    }
+
     this.stopEmbedUpdates();
     this.disconnect();
 
@@ -1330,6 +1370,55 @@ export default class Player {
    * boosts. Encoding above the channel's rate does not raise the ceiling, it
    * just makes packets the link may not be provisioned for.
    */
+  private getHistoryContext() {
+    return {
+      guildId: this.guildId,
+      guildName: this.currentChannel?.guild.name ?? null,
+      voiceChannelId: this.currentChannel?.id ?? null,
+    };
+  }
+
+  private beginPlayRecord(song: QueuedSong): void {
+    const sourceName = MediaSource[song.source] ?? String(song.source);
+    this.activePlay = {song, id: this.history.startPlay(this.getHistoryContext(), {song, sourceName})};
+  }
+
+  /**
+   * Closes the current SongPlay row, if there is one. Must run before
+   * anything resets positionInSeconds. Returns the closed play so the caller
+   * can link an action (skip, back, stop) to it.
+   */
+  private endPlayRecord(reason: PlayEndReason, actor?: PlaybackActor): {song: QueuedSong; id: Promise<number | null>} | null {
+    const play = this.activePlay;
+    if (!play) {
+      return null;
+    }
+
+    this.activePlay = null;
+    const {song} = play;
+    const playedSeconds = reason === 'finished' && !song.isLive && song.length > 0
+      ? song.length
+      : song.length > 0 ? Math.min(this.positionInSeconds, song.length) : this.positionInSeconds;
+
+    this.history.finishPlay(play.id, {endedAt: new Date(), playedSeconds, reason, actor});
+    return play;
+  }
+
+  private recordAction(
+    kind: 'skip' | 'back' | 'stop',
+    actor: PlaybackActor,
+    ended: {song: QueuedSong; id: Promise<number | null>} | null,
+    detail: string | null = null,
+  ): void {
+    this.history.recordAction(this.getHistoryContext(), {
+      kind,
+      actor,
+      song: ended?.song ?? null,
+      playId: ended?.id ?? null,
+      detail,
+    });
+  }
+
   private getOpusBitrateKbps(): number {
     const channelBitrateKbps = this.currentChannel?.bitrate
       ? Math.round(this.currentChannel.bitrate / 1000)
@@ -1374,7 +1463,13 @@ export default class Player {
   private async onAudioPlayerIdle(_oldState: AudioPlayerState, newState: AudioPlayerState): Promise<void> {
     // Automatically advance queued song at end
     if (this.loopCurrentSong && newState.status === AudioPlayerStatus.Idle && this.status === STATUS.PLAYING) {
+      const current = this.getCurrent();
+      this.endPlayRecord('finished');
       await this.seek(0);
+      if (current) {
+        this.beginPlayRecord(current);
+      }
+
       return;
     }
 
@@ -1616,6 +1711,7 @@ export default class Player {
 
     if (this.playbackErrorAttempts >= PLAYBACK_ERROR_MAX_RETRIES) {
       debug('Audio player error retries exhausted, skipping track.');
+      this.endPlayRecord('error');
       await this.forward(1);
       return;
     }

@@ -51,3 +51,62 @@ model FavoriteQuery {
 
   @@unique([guildId, name])
 }
+
+// Playback history. Written by the bot (services/playback-history.ts), read
+// by the web dashboard's superuser admin view with raw SQL.
+
+/// One row per time a song actually started playing in a guild.
+model SongPlay {
+  id              Int       @id @default(autoincrement())
+  guildId         String
+  /// Snapshot at play time, so history survives the bot leaving a guild.
+  guildName       String?
+  voiceChannelId  String?
+  textChannelId   String?
+  title           String
+  artist          String
+  album           String?
+  url             String
+  source          String
+  lengthSeconds   Int
+  isLive          Boolean   @default(false)
+  playlistTitle   String?
+  requestedBy     String
+  requestedByName String?
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  playedSeconds   Int?
+  /// finished | skipped | back | stopped | error | disconnected
+  endReason       String?
+  endedBy         String?
+  endedByName     String?
+
+  actions PlaybackAction[]
+
+  @@index([guildId, startedAt])
+  @@index([startedAt])
+  @@index([requestedBy])
+}
+
+/// Who did what to playback: queued, queued next, skipped, went back, stopped.
+model PlaybackAction {
+  id         Int       @id @default(autoincrement())
+  guildId    String
+  guildName  String?
+  userId     String
+  userName   String?
+  /// queue | queue-next | skip | back | stop
+  action     String
+  songTitle  String?
+  songArtist String?
+  /// The play this action ended (skip / back / stop), when there was one.
+  songPlayId Int?
+  detail     String?
+  createdAt  DateTime  @default(now())
+
+  songPlay SongPlay? @relation(fields: [songPlayId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, createdAt])
+  @@index([createdAt])
+  @@index([userId])
+}

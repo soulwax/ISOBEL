@@ -4,6 +4,7 @@ import { SlashCommandBuilder } from '@discordjs/builders';
 import { type ChatInputCommandInteraction } from 'discord.js';
 import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
+import { actorFromInteraction } from '../services/playback-history.js';
 import { TYPES } from '../types.js';
 import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import type Command from './index.js';
@@ -36,7 +37,7 @@ export default class implements Command {
     const player = this.playerManager.get(interaction.guild!.id);
 
     try {
-      await player.forward(numToSkip);
+      await player.forward(numToSkip, actorFromInteraction(interaction));
       await interaction.reply({
         content: 'keep \'er movin\'',
         embeds: player.getCurrent() ? [buildPlayingMessageEmbed(player)] : [],

@@ -24,8 +24,17 @@ import { getEnv, validateEnv } from "../lib/env.js";
 import { AuthorizationError, NotFoundError } from "../lib/errors.js";
 import { fetchWithTimeout } from "../lib/fetch-with-timeout.js";
 import { logger } from "../lib/logger.js";
-import { hasAdministratorPermission, validateGuildId } from "../lib/utils.js";
+import { hasAdministratorPermission, validateDiscordId, validateGuildId } from "../lib/utils.js";
 import { guildSettingsSchema } from "../lib/validation.js";
+import {
+  getActionHistory,
+  getHistorySummary,
+  getPlayHistory,
+  HISTORY_ACTIONS,
+  type HistoryAction,
+  type HistoryFilters,
+  isHistoryAvailable,
+} from "./admin-history.js";
 import { getBotHealthUrl } from "./bot-health-url.js";
 import { getBotGuilds, leaveBotGuild, type BotGuild } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
@@ -356,6 +365,42 @@ async function reconcileDeletedBotGuilds(botGuilds: BotGuild[] | null): Promise<
   `);
 }
 
+const HISTORY_DAY_RANGES = new Set([1, 7, 30, 90, 365, 0]);
+
+function readQueryString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
+/** Parses the shared admin history filters, or returns an error message. */
+function parseHistoryFilters(query: express.Request["query"]): HistoryFilters | string {
+  const days = Number.parseInt(readQueryString(query.days) ?? "30", 10);
+  if (!HISTORY_DAY_RANGES.has(days)) {
+    return "Invalid days range";
+  }
+
+  const guildId = readQueryString(query.guildId);
+  if (guildId && !validateGuildId(guildId)) {
+    return "Invalid guild ID format";
+  }
+
+  const userId = readQueryString(query.userId);
+  if (userId && !validateDiscordId(userId)) {
+    return "Invalid user ID format";
+  }
+
+  return { days, guildId, userId };
+}
+
+function parsePage(query: express.Request["query"]): { before?: number; limit: number } {
+  const before = Number.parseInt(readQueryString(query.before) ?? "", 10);
+  const limit = Number.parseInt(readQueryString(query.limit) ?? "50", 10);
+
+  return {
+    before: Number.isSafeInteger(before) && before > 0 ? before : undefined,
+    limit: Number.isFinite(limit) ? Math.min(100, Math.max(1, limit)) : 50,
+  };
+}
+
 function isLocalHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
@@ -416,6 +461,29 @@ export function createApp(options: CreateAppOptions = {}) {
     legacyHeaders: false,
     store: process.env.VERCEL ? undefined : undefined, // Use default memory store
   });
+
+  // Admin history gets its own bucket: filtering and paging through it would
+  // otherwise eat the shared API allowance and lock the dashboard itself out.
+  const adminLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const requireSuperUser: express.RequestHandler = async (req, res, next): Promise<void> => {
+    try {
+      if (!(await isSessionSuperUser((req as AuthenticatedRequest).session))) {
+        res.status(403).json({ error: "Superuser access required" });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -1082,6 +1150,81 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
       logger.error("Error updating guild settings", { error, guildId: req.params.guildId });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Superuser admin: playback history recorded by the bot.
+  app.get("/api/admin/history/summary", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const filters = parseHistoryFilters(req.query);
+      if (typeof filters === "string") {
+        res.status(400).json({ error: filters });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ available: false });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ available: true, ...(await getHistorySummary(filters)) });
+    } catch (error) {
+      logger.error("Error fetching history summary", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/history/plays", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const filters = parseHistoryFilters(req.query);
+      if (typeof filters === "string") {
+        res.status(400).json({ error: filters });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ plays: [], nextCursor: null });
+        return;
+      }
+
+      const search = readQueryString(req.query.search)?.slice(0, 100);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await getPlayHistory({ ...filters, ...parsePage(req.query), search }));
+    } catch (error) {
+      logger.error("Error fetching play history", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/history/actions", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const filters = parseHistoryFilters(req.query);
+      if (typeof filters === "string") {
+        res.status(400).json({ error: filters });
+        return;
+      }
+
+      const action = readQueryString(req.query.action);
+      if (action && !(HISTORY_ACTIONS as readonly string[]).includes(action)) {
+        res.status(400).json({ error: "Invalid action" });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ actions: [], nextCursor: null });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await getActionHistory({
+        ...filters,
+        ...parsePage(req.query),
+        action: action as HistoryAction | undefined,
+      }));
+    } catch (error) {
+      logger.error("Error fetching action history", { error });
       res.status(500).json({ error: "Internal server error" });
     }
   });

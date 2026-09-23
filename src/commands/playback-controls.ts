@@ -5,6 +5,8 @@ import { inject, injectable } from 'inversify';
 import { URL } from 'node:url';
 import type PlayerManager from '../managers/player.js';
 import type AddQueryToQueue from '../services/add-query-to-queue.js';
+import type PlaybackHistory from '../services/playback-history.js';
+import { actorFromInteraction } from '../services/playback-history.js';
 import type Player from '../services/player.js';
 import { MediaSource, STATUS, type SongMetadata } from '../services/player.js';
 import { TYPES } from '../types.js';
@@ -52,13 +54,16 @@ export default class PlaybackControls implements Command {
 
   private readonly playerManager: PlayerManager;
   private readonly addQueryToQueue: AddQueryToQueue;
+  private readonly history: PlaybackHistory;
 
   constructor(
     @inject(TYPES.Managers.Player) playerManager: PlayerManager,
-    @inject(TYPES.Services.AddQueryToQueue) addQueryToQueue: AddQueryToQueue
+    @inject(TYPES.Services.AddQueryToQueue) addQueryToQueue: AddQueryToQueue,
+    @inject(TYPES.Services.PlaybackHistory) history: PlaybackHistory
   ) {
     this.playerManager = playerManager;
     this.addQueryToQueue = addQueryToQueue;
+    this.history = history;
   }
 
   public async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
@@ -103,7 +108,7 @@ export default class PlaybackControls implements Command {
         await interaction.deferUpdate();
         await this.runPlayerAction(interaction, async () => {
           const reconnected = await this.connectToMemberIfNeeded(player, memberVoiceChannel);
-          await player.back();
+          await player.back(actorFromInteraction(interaction));
           if (reconnected && player.status !== STATUS.PLAYING) {
             await player.play();
           }
@@ -118,7 +123,7 @@ export default class PlaybackControls implements Command {
         await interaction.deferUpdate();
         await this.runPlayerAction(interaction, async () => {
           const reconnected = await this.connectToMemberIfNeeded(player, memberVoiceChannel);
-          await player.forward(1);
+          await player.forward(1, actorFromInteraction(interaction));
           if (reconnected && player.status !== STATUS.PLAYING) {
             await player.play();
           }
@@ -179,7 +184,7 @@ export default class PlaybackControls implements Command {
 
       case 'playback:stop':
         await interaction.deferUpdate();
-        await this.runPlayerAction(interaction, () => player.stop());
+        await this.runPlayerAction(interaction, () => player.stop(actorFromInteraction(interaction)));
         break;
       case 'playback:seek': {
         await this.showSeekModal(interaction);
@@ -249,11 +254,17 @@ export default class PlaybackControls implements Command {
         return;
       }
       const player = this.playerManager.get(interaction.guild.id);
+      const actor = actorFromInteraction(interaction);
       player.add({
         ...mp3Song,
         addedInChannelId: interaction.channelId,
-        requestedBy: interaction.user.id,
+        requestedBy: actor.id,
+        requestedByName: actor.name,
       }, {immediate: false});
+      this.history.recordAction(
+        {guildId: interaction.guild.id, guildName: interaction.guild.name},
+        {kind: 'queue', actor, song: mp3Song, detail: 'from MP3 URL'},
+      );
       await this.connectToMemberIfNeeded(player, memberVoiceChannel);
       if (player.status !== STATUS.PLAYING) {
         await player.play();
