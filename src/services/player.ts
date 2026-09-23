@@ -20,15 +20,17 @@ import { createReadStream as createFileReadStream } from 'fs';
 import { WriteStream } from 'fs-capacitor';
 import { hashSync } from 'hasha';
 import { inject } from 'inversify';
+import { setPriority } from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import pLimit from 'p-limit';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
 import { buildPlaybackControls, buildPlaybackFinishedControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed } from '../utils/build-embed.js';
-import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, BACKGROUND_ENCODE_CONCURRENCY, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, STREAM_RECONNECT_INPUT_OPTIONS, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
+import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, BACKGROUND_ENCODE_CONCURRENCY, BACKGROUND_ENCODE_NICE, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, STREAM_RECONNECT_INPUT_OPTIONS, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug, { createNamespacedDebug } from '../utils/debug.js';
 import { formatError } from '../utils/error-msg.js';
+import { readEventLoopLag } from '../utils/event-loop-lag.js';
 import { supportsReadrateInitialBurst } from '../utils/ffmpeg-capabilities.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import type FileCacheProvider from './file-cache.js';
@@ -833,10 +835,25 @@ export default class Player {
     // Nothing consumes this rejection when the encode fails below.
     void committed.catch(() => undefined);
 
-    // run() resolves once the process is spawned, not when it finishes, so
-    // the pipeline has to be started before awaiting either.
+    // run() returns execa's child process, which is itself a promise, so
+    // awaiting run() waits for ffmpeg to exit. The pipeline has to be draining
+    // stdout before that, or ffmpeg blocks on a full pipe.
     const written = pipeline(ff.toStream() as unknown as Readable, writeStream);
-    await ff.run();
+    const running = ff.run();
+
+    // With a file input, run() spawns synchronously before its first await, so
+    // the process is already there. ffmpeggy's ESM typings don't declare
+    // `process` at all, hence the structural read.
+    const pid = (ff as unknown as {process?: {pid?: unknown}}).process?.pid;
+    if (typeof pid === 'number') {
+      try {
+        setPriority(pid, BACKGROUND_ENCODE_NICE);
+      } catch (error: unknown) {
+        debugAudio(`could not lower background encode priority: ${formatError(error)}`);
+      }
+    }
+
+    await running;
 
     try {
       await exited;
@@ -1157,7 +1174,8 @@ export default class Player {
       // every playing guild, and the template would otherwise be built (and
       // redacted) even with the namespace switched off.
       if (debugAudio.enabled) {
-        debugAudio(`guild=${this.guildId} path=${this.playbackPath} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms`);
+        const lag = readEventLoopLag();
+        debugAudio(`guild=${this.guildId} path=${this.playbackPath} cushion=${this.cushionSeconds === null ? 'n/a' : `${this.cushionSeconds}s`} lost=${Math.round(this.lostPlaybackMs)}ms loopLag p99=${lag.p99Ms}ms max=${lag.maxMs}ms`);
       }
     }, PLAYBACK_TELEMETRY_INTERVAL_MS);
   }

@@ -99,6 +99,17 @@ export const FFMPEG_READRATE_BURST_MIN_MINOR = 1;
 export const BACKGROUND_ENCODE_CONCURRENCY = 2;
 
 /**
+ * Scheduler niceness for those background encodes (0 = normal, 19 = lowest).
+ *
+ * Capping how many run at once still leaves each one at full priority,
+ * contending with the bot's own thread - which sends a voice packet every
+ * 20 ms and is heard as micro-stutter when it runs late - and with the
+ * encoder feeding live playback. A positive nice value makes them yield
+ * the CPU whenever either needs it, and costs nothing on an idle machine.
+ */
+export const BACKGROUND_ENCODE_NICE = 10;
+
+/**
  * Upper bound for the Opus encoder, in kbps.
  *
  * The voice channel advertises its own bitrate and that wins when it is lower.
