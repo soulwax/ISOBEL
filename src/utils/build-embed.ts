@@ -2,7 +2,7 @@
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import type Player from '../services/player.js';
-import { MediaSource, STATUS, type QueuedSong } from '../services/player.js';
+import { MediaSource, STATUS, type QueuedSong, type SongMetadata } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS, VOLUME_MAX, VOLUME_MIN } from './constants.js';
 import getProgressBar from './get-progress-bar.js';
 import { truncate } from './string.js';
@@ -444,3 +444,94 @@ export const buildQueueEmbed = (player: Player, page: number, pageSize: number):
 
   return message;
 };
+
+export interface SongQueuedOptions {
+  queuePosition: number;
+  estimatedWaitSeconds: number;
+  requestedBy?: string;
+  extraMsg?: string;
+  immediate?: boolean;
+}
+
+export const buildSongQueuedEmbed = (
+  song: SongMetadata,
+  options: SongQueuedOptions
+): EmbedBuilder => {
+  const {title, artist} = getCleanSongParts({title: song.title, artist: song.artist} as QueuedSong);
+  const songUrl = buildSongLink(artist, title);
+  const durationText = song.isLive ? '🔴 LIVE' : (song.length > 0 ? prettyTime(song.length) : 'Unknown');
+  const albumText = song.album?.trim();
+  const linkedTitle = songUrl ? `[${title}](${songUrl})` : title;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(options.immediate ? '⚡ Added to the front of the queue' : '➕ Added to queue')
+    .setDescription(`**${linkedTitle}**\nby **${artist}**${albumText ? ` • *${albumText}*` : ''}`)
+    .addFields([
+      {
+        name: '⏱️ Duration',
+        value: `\`${durationText}\``,
+        inline: true,
+      },
+      {
+        name: '📍 Position',
+        value: options.immediate ? '`#1 (Next)`' : `\`#${options.queuePosition}\``,
+        inline: true,
+      },
+      {
+        name: '⏳ Estimated Wait',
+        value: options.immediate ? '`Up next`' : (options.estimatedWaitSeconds > 0 ? `\`~${prettyTime(options.estimatedWaitSeconds)}\`` : '`< 1 min`'),
+        inline: true,
+      },
+    ]);
+
+  if (song.thumbnailUrl) {
+    embed.setThumbnail(song.thumbnailUrl);
+  }
+
+  const footerParts: string[] = [];
+  if (options.requestedBy) {
+    footerParts.push(`Requested by ${options.requestedBy}`);
+  }
+  if (options.extraMsg) {
+    footerParts.push(options.extraMsg);
+  }
+  if (footerParts.length > 0) {
+    embed.setFooter({text: footerParts.join(' • ')});
+  }
+
+  return embed;
+};
+
+export const buildSongQueuedControls = (
+  song: SongMetadata,
+  isImmediate = false
+): ActionRowBuilder<ButtonBuilder>[] => {
+  const row = new ActionRowBuilder<ButtonBuilder>();
+
+  if (!isImmediate) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`play:bump:${song.url}`)
+        .setLabel('Play Next')
+        .setEmoji('⚡')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`play:undo:${song.url}`)
+      .setLabel('Remove')
+      .setEmoji('🗑️')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('playback:queue')
+      .setLabel('View Queue')
+      .setEmoji('📜')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return [row];
+};
+

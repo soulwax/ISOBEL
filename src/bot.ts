@@ -234,7 +234,14 @@ export default class Bot {
    * @param interaction - The button interaction to handle
    */
   private async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
-    const command = this.commandsByButtonId.get(interaction.customId);
+    let command = this.commandsByButtonId.get(interaction.customId);
+
+    if (!command) {
+      const colonIndex = interaction.customId.lastIndexOf(':');
+      if (colonIndex !== -1) {
+        command = this.commandsByButtonId.get(interaction.customId.slice(0, colonIndex));
+      }
+    }
 
     if (!command) {
       return;

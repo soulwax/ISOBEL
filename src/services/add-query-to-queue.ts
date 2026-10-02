@@ -6,7 +6,7 @@ import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
 import type GetSongs from '../services/get-songs.js';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildPlaybackControls, buildPlayingMessageEmbed, buildSongQueuedControls, buildSongQueuedEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import type PlaybackHistory from './playback-history.js';
@@ -67,6 +67,11 @@ export default class AddQueryToQueue {
 
     await interaction.deferReply({ flags: queueAddResponseEphemeral ? MessageFlags.Ephemeral : undefined });
 
+    const wasConnectedBefore = player.isConnected();
+    const connectPromise = !wasConnectedBefore
+      ? player.connect(targetVoiceChannel)
+      : Promise.resolve();
+
     // For play command, only add one song regardless of playlist limit
     let newSongs: SongMetadata[];
     let extraMsg: string;
@@ -74,6 +79,7 @@ export default class AddQueryToQueue {
     if (songsOverride && songsOverride.length > 0) {
       newSongs = songsOverride;
       extraMsg = extraMsgOverride ?? '';
+      await connectPromise;
     } else if (attachment) {
       const attachmentName = attachment.name ?? 'attachment.mp3';
       const isMp3 = (attachment.contentType?.toLowerCase()?.includes('audio/mpeg') ?? false)
@@ -95,11 +101,16 @@ export default class AddQueryToQueue {
         thumbnailUrl: null,
       }];
       extraMsg = 'from attachment';
+      await connectPromise;
     } else {
       if (!query) {
         throw new Error('provide a search query or attach an mp3');
       }
-      [newSongs, extraMsg] = await this.getSongs.getSongs(query, 1);
+      const [songsResult] = await Promise.all([
+        this.getSongs.getSongs(query, 1),
+        connectPromise,
+      ]);
+      [newSongs, extraMsg] = songsResult;
     }
 
     if (newSongs.length === 0) {
@@ -157,9 +168,7 @@ export default class AddQueryToQueue {
     let statusMsg = '';
     let showedEmbed = false;
 
-    if (!player.isConnected()) {
-      await player.connect(targetVoiceChannel);
-
+    if (!wasConnectedBefore) {
       // Resume / start playback
       await player.play();
 
@@ -205,13 +214,47 @@ export default class AddQueryToQueue {
     }
 
     // Only update message if we didn't already show the embed
-    // If we showed the embed, keep it animated; otherwise show the text response
+    // If we showed the embed, keep it animated; otherwise show the queued card
     if (!showedEmbed) {
-      await interaction.editReply(
-        newSongs.length === 1
-          ? `**${firstSongDisplay}** added to the${addToFrontOfQueue ? ' front of the' : ''} queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
-          : `**${firstSongDisplay}** and ${newSongs.length - 1} other songs were added to the queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
-      );
+      if (newSongs.length === 1) {
+        const queuePosition = addToFrontOfQueue ? 1 : player.queueSize();
+        let estimatedWaitSeconds = 0;
+        const currentSong = player.getCurrent();
+        if (currentSong && !currentSong.isLive && currentSong.length > 0) {
+          estimatedWaitSeconds += Math.max(0, currentSong.length - player.getPosition());
+        }
+
+        if (!addToFrontOfQueue) {
+          const upcomingSongs = player.getQueue();
+          const songsAhead = upcomingSongs.slice(0, Math.max(0, upcomingSongs.length - 1));
+          for (const ahead of songsAhead) {
+            if (ahead.isLive) {
+              estimatedWaitSeconds = -1;
+              break;
+            }
+            estimatedWaitSeconds += ahead.length;
+          }
+        }
+
+        const embed = buildSongQueuedEmbed(firstSong, {
+          queuePosition,
+          estimatedWaitSeconds,
+          requestedBy: actor.name,
+          extraMsg: extraMsg !== '' ? extraMsg : undefined,
+          immediate: addToFrontOfQueue,
+        });
+
+        const components = buildSongQueuedControls(firstSong, addToFrontOfQueue);
+
+        await interaction.editReply({
+          embeds: [embed],
+          components,
+        });
+      } else {
+        await interaction.editReply(
+          `**${firstSongDisplay}** and ${newSongs.length - 1} other songs were added to the queue${skipCurrentTrack ? ' and current track skipped' : ''}${extraMsg}`
+        );
+      }
     }
   }
 }

@@ -26,6 +26,18 @@ export default class GetSongs {
     let searchQuery = query;
     let isYouTubeLink = false;
 
+    // Fast-path: Check for direct track ID reference from autocomplete (e.g. track:138545815)
+    const directTrackMatch = /^(?:track|id|songbird):(\d+)$/i.exec(query);
+    if (directTrackMatch) {
+      const trackId = directTrackMatch[1];
+      const directSong = await this.starchildAPI.getTrackById(trackId);
+      if (directSong) {
+        newSongs.push(directSong);
+        return [newSongs, extraMsg];
+      }
+      searchQuery = trackId;
+    }
+
     // Test if it's a complete URL (for HLS streams)
     // Only catch TypeError from URL parsing - this indicates the query is not a valid URL
     try {

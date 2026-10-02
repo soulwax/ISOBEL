@@ -127,4 +127,44 @@ export default class PlaybackHistory {
       debug('Playback history: failed to record action', error);
     });
   }
+
+  /**
+   * Retrieves unique recently played tracks for a guild to power smart autocomplete defaults.
+   */
+  async getRecentPlays(guildId: string, limit = 6): Promise<{title: string; artist: string; url: string; lengthSeconds: number; source: string}[]> {
+    try {
+      const rows = await prisma.songPlay.findMany({
+        where: {guildId},
+        orderBy: {startedAt: 'desc'},
+        take: 20,
+        select: {
+          title: true,
+          artist: true,
+          url: true,
+          lengthSeconds: true,
+          source: true,
+        },
+      });
+
+      const uniquePlays: typeof rows = [];
+      const seen = new Set<string>();
+
+      for (const row of rows) {
+        const key = `${row.title.toLowerCase().trim()}:::${row.artist.toLowerCase().trim()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniquePlays.push(row);
+          if (uniquePlays.length >= limit) {
+            break;
+          }
+        }
+      }
+
+      return uniquePlays;
+    } catch (error: unknown) {
+      debug('Playback history: failed to retrieve recent plays', error);
+      return [];
+    }
+  }
 }
+
