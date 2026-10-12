@@ -30,6 +30,10 @@ The **Discord bot** (root of the repo) uses a **bot token** (`DISCORD_TOKEN`) an
 | `SUPERUSER` | No | Discord account email address that should be seeded as a dashboard super admin. |
 | `SUPERUSER_DISCORD_ID` | No | Discord user ID that should be seeded as a dashboard super admin. |
 
+When no `SUPERUSER` or `SUPERUSER_DISCORD_ID` identity has been seeded, the
+first successful Discord login is promoted to super admin automatically. This
+bootstrap is performed once; later logins do not replace the existing admin.
+
 Redirect URL that must be allowed in the Discord Developer Portal:
 
 - **Callback URL**: `{NEXTAUTH_URL}/api/auth/callback/discord`  
@@ -117,6 +121,7 @@ Important details:
 - In a transaction, upserts guilds into `discordGuilds` and membership into `guildMembers`.  
   This keeps “which user is in which guild” in sync for permission checks (e.g. “can this user manage this guild’s settings?”).  
   If this fails, the error is logged but sign-in still succeeds (`return true`).
+- If the `super_user` table is empty, promotes this first authenticated Discord identity to super admin. An advisory transaction lock prevents concurrent first logins from creating multiple bootstrap admins.
 
 **session callback**:
 

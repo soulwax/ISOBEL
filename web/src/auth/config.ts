@@ -15,7 +15,7 @@ import { eq } from 'drizzle-orm';
 import { requireEnv } from '../lib/env.js';
 import { logger } from '../lib/logger.js';
 import { syncDiscordData } from './discord-sync.js';
-import { isSuperUserIdentity } from '../server/superuser.js';
+import { ensureFirstSuperUser, isSuperUserIdentity } from '../server/superuser.js';
 
 // Get NEXTAUTH_URL from environment, fallback to auto-detection
 const nextAuthUrl = process.env.NEXTAUTH_URL;
@@ -45,6 +45,9 @@ export const authConfig = {
     Discord({
       clientId: requireEnv('DISCORD_CLIENT_ID'),
       clientSecret: requireEnv('DISCORD_CLIENT_SECRET'),
+      // Discord includes `iss=https://discord.com` in OAuth callbacks. Setting
+      // the issuer prevents Auth.js from comparing it to its generic fallback.
+      issuer: 'https://discord.com',
       authorization: {
         params: {
           scope: 'identify email guilds',
@@ -55,20 +58,23 @@ export const authConfig = {
   callbacks: {
     async signIn({ user, account, profile }) {
       if (account?.provider === 'discord' && account.access_token && profile && user.id) {
+        const discordUserId = typeof profile.id === 'string' ? profile.id : undefined;
+        const profileEmail = typeof profile.email === 'string' ? profile.email : user.email;
+
         try {
-          if (typeof profile.id === 'string') {
+          if (discordUserId) {
             await syncDiscordData({
               authUserId: user.id,
-              discordUserId: profile.id,
+              discordUserId,
               accessToken: account.access_token,
               profile,
             });
 
-            if (typeof profile.email === 'string') {
+            if (profileEmail) {
               await db
                 .update(users)
                 .set({
-                  email: profile.email,
+                  email: profileEmail,
                   updatedAt: new Date(),
                 })
                 .where(eq(users.id, user.id));
@@ -77,6 +83,16 @@ export const authConfig = {
         } catch (error) {
           logger.error('Error saving Discord data', { error, userId: user.id });
           // Don't block sign-in if guild fetching fails
+        }
+
+        try {
+          await ensureFirstSuperUser({
+            email: profileEmail,
+            discordId: discordUserId,
+          });
+        } catch (error) {
+          logger.error('Error assigning first super admin', { error, userId: user.id });
+          // Super-user bootstrap must not prevent a valid Discord login.
         }
       }
       return true;

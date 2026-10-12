@@ -28,6 +28,19 @@ function getConfiguredSuperUserDiscordIds(): string[] {
     .filter((discordId): discordId is string => Boolean(discordId));
 }
 
+function normalizeIdentity({
+  email,
+  discordId,
+}: {
+  email?: string | null;
+  discordId?: string | null;
+}): { email: string | null; discordId: string | null } {
+  return {
+    email: normalizeEmail(email),
+    discordId: normalizeDiscordId(discordId),
+  };
+}
+
 async function setupSuperUserTable(): Promise<void> {
   const tableExists = await db.execute<{ exists: boolean }>(sql`
     SELECT to_regclass('public.super_user') IS NOT NULL AS "exists"
@@ -93,6 +106,60 @@ export async function ensureSuperUserTable(): Promise<void> {
   return setupPromise;
 }
 
+/**
+ * Promote the first authenticated Discord identity when no super admin has
+ * been configured yet. The transaction lock makes this safe when two users
+ * complete OAuth at the same time.
+ */
+export async function ensureFirstSuperUser({
+  email,
+  discordId,
+}: {
+  email?: string | null;
+  discordId?: string | null;
+}): Promise<boolean> {
+  const identity = normalizeIdentity({ email, discordId });
+
+  if (!identity.email && !identity.discordId) {
+    return false;
+  }
+
+  await ensureSuperUserTable();
+
+  const promoted = await db.transaction(async (tx) => {
+    // Session-scoped advisory lock: released automatically when this
+    // transaction completes, including on errors.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(72707370)`);
+
+    const existing = await tx.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS "count" FROM "super_user"
+    `);
+
+    if ((existing[0]?.count ?? 0) > 0) {
+      return false;
+    }
+
+    // Discord normally supplies an email, but retain Discord-only accounts by
+    // using a stable internal key while matching authorization by discordId.
+    const storageEmail = identity.email ?? `discord:${identity.discordId}`;
+
+    await tx.execute(sql`
+      INSERT INTO "super_user" ("email", "discordId", "updatedAt")
+      VALUES (${storageEmail}, ${identity.discordId}, now())
+    `);
+
+    return true;
+  });
+
+  if (promoted) {
+    logger.info('Promoted the first authenticated Discord user to super admin', {
+      discordId: identity.discordId,
+    });
+  }
+
+  return promoted;
+}
+
 export async function isSuperUserIdentity({
   email,
   discordId,
@@ -100,10 +167,9 @@ export async function isSuperUserIdentity({
   email?: string | null;
   discordId?: string | null;
 }): Promise<boolean> {
-  const normalizedEmail = normalizeEmail(email);
-  const normalizedDiscordId = normalizeDiscordId(discordId);
+  const identity = normalizeIdentity({ email, discordId });
 
-  if (!normalizedEmail && !normalizedDiscordId) {
+  if (!identity.email && !identity.discordId) {
     return false;
   }
 
@@ -112,8 +178,8 @@ export async function isSuperUserIdentity({
   const rows = await db.execute<{ exists: boolean }>(sql`
     SELECT EXISTS (
       SELECT 1 FROM "super_user"
-      WHERE (${normalizedEmail}::text IS NOT NULL AND "email" = ${normalizedEmail})
-        OR (${normalizedDiscordId}::text IS NOT NULL AND "discordId" = ${normalizedDiscordId})
+      WHERE (${identity.email}::text IS NOT NULL AND "email" = ${identity.email})
+        OR (${identity.discordId}::text IS NOT NULL AND "discordId" = ${identity.discordId})
     ) AS "exists"
   `);
 
