@@ -206,6 +206,122 @@ export async function getInsightPage(options: {
   return page(result, offset, limit);
 }
 
+
+export async function getUserInsightDetail(userId: string, days: number, cursor: number) {
+  const playRange = withinRange(sql`p."startedAt"`, days);
+  const actionRange = withinRange(sql`a."createdAt"`, days);
+  const [summary, servers, tracks, activity] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      SELECT
+        (SELECT count(*)::int FROM "SongPlay" p WHERE p."requestedBy" = ${userId} AND ${playRange}) AS plays,
+        (SELECT coalesce(sum(p."playedSeconds"), 0)::int FROM "SongPlay" p WHERE p."requestedBy" = ${userId} AND ${playRange}) AS "listenedSeconds",
+        (SELECT count(DISTINCT p."guildId")::int FROM "SongPlay" p WHERE p."requestedBy" = ${userId} AND ${playRange}) AS servers,
+        (SELECT count(*)::int FROM "PlaybackAction" a WHERE a."userId" = ${userId} AND ${actionRange}) AS actions,
+        (SELECT count(*)::int FROM "PlaybackAction" a WHERE a."userId" = ${userId} AND a.action = 'skip' AND ${actionRange}) AS skips
+    `),
+    db.execute<Record<string, unknown>>(sql`
+      SELECT p."guildId", COALESCE(g.name, p."guildName", p."guildId") AS "guildName",
+        count(*)::int AS plays, coalesce(sum(p."playedSeconds"), 0)::int AS "listenedSeconds"
+      FROM "SongPlay" p LEFT JOIN "discord_guild" g ON g.id = p."guildId"
+      WHERE p."requestedBy" = ${userId} AND ${playRange}
+      GROUP BY p."guildId", g.name, p."guildName"
+      ORDER BY plays DESC, "listenedSeconds" DESC LIMIT 8
+    `),
+    db.execute<Record<string, unknown>>(sql`
+      SELECT p.title, p.artist, count(*)::int AS plays,
+        coalesce(sum(p."playedSeconds"), 0)::int AS "listenedSeconds"
+      FROM "SongPlay" p WHERE p."requestedBy" = ${userId} AND ${playRange}
+      GROUP BY p.url, p.title, p.artist ORDER BY plays DESC, "listenedSeconds" DESC LIMIT 8
+    `),
+    db.execute<Record<string, unknown> & { hasMore: boolean }>(sql`
+      WITH events AS (
+        SELECT p.id AS id, 'play'::text AS type, p."startedAt" AS at,
+          COALESCE(g.name, p."guildName", p."guildId") AS server, p.title, p.artist,
+          p."endReason" AS detail, p."playedSeconds"
+        FROM "SongPlay" p LEFT JOIN "discord_guild" g ON g.id = p."guildId"
+        WHERE p."requestedBy" = ${userId} AND ${playRange}
+        UNION ALL
+        SELECT a.id, 'action'::text, a."createdAt",
+          COALESCE(g.name, a."guildName", a."guildId"), a."songTitle", a."songArtist",
+          a.action, NULL::integer
+        FROM "PlaybackAction" a LEFT JOIN "discord_guild" g ON g.id = a."guildId"
+        WHERE a."userId" = ${userId} AND ${actionRange}
+      ), batch AS (
+        SELECT id, type, to_char(at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
+          server, title, artist, detail, "playedSeconds"
+        FROM events ORDER BY at DESC, type, id DESC LIMIT 26 OFFSET ${cursor}
+      )
+      SELECT batch.*, count(*) OVER () > 25 AS "hasMore"
+      FROM batch ORDER BY at DESC, type, id DESC LIMIT 25
+    `)
+  ]);
+  const recent = [...activity];
+  return {
+    summary: summary[0] ?? {},
+    topServers: [...servers],
+    topTracks: [...tracks],
+    activity: recent.map(({ hasMore: _hasMore, ...row }) => row),
+    nextCursor: recent.length === 25 && recent[recent.length - 1]?.hasMore ? cursor + 25 : null,
+  };
+}
+
+export async function getChannelInsightDetail(
+  guildId: string,
+  channelId: string,
+  kind: 'voice' | 'text',
+  days: number,
+  cursor: number,
+) {
+  const channelColumn = kind === 'voice' ? sql.raw('p."voiceChannelId"') : sql.raw('p."textChannelId"');
+  const range = withinRange(sql`p."startedAt"`, days);
+  const where = sql`p."guildId" = ${guildId} AND ${channelColumn} = ${channelId} AND ${range}`;
+  const [summary, tracks, requesters, activity] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS plays, count(DISTINCT p."requestedBy")::int AS requesters,
+        coalesce(sum(p."playedSeconds"), 0)::int AS "listenedSeconds",
+        count(*) FILTER (WHERE p."endReason" = 'skipped')::int AS skips,
+        min(p."startedAt") AS "firstPlayedAt", max(p."startedAt") AS "lastPlayedAt"
+      FROM "SongPlay" p WHERE ${where}
+    `),
+    db.execute<Record<string, unknown>>(sql`
+      SELECT p.title, p.artist, count(*)::int AS plays,
+        coalesce(sum(p."playedSeconds"), 0)::int AS "listenedSeconds",
+        count(*) FILTER (WHERE p."endReason" = 'skipped')::int AS skips
+      FROM "SongPlay" p WHERE ${where}
+      GROUP BY p.url, p.title, p.artist ORDER BY plays DESC, "listenedSeconds" DESC LIMIT 10
+    `),
+    db.execute<Record<string, unknown>>(sql`
+      SELECT p."requestedBy" AS "userId",
+        COALESCE(du."globalName", du.username, max(p."requestedByName"), 'Unknown user') AS name,
+        count(*)::int AS plays, coalesce(sum(p."playedSeconds"), 0)::int AS "listenedSeconds"
+      FROM "SongPlay" p LEFT JOIN "discord_user" du ON du.id = p."requestedBy"
+      WHERE ${where}
+      GROUP BY p."requestedBy", du."globalName", du.username
+      ORDER BY plays DESC, "listenedSeconds" DESC LIMIT 10
+    `),
+    db.execute<Record<string, unknown> & { hasMore: boolean }>(sql`
+      WITH batch AS (
+        SELECT p.id, to_char(p."startedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
+          p.title, p.artist, p."requestedBy" AS "userId",
+          COALESCE(du."globalName", du.username, p."requestedByName", 'Unknown user') AS name,
+          p."playedSeconds", p."lengthSeconds", p."endReason"
+        FROM "SongPlay" p LEFT JOIN "discord_user" du ON du.id = p."requestedBy"
+        WHERE ${where} ORDER BY p."startedAt" DESC, p.id DESC LIMIT 26 OFFSET ${cursor}
+      )
+      SELECT batch.*, count(*) OVER () > 25 AS "hasMore"
+      FROM batch ORDER BY at DESC, id DESC LIMIT 25
+    `)
+  ]);
+  const recent = [...activity];
+  return {
+    summary: summary[0] ?? {},
+    topTracks: [...tracks],
+    topRequesters: [...requesters],
+    activity: recent.map(({ hasMore: _hasMore, ...row }) => row),
+    nextCursor: recent.length === 25 && recent[recent.length - 1]?.hasMore ? cursor + 25 : null,
+  };
+}
+
 function page(
   rows: Array<Record<string, unknown> & { total: number; nextCursor: number | null }>,
   offset: number,

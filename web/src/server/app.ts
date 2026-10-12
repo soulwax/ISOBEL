@@ -35,7 +35,13 @@ import {
   type HistoryFilters,
   isHistoryAvailable,
 } from "./admin-history.js";
-import { getInsightOverview, getInsightPage, type InsightSection } from "./admin-insights.js";
+import {
+  getChannelInsightDetail,
+  getInsightOverview,
+  getInsightPage,
+  getUserInsightDetail,
+  type InsightSection,
+} from "./admin-insights.js";
 import { getBotHealthUrl } from "./bot-health-url.js";
 import { getBotGuilds, leaveBotGuild, type BotGuild } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
@@ -370,6 +376,10 @@ const HISTORY_DAY_RANGES = new Set([1, 7, 30, 90, 365, 0]);
 
 function readQueryString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
+function readRouteParam(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 /** Parses the shared admin history filters, or returns an error message. */
@@ -1156,6 +1166,57 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   // Superuser admin: playback history recorded by the bot.
+  app.get("/api/admin/insights/user/:userId", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const userId = readRouteParam(req.params.userId);
+      const days = Number.parseInt(readQueryString(req.query.days) ?? "30", 10);
+      const cursor = Number.parseInt(readQueryString(req.query.cursor) ?? "0", 10);
+      if (!userId || !validateDiscordId(userId) || ![7, 30, 90, 365, 0].includes(days)
+        || !Number.isSafeInteger(cursor) || cursor < 0 || cursor > 1_000_000) {
+        res.status(400).json({ error: "Invalid user insight request" });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ available: false });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ available: true, ...(await getUserInsightDetail(userId, days, cursor)) });
+    } catch (error) {
+      logger.error("Error fetching user admin insights", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/insights/channel/:guildId/:channelId", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const guildId = readRouteParam(req.params.guildId);
+      const channelId = readRouteParam(req.params.channelId);
+      const kind = readQueryString(req.query.kind);
+      const days = Number.parseInt(readQueryString(req.query.days) ?? "30", 10);
+      const cursor = Number.parseInt(readQueryString(req.query.cursor) ?? "0", 10);
+      if (!guildId || !channelId || !validateGuildId(guildId) || !validateDiscordId(channelId)
+        || (kind !== "voice" && kind !== "text") || ![7, 30, 90, 365, 0].includes(days)
+        || !Number.isSafeInteger(cursor) || cursor < 0 || cursor > 1_000_000) {
+        res.status(400).json({ error: "Invalid channel insight request" });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.json({ available: false });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ available: true, ...(await getChannelInsightDetail(guildId, channelId, kind, days, cursor)) });
+    } catch (error) {
+      logger.error("Error fetching channel admin insights", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/admin/insights", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
     try {
       const section = readQueryString(req.query.section) ?? "overview";

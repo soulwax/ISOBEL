@@ -26,6 +26,22 @@ interface InsightPage {
   nextCursor: number | null;
 }
 
+type DetailRow = Record<string, unknown>;
+
+interface ExplorerDetail {
+  available?: boolean;
+  summary?: DetailRow;
+  topServers?: DetailRow[];
+  topTracks?: DetailRow[];
+  topRequesters?: DetailRow[];
+  activity?: DetailRow[];
+  nextCursor?: number | null;
+}
+
+type ExplorerSelection =
+  | { type: 'user'; id: string; name: string }
+  | { type: 'channel'; guildId: string; channelId: string; kind: 'voice' | 'text'; name: string; guildName: string };
+
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'servers', label: 'Servers' },
@@ -83,6 +99,46 @@ async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
   return await response.json() as T;
 }
 
+function DetailStat({ label, value }: { label: string; value: unknown }) {
+  const rendered = typeof value === 'string' ? value : formatNumber(value);
+  return <article className="admin-stat"><div className="admin-stat-label">{label}</div><div className="admin-stat-value">{rendered}</div></article>;
+}
+
+function DetailList({
+  title,
+  rows,
+  primary,
+  secondary,
+  value,
+  onSelectRow,
+}: {
+  title: string;
+  rows: DetailRow[];
+  primary: string;
+  secondary: string;
+  value: (row: DetailRow) => string;
+  onSelectRow?: (row: DetailRow) => void;
+}) {
+  return (
+    <section className="admin-card admin-explorer-list">
+      <h4 className="admin-card-title">{title}</h4>
+      {rows.length === 0 ? <p className="admin-empty">No data in this period.</p> : (
+        <ol>
+          {rows.map((row, index) => (
+            <li key={`${row[primary] ?? index}-${row[secondary] ?? ''}`}>
+              <div>
+                {onSelectRow ? <button type="button" className="admin-link admin-song" onClick={() => onSelectRow(row)}>{rowString(row, primary) || 'Unknown'}</button> : <strong>{rowString(row, primary) || 'Unknown'}</strong>}
+                <span className="admin-muted">{rowString(row, secondary) && ` · ${rowString(row, secondary)}`}</span>
+              </div>
+              <span className="admin-muted">{value(row)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export default function AdminInsights() {
   const [section, setSection] = useState<Section>('overview');
   const [days, setDays] = useState(30);
@@ -96,6 +152,12 @@ export default function AdminInsights() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pageController = useRef<AbortController | null>(null);
+  const detailPageController = useRef<AbortController | null>(null);
+  const [selection, setSelection] = useState<ExplorerSelection | null>(null);
+  const [detail, setDetail] = useState<ExplorerDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailLoadingMore, setDetailLoadingMore] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -145,6 +207,31 @@ export default function AdminInsights() {
     };
   }, [section, search, days]);
 
+  useEffect(() => {
+    if (!selection) return;
+    detailPageController.current?.abort();
+    detailPageController.current = null;
+    const controller = new AbortController();
+    const path = selection.type === 'user'
+      ? `/admin/insights/user/${encodeURIComponent(selection.id)}?days=${days}`
+      : `/admin/insights/channel/${encodeURIComponent(selection.guildId)}/${encodeURIComponent(selection.channelId)}?kind=${selection.kind}&days=${days}`;
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    getJson<ExplorerDetail>(path, controller.signal)
+      .then(setDetail)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setDetailError(reason instanceof Error ? reason.message : 'Failed to load detail.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDetailLoading(false);
+      });
+    return () => {
+      controller.abort();
+      detailPageController.current?.abort();
+    };
+  }, [selection, days]);
+
   const loadMore = async () => {
     if (section === 'overview' || nextCursor === null || loadingMore) return;
     pageController.current?.abort();
@@ -166,6 +253,32 @@ export default function AdminInsights() {
     }
   };
 
+  const loadMoreDetail = async () => {
+    if (!selection || detail?.nextCursor == null || detailLoadingMore) return;
+    detailPageController.current?.abort();
+    const controller = new AbortController();
+    detailPageController.current = controller;
+    const cursor = detail.nextCursor;
+    const path = selection.type === 'user'
+      ? `/admin/insights/user/${encodeURIComponent(selection.id)}?days=${days}&cursor=${cursor}`
+      : `/admin/insights/channel/${encodeURIComponent(selection.guildId)}/${encodeURIComponent(selection.channelId)}?kind=${selection.kind}&days=${days}&cursor=${cursor}`;
+    setDetailLoadingMore(true);
+    setDetailError(null);
+    try {
+      const next = await getJson<ExplorerDetail>(path, controller.signal);
+      setDetail((current) => current ? {
+        ...current,
+        activity: [...(current.activity ?? []), ...(next.activity ?? [])],
+        nextCursor: next.nextCursor ?? null,
+      } : next);
+    } catch (reason: unknown) {
+      if (!controller.signal.aborted) setDetailError(reason instanceof Error ? reason.message : 'Failed to load more detail.');
+    } finally {
+      if (detailPageController.current === controller) detailPageController.current = null;
+      setDetailLoadingMore(false);
+    }
+  };
+
   const columns = section === 'servers'
     ? ['Server', 'Members', 'Plays', 'Requesters', 'Listening time', 'Skips', 'Settings', 'Last active']
     : section === 'users'
@@ -182,7 +295,10 @@ export default function AdminInsights() {
             role="tab"
             aria-selected={section === item.id}
             className={section === item.id ? 'active' : ''}
-            onClick={() => setSection(item.id)}
+            onClick={() => {
+              setSection(item.id);
+              setSelection(null);
+            }}
           >
             {item.label}
           </button>
@@ -260,7 +376,7 @@ export default function AdminInsights() {
                   }
                   if (section === 'users') {
                     return <tr key={key}>
-                      <td><span className="admin-song">{rowString(row, 'name')}</span><br /><span className="admin-muted">{rowString(row, 'id')}</span></td>
+                      <td><button type="button" className="admin-link admin-song" onClick={() => setSelection({ type: 'user', id: rowString(row, 'id'), name: rowString(row, 'name') })}>{rowString(row, 'name')}</button><br /><span className="admin-muted">{rowString(row, 'id')}</span></td>
                       <td>{formatNumber(row.plays)}</td>
                       <td>{formatListeningTime(row.listenedSeconds)}</td>
                       <td>{formatNumber(row.actions)}</td>
@@ -270,7 +386,14 @@ export default function AdminInsights() {
                     </tr>;
                   }
                   return <tr key={key}>
-                    <td><span className="admin-song">{rowString(row, 'id')}</span></td>
+                    <td><button type="button" className="admin-link admin-song" onClick={() => setSelection({
+                      type: 'channel',
+                      guildId: rowString(row, 'guildId'),
+                      channelId: rowString(row, 'id'),
+                      kind: rowString(row, 'kind') === 'voice' ? 'voice' : 'text',
+                      name: rowString(row, 'id'),
+                      guildName: rowString(row, 'guildName') || rowString(row, 'guildId'),
+                    })}>{rowString(row, 'id')}</button></td>
                     <td>{rowString(row, 'guildName') || rowString(row, 'guildId')}<br /><span className="admin-muted">{rowString(row, 'guildId')}</span></td>
                     <td>{rowString(row, 'kind')}</td>
                     <td>{formatNumber(row.plays)}</td>
@@ -289,6 +412,80 @@ export default function AdminInsights() {
           {nextCursor !== null && <button type="button" className="admin-load-more" onClick={() => void loadMore()} disabled={loadingMore}>
             {loadingMore ? 'Loading…' : 'Load 25 more'}
           </button>}
+          {((section === 'users' && selection?.type === 'user') || (section === 'channels' && selection?.type === 'channel')) && (
+            <section className="admin-explorer" aria-label="Selected profile details">
+              <header className="admin-explorer-header">
+                <div>
+                  <span className="admin-eyebrow">{selection.type === 'user' ? 'User profile' : `${selection.kind} channel · ${selection.guildName}`}</span>
+                  <h3 className="admin-title">{selection.name}</h3>
+                  <p className="admin-subtitle">{selection.type === 'user' ? selection.id : `${selection.channelId} · Server ${selection.guildId}`}</p>
+                </div>
+                <button type="button" className="admin-load-more" onClick={() => setSelection(null)}>Close</button>
+              </header>
+              {detailError && <div className="admin-card admin-error" role="alert">{detailError}</div>}
+              {detailLoading && <div className="admin-card admin-empty">Loading this {selection.type}…</div>}
+              {detail?.available === false && <div className="admin-card admin-empty">Playback detail is not available yet.</div>}
+              {detail?.available !== false && detail?.summary && (
+                <>
+                  <div className="admin-insight-stats">
+                    {selection.type === 'user' ? (
+                      <>
+                        <DetailStat label="Plays" value={detail.summary.plays} />
+                        <DetailStat label="Listening time" value={formatListeningTime(detail.summary.listenedSeconds)} />
+                        <DetailStat label="Actions" value={detail.summary.actions} />
+                        <DetailStat label="Skips" value={detail.summary.skips} />
+                        <DetailStat label="Servers" value={detail.summary.servers} />
+                      </>
+                    ) : (
+                      <>
+                        <DetailStat label="Plays" value={detail.summary.plays} />
+                        <DetailStat label="Requesters" value={detail.summary.requesters} />
+                        <DetailStat label="Listening time" value={formatListeningTime(detail.summary.listenedSeconds)} />
+                        <DetailStat label="Skips" value={detail.summary.skips} />
+                        <DetailStat label="First played" value={formatDate(detail.summary.firstPlayedAt)} />
+                        <DetailStat label="Last played" value={formatDate(detail.summary.lastPlayedAt)} />
+                      </>
+                    )}
+                  </div>
+                  <div className="admin-explorer-grid">
+                    {selection.type === 'user' && <DetailList title="Most active servers" rows={detail.topServers ?? []} primary="guildName" secondary="guildId" value={(row) => `${formatNumber(row.plays)} plays · ${formatListeningTime(row.listenedSeconds)}`} />}
+                    <DetailList title="Top tracks" rows={detail.topTracks ?? []} primary="title" secondary="artist" value={(row) => `${formatNumber(row.plays)} plays · ${formatListeningTime(row.listenedSeconds)}`} />
+                    {selection.type === 'channel' && <DetailList
+                      title="Top requesters"
+                      rows={detail.topRequesters ?? []}
+                      primary="name"
+                      secondary="userId"
+                      value={(row) => `${formatNumber(row.plays)} plays · ${formatListeningTime(row.listenedSeconds)}`}
+                      onSelectRow={(row) => {
+                        const id = rowString(row, 'userId');
+                        if (!id) return;
+                        setSection('users');
+                        setSelection({ type: 'user', id, name: rowString(row, 'name') });
+                      }}
+                    />}
+                  </div>
+                  <section className="admin-card admin-explorer-activity">
+                    <h4 className="admin-card-title">Recent {selection.type === 'user' ? 'activity' : 'plays'}</h4>
+                    {(detail.activity ?? []).length === 0 ? <p className="admin-empty">No activity in this period.</p> : (
+                      <ol>
+                        {(detail.activity ?? []).map((event, index) => (
+                          <li key={`${event.type ?? 'play'}-${event.id ?? index}-${event.at}`}>
+                            <div>
+                              <strong>{rowString(event, 'title') || rowString(event, 'detail') || 'Playback activity'}</strong>
+                              {rowString(event, 'artist') && <span className="admin-muted"> · {rowString(event, 'artist')}</span>}
+                              {rowString(event, 'server') && <span className="admin-muted"> · {rowString(event, 'server')}</span>}
+                            </div>
+                            <span className="admin-muted">{formatDate(event.at)}{event.playedSeconds == null ? '' : ` · ${formatListeningTime(event.playedSeconds)}`}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {detail.nextCursor != null && <button type="button" className="admin-load-more" onClick={() => void loadMoreDetail()} disabled={detailLoadingMore}>{detailLoadingMore ? 'Loading…' : 'Load 25 more activity rows'}</button>}
+                  </section>
+                </>
+              )}
+            </section>
+          )}
         </>
       )}
       {error && section === 'overview' && <div className="admin-card admin-error" role="alert">{error}</div>}
