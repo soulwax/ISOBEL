@@ -1164,6 +1164,12 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
+      const days = Number.parseInt(readQueryString(req.query.days) ?? "30", 10);
+      if (![7, 30, 90, 365, 0].includes(days)) {
+        res.status(400).json({ error: "Invalid insight time range" });
+        return;
+      }
+
       if (!(await isHistoryAvailable())) {
         res.setHeader("Cache-Control", "no-store");
         res.json(section === "overview"
@@ -1174,7 +1180,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
       res.setHeader("Cache-Control", "no-store");
       if (section === "overview") {
-        res.json({ available: true, ...(await getInsightOverview()) });
+        res.json({ available: true, days, ...(await getInsightOverview(days)) });
         return;
       }
 
@@ -1191,6 +1197,7 @@ export function createApp(options: CreateAppOptions = {}) {
         section: section as Exclude<InsightSection, "overview">,
         cursor,
         limit,
+        days,
         search,
       }));
     } catch (error) {

@@ -1,16 +1,22 @@
 // File: web/src/components/AdminInsights.tsx
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '../lib/api-paths';
 
 type Section = 'overview' | 'servers' | 'users' | 'channels';
 
 interface Overview {
   available: boolean;
+  days?: number;
   servers?: number;
-  users?: number;
-  channels?: number;
+  activeServers?: number;
+  knownUsers?: number;
+  activeUsers?: number;
+  activeChannels?: number;
   plays?: number;
+  listenedSeconds?: number;
+  skipped?: number;
+  actions?: number;
 }
 
 interface InsightPage {
@@ -27,6 +33,14 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'channels', label: 'Channels' },
 ];
 
+const RANGES = [
+  { days: 7, label: '7 days' },
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
+  { days: 365, label: '1 year' },
+  { days: 0, label: 'All time' },
+] as const;
+
 const numberFormat = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -42,6 +56,16 @@ function formatDate(value: unknown): string {
 
 function rowString(row: Record<string, unknown>, field: string): string {
   return typeof row[field] === 'string' ? row[field] as string : '';
+}
+
+function formatListeningTime(value: unknown): string {
+  const seconds = Number(value ?? 0);
+  if (seconds >= 3600) return `${numberFormat.format(seconds / 3600)} h`;
+  return `${Math.round(seconds / 60)} min`;
+}
+
+function formatLoopMode(value: unknown): string {
+  return ['Off', 'Track', 'Queue'][Number(value)] ?? '—';
 }
 
 async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
@@ -61,6 +85,7 @@ async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
 
 export default function AdminInsights() {
   const [section, setSection] = useState<Section>('overview');
+  const [days, setDays] = useState(30);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [total, setTotal] = useState(0);
@@ -70,6 +95,7 @@ export default function AdminInsights() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pageController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -80,18 +106,20 @@ export default function AdminInsights() {
     if (section !== 'overview') return;
     const controller = new AbortController();
     setError(null);
-    getJson<Overview>('/admin/insights?section=overview', controller.signal)
+    getJson<Overview>(`/admin/insights?section=overview&days=${days}`, controller.signal)
       .then(setOverview)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Failed to load insights.');
       });
     return () => controller.abort();
-  }, [section]);
+  }, [section, days]);
 
   useEffect(() => {
     if (section === 'overview') return;
+    pageController.current?.abort();
+    pageController.current = null;
     const controller = new AbortController();
-    const query = new URLSearchParams({ section, limit: '25' });
+    const query = new URLSearchParams({ section, limit: '25', days: String(days) });
     if (search) query.set('search', search);
     setLoading(true);
     setRows([]);
@@ -111,13 +139,18 @@ export default function AdminInsights() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
-    return () => controller.abort();
-  }, [section, search]);
+    return () => {
+      controller.abort();
+      pageController.current?.abort();
+    };
+  }, [section, search, days]);
 
   const loadMore = async () => {
     if (section === 'overview' || nextCursor === null || loadingMore) return;
+    pageController.current?.abort();
     const controller = new AbortController();
-    const query = new URLSearchParams({ section, limit: '25', cursor: String(nextCursor) });
+    pageController.current = controller;
+    const query = new URLSearchParams({ section, limit: '25', cursor: String(nextCursor), days: String(days) });
     if (search) query.set('search', search);
     setLoadingMore(true);
     setError(null);
@@ -128,15 +161,16 @@ export default function AdminInsights() {
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Failed to load more insights.');
     } finally {
+      if (pageController.current === controller) pageController.current = null;
       setLoadingMore(false);
     }
   };
 
   const columns = section === 'servers'
-    ? ['Server', 'Known members', 'Plays', 'Last active']
+    ? ['Server', 'Members', 'Plays', 'Requesters', 'Listening time', 'Skips', 'Settings', 'Last active']
     : section === 'users'
-      ? ['User', 'Plays', 'Actions', 'Last active']
-      : ['Channel', 'Server', 'Type', 'Plays', 'Listeners', 'Top track'];
+      ? ['User', 'Plays', 'Listening time', 'Actions', 'Skips', 'Servers', 'Last active']
+      : ['Channel', 'Server', 'Type', 'Plays', 'Requesters', 'Listening time', 'Skips', 'Top track', 'Last active'];
 
   return (
     <section aria-label="Server, user, and channel insights">
@@ -155,29 +189,41 @@ export default function AdminInsights() {
         ))}
       </div>
 
+      <div className="admin-insight-range" role="group" aria-label="Insight time range">
+        {RANGES.map((range) => (
+          <button key={range.days} type="button" className={days === range.days ? 'active' : ''} aria-pressed={days === range.days} onClick={() => setDays(range.days)}>
+            {range.label}
+          </button>
+        ))}
+      </div>
+
       {section === 'overview' ? (
         <>
+          {overview === null && <div className="admin-card admin-empty">Loading overview…</div>}
           {overview?.available === false && (
             <div className="admin-card admin-unavailable"><p>Playback insights become available after the bot has created its history tables.</p></div>
           )}
-          {overview?.available !== false && (
+          {overview && overview.available && (
             <div className="admin-insight-stats">
               {[
-                ['Servers', overview?.servers],
-                ['Known users', overview?.users],
-                ['Active channels', overview?.channels],
+                ['Servers active / total', `${formatNumber(overview?.activeServers)} / ${formatNumber(overview?.servers)}`],
+                ['Active / known users', `${formatNumber(overview?.activeUsers)} / ${formatNumber(overview?.knownUsers)}`],
+                ['Channels with plays', overview?.activeChannels],
                 ['Plays recorded', overview?.plays],
+                ['Listening time', formatListeningTime(overview?.listenedSeconds)],
+                ['Skip rate', `${overview?.plays ? Math.round((Number(overview.skipped ?? 0) / overview.plays) * 100) : 0}%`],
+                ['Playback actions', overview?.actions],
               ].map(([label, value]) => (
                 <article className="admin-stat" key={String(label)}>
                   <div className="admin-stat-label">{label}</div>
-                  <div className="admin-stat-value">{formatNumber(value)}</div>
+                  <div className="admin-stat-value">{typeof value === 'string' ? value : formatNumber(value)}</div>
                 </article>
               ))}
             </div>
           )}
           <div className="admin-card admin-insight-note">
             <h3 className="admin-card-title">Incremental and privacy-aware</h3>
-            <p>Lists load only when opened and return 25 rows at a time. Channel insights summarize music activity and channel IDs; message bodies are never collected.</p>
+            <p>Activity cards and lists use the selected period. Server totals and known user totals are current database coverage; user membership counts reflect dashboard users seen in shared servers, not a full member scrape. Channel reports summarize recorded music activity and channel IDs; message bodies are never collected.</p>
           </div>
         </>
       ) : (
@@ -205,15 +251,22 @@ export default function AdminInsights() {
                       <td><span className="admin-song">{rowString(row, 'name') || 'Unknown server'}</span><br /><span className="admin-muted">{rowString(row, 'id')}</span></td>
                       <td>{row.memberCount == null ? '—' : formatNumber(row.memberCount)} <span className="admin-muted">({formatNumber(row.knownMembers)} known)</span></td>
                       <td>{formatNumber(row.plays)}</td>
-                      <td className="admin-nowrap">{formatDate(row.lastActiveAt)}</td>
+                      <td>{formatNumber(row.requesters)}</td>
+                      <td>{formatListeningTime(row.listenedSeconds)}</td>
+                      <td>{formatNumber(row.skips)}</td>
+                      <td className="admin-muted">{row.playlistLimit == null ? '—' : `Playlist ${formatNumber(row.playlistLimit)} · queue ${row.maxQueueSize == null || Number(row.maxQueueSize) === 0 ? '∞' : formatNumber(row.maxQueueSize)} · volume ${formatNumber(row.defaultVolume)}% · loop ${formatLoopMode(row.defaultLoopMode)}`}</td>
+                      <td className="nowrap">{formatDate(row.lastActiveAt)}</td>
                     </tr>;
                   }
                   if (section === 'users') {
                     return <tr key={key}>
                       <td><span className="admin-song">{rowString(row, 'name')}</span><br /><span className="admin-muted">{rowString(row, 'id')}</span></td>
                       <td>{formatNumber(row.plays)}</td>
+                      <td>{formatListeningTime(row.listenedSeconds)}</td>
                       <td>{formatNumber(row.actions)}</td>
-                      <td className="admin-nowrap">{formatDate(row.lastActiveAt)}</td>
+                      <td>{formatNumber(row.skips)}</td>
+                      <td>{formatNumber(row.servers)}</td>
+                      <td className="nowrap">{formatDate(row.lastActiveAt)}</td>
                     </tr>;
                   }
                   return <tr key={key}>
@@ -221,8 +274,11 @@ export default function AdminInsights() {
                     <td>{rowString(row, 'guildName') || rowString(row, 'guildId')}<br /><span className="admin-muted">{rowString(row, 'guildId')}</span></td>
                     <td>{rowString(row, 'kind')}</td>
                     <td>{formatNumber(row.plays)}</td>
-                    <td>{formatNumber(row.listeners)}</td>
-                    <td>{rowString(row, 'topTrack') || '—'}</td>
+                    <td>{formatNumber(row.requesters)}</td>
+                    <td>{formatListeningTime(row.listenedSeconds)}</td>
+                    <td>{formatNumber(row.skips)}</td>
+                    <td><span className="admin-song">{rowString(row, 'topTrack') || '—'}</span><br /><span className="admin-muted">{rowString(row, 'topArtist')}</span></td>
+                    <td className="nowrap">{formatDate(row.lastActiveAt)}</td>
                   </tr>;
                 })}
                 {!loading && rows.length === 0 && <tr><td colSpan={columns.length} className="admin-empty">No insights found.</td></tr>}

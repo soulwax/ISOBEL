@@ -435,6 +435,7 @@
 
 .admin-primary-tabs button:focus-visible,
 .admin-insights-tabs button:focus-visible,
+.admin-insight-range button:focus-visible,
 .admin-load-more:focus-visible {
   outline: 2px solid var(--admin-accent);
   outline-offset: 2px;
@@ -442,9 +443,33 @@
 
 .admin-insight-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.admin-insight-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -8px 0 18px;
+}
+
+.admin-insight-range button {
+  padding: 6px 10px;
+  border: 1px solid var(--admin-hairline);
+  border-radius: 999px;
+  background: var(--admin-surface-raised);
+  color: var(--admin-ink-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.admin-insight-range button.active {
+  border-color: rgba(88, 101, 242, 0.7);
+  background: rgba(88, 101, 242, 0.2);
+  color: var(--admin-ink);
 }
 
 .admin-insight-note p {
