@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE_URL } from '../lib/api-paths';
+import AdminInsights from './AdminInsights';
 import './GuildSettings.css';
 import './AdminHistory.css';
 
@@ -348,6 +349,7 @@ function Timestamp({ iso }: { iso: string }) {
 // ── main ──────────────────────────────────────────────────────
 
 export default function AdminHistory({ onBack }: AdminHistoryProps) {
+  const [view, setView] = useState<'insights' | 'playback'>('insights');
   const [days, setDays] = useState<number>(30);
   const [guildId, setGuildId] = useState('');
   const [user, setUser] = useState<UserFilter | null>(null);
@@ -374,6 +376,7 @@ export default function AdminHistory({ onBack }: AdminHistoryProps) {
   }, [searchInput]);
 
   useEffect(() => {
+    if (view !== 'playback') return;
     const controller = new AbortController();
     setSummaryError(null);
 
@@ -386,7 +389,7 @@ export default function AdminHistory({ onBack }: AdminHistoryProps) {
       });
 
     return () => controller.abort();
-  }, [days, guildId, user]);
+  }, [days, guildId, user, view]);
 
   const loadList = async (cursor: number | null, signal: AbortSignal) => {
     setListLoading(true);
@@ -420,13 +423,14 @@ export default function AdminHistory({ onBack }: AdminHistoryProps) {
   };
 
   useEffect(() => {
+    if (view !== 'playback') return;
     const controller = new AbortController();
     listController.current = controller;
     void loadList(null, controller.signal);
     return () => controller.abort();
     // loadList reads exactly these values; listing it would refetch every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, days, guildId, user, search, actionFilter]);
+  }, [tab, days, guildId, user, search, actionFilter, view]);
 
   const selectUser = (selected: UserFilter) => {
     setUser(selected);
@@ -444,12 +448,19 @@ export default function AdminHistory({ onBack }: AdminHistoryProps) {
         <button type="button" className="back-button" onClick={onBack}>← Back</button>
         <div>
           <span className="admin-eyebrow">Super admin</span>
-          <h2 className="admin-title">Playback history</h2>
+          <h2 className="admin-title">Admin insights</h2>
           <p className="admin-subtitle">
-            What played where, who asked for it, and who skipped it — across every server ISOBEL is in.
+            Server coverage, user activity, channel trends, and playback history.
           </p>
         </div>
       </header>
+
+      <div className="admin-primary-tabs" role="tablist" aria-label="Admin views">
+        <button type="button" role="tab" aria-selected={view === 'insights'} className={view === 'insights' ? 'active' : ''} onClick={() => setView('insights')}>Insights</button>
+        <button type="button" role="tab" aria-selected={view === 'playback'} className={view === 'playback' ? 'active' : ''} onClick={() => setView('playback')}>Playback history</button>
+      </div>
+
+      {view === 'insights' ? <AdminInsights /> : <>
 
       <div className="admin-filters" role="group" aria-label="History filters">
         <div className="admin-segmented" role="radiogroup" aria-label="Time range">
@@ -719,6 +730,7 @@ export default function AdminHistory({ onBack }: AdminHistoryProps) {
           </section>
         </>
       )}
+      </>}
     </div>
   );
 }

@@ -406,6 +406,90 @@
   border-bottom-color: var(--admin-accent);
 }
 
+.admin-primary-tabs,
+.admin-insights-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.admin-primary-tabs button,
+.admin-insights-tabs button {
+  padding: 8px 14px;
+  border: 1px solid var(--admin-hairline);
+  border-radius: 6px;
+  background: var(--admin-surface);
+  color: var(--admin-ink-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-primary-tabs button.active,
+.admin-insights-tabs button.active {
+  border-color: rgba(88, 101, 242, 0.7);
+  background: rgba(88, 101, 242, 0.2);
+  color: var(--admin-ink);
+}
+
+.admin-primary-tabs button:focus-visible,
+.admin-insights-tabs button:focus-visible,
+.admin-load-more:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.admin-insight-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-insight-note p {
+  color: var(--admin-ink-secondary);
+  line-height: 1.6;
+}
+
+.admin-insight-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-insight-toolbar p {
+  margin: 0;
+}
+
+.admin-insight-toolbar .admin-search {
+  box-sizing: border-box;
+}
+
+.admin-error {
+  color: #f2a5a5;
+}
+
+.admin-load-more {
+  display: block;
+  margin: 12px auto;
+  padding: 8px 14px;
+  border: 1px solid var(--admin-hairline);
+  border-radius: 6px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-load-more:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .admin-search {
   min-width: 240px;
   padding: 8px 10px;

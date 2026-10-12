@@ -35,6 +35,7 @@ import {
   type HistoryFilters,
   isHistoryAvailable,
 } from "./admin-history.js";
+import { getInsightOverview, getInsightPage, type InsightSection } from "./admin-insights.js";
 import { getBotHealthUrl } from "./bot-health-url.js";
 import { getBotGuilds, leaveBotGuild, type BotGuild } from "./bot-guilds.js";
 import { AuthenticatedRequest, errorHandler, requireAuth } from "./middleware.js";
@@ -1155,6 +1156,49 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   // Superuser admin: playback history recorded by the bot.
+  app.get("/api/admin/insights", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
+    try {
+      const section = readQueryString(req.query.section) ?? "overview";
+      if (!(new Set(["overview", "servers", "users", "channels"])).has(section)) {
+        res.status(400).json({ error: "Invalid insight section" });
+        return;
+      }
+
+      if (!(await isHistoryAvailable())) {
+        res.setHeader("Cache-Control", "no-store");
+        res.json(section === "overview"
+          ? { available: false }
+          : { rows: [], total: 0, nextCursor: null, available: false });
+        return;
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      if (section === "overview") {
+        res.json({ available: true, ...(await getInsightOverview()) });
+        return;
+      }
+
+      const cursor = Number.parseInt(readQueryString(req.query.cursor) ?? "0", 10);
+      const limit = Number.parseInt(readQueryString(req.query.limit) ?? "25", 10);
+      if (!Number.isSafeInteger(cursor) || cursor < 0 || cursor > 1_000_000
+        || !Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+        res.status(400).json({ error: "Invalid page" });
+        return;
+      }
+
+      const search = readQueryString(req.query.search)?.slice(0, 80);
+      res.json(await getInsightPage({
+        section: section as Exclude<InsightSection, "overview">,
+        cursor,
+        limit,
+        search,
+      }));
+    } catch (error) {
+      logger.error("Error fetching admin insights", { error });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/admin/history/summary", adminLimiter, requireAuth, requireSuperUser, async (req, res): Promise<void> => {
     try {
       const filters = parseHistoryFilters(req.query);
