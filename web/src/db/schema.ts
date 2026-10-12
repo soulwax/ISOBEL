@@ -1,7 +1,23 @@
 // File: web/src/db/schema.ts
 
 import { relations } from 'drizzle-orm';
-import { boolean, index, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgSequence, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core';
+
+// These sequences belong to legacy bot tables that are intentionally outside
+// the web schema. Declaring them keeps Drizzle Kit from trying to drop them
+// while synchronising the web-owned tables in the shared PostgreSQL database.
+const legacyIntegerSequenceOptions = {
+  increment: 1,
+  minValue: 1,
+  maxValue: 2_147_483_647,
+  startWith: 1,
+  cache: 1,
+  cycle: false,
+} as const;
+
+export const favoriteQueryIdSeq = pgSequence('FavoriteQuery_id_seq', legacyIntegerSequenceOptions);
+export const songPlayIdSeq = pgSequence('SongPlay_id_seq', legacyIntegerSequenceOptions);
+export const playbackActionIdSeq = pgSequence('PlaybackAction_id_seq', legacyIntegerSequenceOptions);
 
 // Auth.js required tables
 export const users = pgTable('user', {
