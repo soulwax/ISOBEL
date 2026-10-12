@@ -41,6 +41,7 @@ ALTER TABLE "Settings" RENAME TO "Setting";
 ALTER TABLE "Setting" ALTER COLUMN "guildId" SET NOT NULL;
 ALTER TABLE "Setting" ALTER COLUMN "prefix" SET NOT NULL;
 -- Convert finishedSetup from SMALLINT to BOOLEAN
+ALTER TABLE "Setting" ALTER COLUMN "finishedSetup" DROP DEFAULT;
 ALTER TABLE "Setting" ALTER COLUMN "finishedSetup" TYPE BOOLEAN USING (CASE WHEN "finishedSetup" = 0 THEN false ELSE true END);
 ALTER TABLE "Setting" ALTER COLUMN "finishedSetup" SET DEFAULT false;
 ALTER TABLE "Setting" ALTER COLUMN "playlistLimit" SET DEFAULT 50;

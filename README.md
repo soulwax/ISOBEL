@@ -402,13 +402,26 @@ pnpm run install:bot
 cp .env.example .env
 # Edit .env with your values
 
-# 4. Set up database (first time only)
+# 4. Prepare a fresh PostgreSQL database
+# The migration history before the PostgreSQL baseline contains SQLite-only
+# migrations. Skip those only when the database has no existing data/history.
+set -e
+for migration_dir in migrations/*/; do
+  migration=${migration_dir#migrations/}
+  migration=${migration%/}
+  if [[ "$migration" < 20250119200000_baseline_postgresql ]]; then
+    pnpm run env:set-database-url -- prisma migrate resolve --applied "$migration"
+  fi
+done
 pnpm prisma:migrate:deploy
 
 # 5. Build and start the bot
 pnpm build
 pnpm pm2:start:prod
 ```
+
+For databases with an existing schema or migration history, do not run the
+baseline preparation loop; use the regular migration commands for that database.
 
 ### Running on the Same Machine (Bot + Web)
 
