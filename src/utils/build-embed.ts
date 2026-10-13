@@ -24,9 +24,8 @@ const EMBED_COLOR = {
   idle: 0x4E5058,
 } as const;
 
-// The now-playing card has room for a fuller timeline than the compact queue
-// preview, which continues to use PROGRESS_BAR_SEGMENTS.
-const PLAYING_PROGRESS_BAR_SEGMENTS = 30;
+// Keep the timeline short enough to fit beside Discord's right-side thumbnail.
+const PLAYING_PROGRESS_BAR_SEGMENTS = 14;
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
@@ -189,7 +188,7 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   const timeline = currentlyPlaying.isLive
     ? '🔴 `LIVE BROADCAST`'
     : currentlyPlaying.length > 0
-      ? `\`${prettyTime(player.getPosition())}\`  ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)}  \`${prettyTime(currentlyPlaying.length)}\``
+      ? `\`${prettyTime(player.getPosition())}\` ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)} \`${prettyTime(currentlyPlaying.length)}\``
       : `\`${prettyTime(player.getPosition())}\`  •  ⏱️ · duration unavailable`;
   const subtitle = album === 'Unknown album'
     ? `by **${artist}**`
@@ -202,8 +201,8 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
     .setTitle(truncate(title, 256))
     .setDescription([
       subtitle,
-      '',
       timeline,
+      `👤 <@${requestedBy}>  •  ${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}  •  ${loop.emoji} ${loop.label}`,
     ].join('\n'));
 
   if (songUrl) {
@@ -211,19 +210,12 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   }
 
   message
-    .addFields(
-      {name: 'STATE', value: `Requested by <@${requestedBy}>`, inline: true},
-      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
-      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
-    )
     .setFooter({
       text: [getSourceLabel(currentlyPlaying), `${getQueueInfo(player)} queued`, playlist?.title].filter(Boolean).join('  •  '),
     });
 
   if (thumbnailUrl) {
-    // Keep the card visually dominant; Discord renders every component row
-    // beneath this full-width image, never inside the embed itself.
-    message.setImage(thumbnailUrl);
+    message.setThumbnail(thumbnailUrl);
   }
 
   return message;
