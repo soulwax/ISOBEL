@@ -1261,6 +1261,12 @@ body {
   margin-top: 2rem;
 }
 
+.pipeline-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
 .tech-badge {
   padding: 0.4rem 0.9rem;
   border-radius: 999px;

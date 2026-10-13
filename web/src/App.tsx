@@ -742,6 +742,11 @@ function App() {
                 <span key={tech} className="tech-badge">{tech}</span>
               ))}
             </div>
+            <div className="pipeline-more">
+              <a href="/architecture.html" className="btn btn-secondary">
+                Explore the full pipeline architecture
+              </a>
+            </div>
           </div>
         </section>
 
