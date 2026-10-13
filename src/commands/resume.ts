@@ -6,7 +6,7 @@ import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
 import { STATUS } from '../services/player.js';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildNowPlayingMessage } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
 import type Command from './index.js';
 
@@ -39,10 +39,6 @@ export default class implements Command {
     await player.connect(targetVoiceChannel);
     await player.play();
 
-    await interaction.reply({
-      content: 'the stop-and-go light is now green',
-      embeds: [buildPlayingMessageEmbed(player)],
-      components: buildPlaybackControls(player),
-    });
+    await interaction.reply(buildNowPlayingMessage(player, {note: 'the stop-and-go light is now green'}));
   }
 }

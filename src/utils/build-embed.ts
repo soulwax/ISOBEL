@@ -1,6 +1,6 @@
 // File: src/utils/build-embed.ts
 
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, EmbedBuilder, escapeMarkdown, MessageFlags, SectionBuilder, SeparatorBuilder, SeparatorSpacingSize, StringSelectMenuBuilder, TextDisplayBuilder, ThumbnailBuilder } from 'discord.js';
 import type Player from '../services/player.js';
 import { MediaSource, STATUS, type QueuedSong, type SongMetadata } from '../services/player.js';
 import { PROGRESS_BAR_SEGMENTS, VOLUME_MAX, VOLUME_MIN } from './constants.js';
@@ -24,9 +24,8 @@ const EMBED_COLOR = {
   idle: 0x4E5058,
 } as const;
 
-// The now-playing card gives the timeline the embed's full width: the album art
-// rides in the author icon rather than the right-hand thumbnail column, which
-// would otherwise eat ~96px and force the bar down to ~14 segments to avoid wrapping.
+// The timeline sits below the cover section and spans the card's full width, so
+// it can run much longer than the ~14 segments that fit beside an embed thumbnail.
 export const PLAYING_PROGRESS_BAR_SEGMENTS = 24;
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
@@ -168,12 +167,46 @@ const getPlayerUI = (player: Player) => {
 };
 
 /**
- * Builds a Discord embed for the currently playing song
- * @param player - The player instance containing the current song and status
- * @returns A Discord embed builder with song information
+ * Payload for a Components V2 player card. Spread it into reply/editReply/update/
+ * send/edit. Embeds are cleared explicitly so a card posted before the switch to
+ * V2 can still be edited into this one; V2 text renders mentions live, so pings
+ * are suppressed (an embed never pinged the requester, and this keeps it so).
+ */
+export interface PlayerCardMessage {
+  flags: MessageFlags.IsComponentsV2;
+  components: (ContainerBuilder | TextDisplayBuilder)[];
+  embeds: [];
+  allowedMentions: {parse: []};
+}
+
+export interface NowPlayingCardOptions {
+  /** Include the transport/volume/suggestion rows inside the card (default true). */
+  controls?: boolean;
+  /** Short line shown above the card, e.g. a command's acknowledgement. */
+  note?: string;
+}
+
+const toPlayerCardMessage = (container: ContainerBuilder, note?: string): PlayerCardMessage => ({
+  flags: MessageFlags.IsComponentsV2,
+  components: note ? [new TextDisplayBuilder().setContent(note), container] : [container],
+  embeds: [],
+  allowedMentions: {parse: []},
+});
+
+const formatVolume = (volume: number) => `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`;
+
+/**
+ * Builds the now-playing card.
+ *
+ * Layout: a section holds the status line, title, artist/album and the
+ * requester/volume/repeat line, with the full cover as its right-hand
+ * accessory. Everything after the section - the timeline, footer and controls -
+ * spans the card's full width, which is what lets the bar run long while the
+ * cover stays on the right (a classic embed's thumbnail column narrows the
+ * whole description instead).
  * @throws {Error} If no song is currently playing
  */
-export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
+export const buildNowPlayingMessage = (player: Player, {controls = true, note}: NowPlayingCardOptions = {}): PlayerCardMessage => {
   const currentlyPlaying = player.getCurrent();
 
   if (!currentlyPlaying) {
@@ -184,68 +217,80 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
   const {title, artist} = getCleanSongParts(currentlyPlaying);
   const status = getStatusPresentation(player);
   const songUrl = buildSongLink(artist, title);
-  const volume = player.getVolume();
   const loop = getLoopPresentation(player);
-  const album = currentlyPlaying.album?.trim() ?? 'Unknown album';
+  const album = currentlyPlaying.album?.trim();
+  const shownTitle = escapeMarkdown(truncate(title, 200));
   const timeline = currentlyPlaying.isLive
     ? '🔴 `LIVE BROADCAST`'
     : currentlyPlaying.length > 0
       ? `\`${prettyTime(player.getPosition())}\` ${getProgressBar(PLAYING_PROGRESS_BAR_SEGMENTS, player.getPosition() / currentlyPlaying.length)} \`${prettyTime(currentlyPlaying.length)}\``
       : `\`${prettyTime(player.getPosition())}\`  •  ⏱️ · duration unavailable`;
-  const subtitle = album === 'Unknown album'
-    ? `by **${artist}**`
-    : `by **${artist}**  •  *${album}*`;
 
-  // Wide layout, top to bottom: status header with the cover as its icon, title,
-  // artist/album, the full-width timeline, then requester/volume/repeat as one
-  // row of inline fields (the same three-column rhythm as the finished card).
-  // No setThumbnail: it would reclaim the right-hand column from the timeline.
-  const message = new EmbedBuilder();
-  message
-    .setColor(status.color)
-    .setAuthor({
-      name: `${status.emoji}  ISOBEL  •  ${status.label.toUpperCase()}`,
-      iconURL: thumbnailUrl ?? undefined,
-    })
-    .setTitle(truncate(title, 256))
-    .setDescription([subtitle, '', timeline].join('\n'))
-    .addFields(
-      {name: 'REQUESTED BY', value: `<@${requestedBy}>`, inline: true},
-      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
-      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+  const heading = [
+    `-# ${status.emoji}  ISOBEL  •  ${status.label.toUpperCase()}`,
+    `### ${songUrl ? `[${shownTitle}](${songUrl})` : shownTitle}`,
+    album ? `by **${escapeMarkdown(artist)}**  •  *${escapeMarkdown(album)}*` : `by **${escapeMarkdown(artist)}**`,
+  ].join('\n');
+  const details = `👤 <@${requestedBy}>  •  ${formatVolume(player.getVolume())}  •  ${loop.emoji} ${loop.label}`;
+
+  const container = new ContainerBuilder().setAccentColor(status.color);
+
+  if (thumbnailUrl) {
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(heading),
+          new TextDisplayBuilder().setContent(details),
+        )
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailUrl).setDescription(truncate(`${title} - ${artist}`, 1024))),
     );
-
-  if (songUrl) {
-    message.setURL(songUrl);
+  } else {
+    // A section must have an accessory, so without cover art the text stands alone.
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(heading),
+      new TextDisplayBuilder().setContent(details),
+    );
   }
 
-  message
-    .setFooter({
-      text: [getSourceLabel(currentlyPlaying), `${getQueueInfo(player)} queued`, playlist?.title].filter(Boolean).join('  •  '),
-    });
+  container
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(timeline),
+      new TextDisplayBuilder().setContent(`-# ${[getSourceLabel(currentlyPlaying), `${getQueueInfo(player)} queued`, playlist?.title].filter(Boolean).join('  •  ')}`),
+    );
 
-  return message;
+  if (controls) {
+    container.addActionRowComponents(buildPlaybackControls(player));
+  }
+
+  return toPlayerCardMessage(container, note);
 };
 
-/** Replaces a stale now-playing card while preserving the same three-part rhythm. */
-export const buildPlaybackFinishedEmbed = (player: Player): EmbedBuilder => {
-  const volume = player.getVolume();
+/** Replaces a stale now-playing card with a replay/add-more prompt in the same card shape. */
+export const buildPlaybackFinishedMessage = (player: Player): PlayerCardMessage => {
   const loop = getLoopPresentation(player);
 
-  return new EmbedBuilder()
-    .setColor(EMBED_COLOR.idle)
-    .setAuthor({name: '⏹️  ISOBEL  •  QUEUE COMPLETE'})
-    .setTitle('Playback finished')
-    .setDescription([
-      player.canGoBack() ? '⏮️ Replay a previous track  •  Use /play to add something new' : 'Use /play to add something new',
-      'Join a voice channel first and ISOBEL will come to you.',
-    ].join('\n\n'))
-    .addFields(
-      {name: 'STATE', value: 'Queue complete', inline: true},
-      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
-      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+  const container = new ContainerBuilder()
+    .setAccentColor(EMBED_COLOR.idle)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent([
+        '-# ⏹️  ISOBEL  •  QUEUE COMPLETE',
+        '### Playback finished',
+        player.canGoBack() ? '⏮️ Replay a previous track  •  Use /play to add something new' : 'Use /play to add something new',
+        'Join a voice channel first and ISOBEL will come to you.',
+      ].join('\n')),
     )
-    .setFooter({text: '⏮️ Replay  •  /play to add music'});
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`Queue complete  •  ${formatVolume(player.getVolume())}  •  ${loop.emoji} ${loop.label}`),
+    );
+
+  const rows = buildPlaybackFinishedControls(player);
+  if (rows.length > 0) {
+    container.addActionRowComponents(rows);
+  }
+
+  return toPlayerCardMessage(container);
 };
 
 export const buildPlaybackControls = (player: Player): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] => {

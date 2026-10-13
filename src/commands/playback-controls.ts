@@ -10,7 +10,7 @@ import { actorFromInteraction } from '../services/playback-history.js';
 import type Player from '../services/player.js';
 import { MediaSource, STATUS, type SongMetadata } from '../services/player.js';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlaybackFinishedControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed, buildQueueEmbed } from '../utils/build-embed.js';
+import { buildNowPlayingMessage, buildPlaybackFinishedMessage, buildQueueEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel } from '../utils/channels.js';
 import { QUEUE_PAGE_SIZE_DEFAULT, SEEK_STEP_SECONDS, VOLUME_MAX, VOLUME_MIN, VOLUME_STEP } from '../utils/constants.js';
 import errorMsg, { formatError } from '../utils/error-msg.js';
@@ -341,11 +341,7 @@ export default class PlaybackControls implements Command {
           player.setNowPlayingMessage(interaction.message);
         }
 
-        const payload = {
-          content: null,
-          embeds: [buildPlayingMessageEmbed(player)],
-          components: buildPlaybackControls(player),
-        };
+        const payload = {content: null, ...buildNowPlayingMessage(player)};
 
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply(payload);
@@ -354,11 +350,7 @@ export default class PlaybackControls implements Command {
         }
       } else {
         player.setNowPlayingMessage(null);
-        const payload = {
-          content: null,
-          embeds: [buildPlaybackFinishedEmbed(player)],
-          components: buildPlaybackFinishedControls(player),
-        };
+        const payload = {content: null, ...buildPlaybackFinishedMessage(player)};
 
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply(payload);

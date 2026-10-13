@@ -25,7 +25,7 @@ import { pipeline } from 'node:stream/promises';
 import pLimit from 'p-limit';
 import { type Readable } from 'stream';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlaybackFinishedControls, buildPlaybackFinishedEmbed, buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildNowPlayingMessage, buildPlaybackFinishedMessage } from '../utils/build-embed.js';
 import { AUDIO_BITRATE_KBPS, AUDIO_PLAYER_MAX_MISSED_FRAMES, BACKGROUND_ENCODE_CONCURRENCY, BACKGROUND_ENCODE_NICE, DISCORD_CHANNEL_COUNT, DISCORD_SAMPLE_RATE_HZ, OPUS_EXPECTED_PACKET_LOSS_PERCENT, OPUS_FALLBACK_BITRATE_KBPS, OPUS_MAX_BITRATE_KBPS, PCM_BYTES_PER_SECOND, PLAYBACK_TELEMETRY_INTERVAL_MS, STREAM_READ_BURST_SECONDS, STREAM_READ_RATE, STREAM_RECONNECT_INPUT_OPTIONS, VOLUME_RESPAWN_DEBOUNCE_MS, FFMPEG_START_TIMEOUT_MS, HTTP_STATUS_GONE, NOW_PLAYING_UPDATE_INTERVAL_MS, PLAYBACK_ERROR_BACKOFF_BASE_MS, PLAYBACK_ERROR_MAX_RETRIES, RECONNECT_BACKOFF_BASE_MS, RECONNECT_MAX_ATTEMPTS, RECONNECT_MAX_DELAY_MS, STREAM_CREATE_BACKOFF_BASE_MS, STREAM_CREATE_MAX_RETRIES, VOLUME_DEFAULT, VOLUME_MAX } from '../utils/constants.js';
 import ByteCounter from '../utils/byte-counter.js';
 import debug, { createNamespacedDebug } from '../utils/debug.js';
@@ -1202,11 +1202,7 @@ export default class Player {
     }
 
     try {
-      await this.nowPlayingMessage.edit({
-        content: null,
-        embeds: [buildPlaybackFinishedEmbed(this)],
-        components: buildPlaybackFinishedControls(this),
-      });
+      await this.nowPlayingMessage.edit({content: null, ...buildPlaybackFinishedMessage(this)});
     } catch (error) {
       debug(`Failed to update finished playback message: ${formatError(error)}`);
     }
@@ -1243,10 +1239,7 @@ export default class Player {
         // Use safeAsync to handle errors without throwing
         this.safeAsync((async () => {
           try {
-            await this.nowPlayingMessage!.edit({
-              embeds: [buildPlayingMessageEmbed(this)],
-              components: buildPlaybackControls(this),
-            });
+            await this.nowPlayingMessage!.edit(buildNowPlayingMessage(this));
           } catch (error: unknown) {
             // Message might have been deleted or bot lost permissions
             debug(`Failed to update now-playing embed: ${formatError(error)}`);
@@ -1286,10 +1279,7 @@ export default class Player {
     }
 
     try {
-      const newMessage = await channel.send({
-        embeds: [buildPlayingMessageEmbed(this)],
-        components: buildPlaybackControls(this),
-      });
+      const newMessage = await channel.send(buildNowPlayingMessage(this));
       this.nowPlayingMessage = newMessage;
     } catch (error) {
       debug(`Failed to create new now-playing message: ${formatError(error)}`);
@@ -1361,10 +1351,7 @@ export default class Player {
 
     if (this.nowPlayingMessage) {
       try {
-        await this.nowPlayingMessage.edit({
-          embeds: [buildPlayingMessageEmbed(this)],
-          components: buildPlaybackControls(this),
-        });
+        await this.nowPlayingMessage.edit(buildNowPlayingMessage(this));
       } catch (error) {
         debug(`Failed to update AI suggestions: ${formatError(error)}`);
       }
@@ -1507,10 +1494,8 @@ export default class Player {
       // Auto announce the next song if configured to
       const settings = await getGuildSettings(this.guildId);
       const {autoAnnounceNextSong} = settings;
-      if (autoAnnounceNextSong && this.currentChannel) {
-        await this.currentChannel.send({
-          embeds: this.getCurrent() ? [buildPlayingMessageEmbed(this)] : [],
-        });
+      if (autoAnnounceNextSong && this.currentChannel && this.getCurrent()) {
+        await this.currentChannel.send(buildNowPlayingMessage(this, {controls: false}));
       }
     }
   }

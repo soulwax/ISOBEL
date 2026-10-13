@@ -6,7 +6,7 @@ import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
 import type GetSongs from '../services/get-songs.js';
 import { TYPES } from '../types.js';
-import { buildPlaybackControls, buildPlayingMessageEmbed, buildSongQueuedControls, buildSongQueuedEmbed } from '../utils/build-embed.js';
+import { buildNowPlayingMessage, buildSongQueuedControls, buildSongQueuedEmbed } from '../utils/build-embed.js';
 import { getMemberVoiceChannel, getMostPopularVoiceChannel } from '../utils/channels.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
 import type PlaybackHistory from './playback-history.js';
@@ -176,10 +176,7 @@ export default class AddQueryToQueue {
         statusMsg = 'resuming playback';
       }
 
-      const message = await interaction.editReply({
-        embeds: [buildPlayingMessageEmbed(player)],
-        components: buildPlaybackControls(player),
-      });
+      const message = await interaction.editReply(buildNowPlayingMessage(player));
 
       // Set the message for animated progress bar updates
       if (message) {

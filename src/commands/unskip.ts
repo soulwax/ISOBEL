@@ -6,7 +6,7 @@ import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
 import { actorFromInteraction } from '../services/playback-history.js';
 import { TYPES } from '../types.js';
-import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildNowPlayingMessage } from '../utils/build-embed.js';
 import type Command from './index.js';
 
 @injectable()
@@ -28,10 +28,9 @@ export default class implements Command {
 
     try {
       await player.back(actorFromInteraction(interaction));
-      await interaction.reply({
-        content: 'back \'er up\'',
-        embeds: player.getCurrent() ? [buildPlayingMessageEmbed(player)] : [],
-      });
+      await interaction.reply(player.getCurrent()
+        ? buildNowPlayingMessage(player, {controls: false, note: 'back \'er up\''})
+        : {content: 'back \'er up\''});
     } catch (error: unknown) {
       throw new Error('no song to go back to', {cause: error});
     }

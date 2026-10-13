@@ -6,7 +6,7 @@ import { inject, injectable } from 'inversify';
 import type PlayerManager from '../managers/player.js';
 import { actorFromInteraction } from '../services/playback-history.js';
 import { TYPES } from '../types.js';
-import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
+import { buildNowPlayingMessage } from '../utils/build-embed.js';
 import type Command from './index.js';
 
 @injectable()
@@ -38,10 +38,9 @@ export default class implements Command {
 
     try {
       await player.forward(numToSkip, actorFromInteraction(interaction));
-      await interaction.reply({
-        content: 'keep \'er movin\'',
-        embeds: player.getCurrent() ? [buildPlayingMessageEmbed(player)] : [],
-      });
+      await interaction.reply(player.getCurrent()
+        ? buildNowPlayingMessage(player, {controls: false, note: 'keep \'er movin\''})
+        : {content: 'keep \'er movin\''});
     } catch (error: unknown) {
       throw new Error('no song to skip to', {cause: error});
     }
