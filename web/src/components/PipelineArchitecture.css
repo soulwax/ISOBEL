@@ -1,0 +1,319 @@
+/* File: web/src/components/PipelineArchitecture.css */
+
+/*
+ * Everything is scoped under .arch: the SVG figures use short class names
+ * (.box, .edge, .head) that would otherwise leak into the rest of the site.
+ * Colors come from the site palette in App.css; the two path colors keep one
+ * meaning each across every figure (amber = no encode, violet = PCM path).
+ */
+.arch {
+  --arch-surface: var(--card-bg);
+  --arch-ground: var(--discord-darker);
+  --arch-fg: var(--text-primary);
+  --arch-muted: var(--text-secondary);
+  --arch-line: var(--border-color);
+  --arch-accent: var(--psy-amber);
+  --arch-accent-soft: rgba(255, 200, 96, 0.12);
+  --arch-pcm: var(--psy-violet);
+  --arch-pcm-soft: rgba(155, 107, 255, 0.16);
+  --arch-bad: #f07a6e;
+
+  color: var(--arch-fg);
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 3.5rem 2rem 4.5rem;
+}
+
+.arch-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  gap: 3rem;
+}
+
+.arch header {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 70ch;
+}
+
+.arch-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--arch-muted);
+}
+
+.arch h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.arch h2 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  text-wrap: balance;
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.arch h2 .n {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--arch-muted);
+  font-weight: 500;
+}
+
+.arch h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.arch .lede {
+  color: var(--arch-muted);
+  font-size: 1.05rem;
+}
+
+.arch code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--arch-fg);
+}
+
+/* Section index */
+.arch nav {
+  border-top: 1px solid var(--arch-line);
+  border-bottom: 1px solid var(--arch-line);
+  padding: 0.75rem 0;
+}
+
+.arch nav ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  font-size: 0.9rem;
+}
+
+.arch nav a {
+  color: var(--arch-muted);
+  text-decoration: none;
+}
+
+.arch nav a:hover,
+.arch nav a:focus-visible {
+  color: var(--arch-fg);
+  text-decoration: underline;
+}
+
+.arch nav .n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-right: 0.3rem;
+}
+
+.arch a:focus-visible {
+  outline: 2px solid var(--arch-accent);
+  outline-offset: 2px;
+}
+
+/* Sections and figures */
+.arch section {
+  display: grid;
+  gap: 0.9rem;
+  /* clears the sticky site nav when jumping from the section index */
+  scroll-margin-top: 6rem;
+}
+
+.arch section > p {
+  max-width: 72ch;
+  color: var(--arch-fg);
+}
+
+.arch figure {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.arch .scroll {
+  overflow-x: auto;
+  background: var(--arch-surface);
+  border: 1px solid var(--arch-line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.arch .scroll svg {
+  display: block;
+  width: 100%;
+  min-width: 800px;
+  height: auto;
+}
+
+.arch figcaption {
+  color: var(--arch-muted);
+  font-size: 14px;
+  max-width: 78ch;
+}
+
+/* SVG parts */
+.arch .box { fill: var(--arch-surface); stroke: var(--arch-line); stroke-width: 1.2; }
+.arch .box-ext { fill: var(--arch-ground); stroke: var(--arch-muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.arch .box-group { fill: var(--arch-ground); stroke: var(--arch-muted); stroke-width: 1.2; }
+.arch .box-hot { fill: var(--arch-accent-soft); stroke: var(--arch-accent); stroke-width: 1.6; }
+.arch .box-pcm { fill: var(--arch-pcm-soft); stroke: var(--arch-pcm); stroke-width: 1.6; }
+.arch .box-q { fill: var(--arch-surface); stroke: var(--arch-fg); stroke-width: 1.2; }
+.arch .box-sink { fill: var(--arch-fg); stroke: none; }
+.arch .box-end { fill: var(--arch-ground); stroke: var(--arch-bad); stroke-width: 1.4; }
+
+.arch .t-name { fill: var(--arch-fg); font-family: var(--font-body); font-size: 13px; font-weight: 600; }
+.arch .t-sub { fill: var(--arch-muted); font-family: var(--font-mono); font-size: 10.5px; }
+.arch .t-cond { fill: var(--arch-muted); font-family: var(--font-body); font-size: 11.5px; }
+.arch .t-tag { fill: var(--arch-muted); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; }
+.arch .t-tag-hot { fill: var(--arch-accent); }
+.arch .t-tag-pcm { fill: var(--arch-pcm); }
+.arch .t-head { fill: var(--arch-muted); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; }
+.arch .t-edge { fill: var(--arch-muted); font-family: var(--font-mono); font-size: 10.5px; }
+.arch .t-edge-hot { fill: var(--arch-accent); font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+.arch .t-edge-bad { fill: var(--arch-bad); font-family: var(--font-mono); font-size: 10.5px; }
+.arch .t-yes { fill: var(--arch-fg); font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; }
+.arch .t-sink { fill: var(--discord-darkest); font-family: var(--font-body); font-size: 13px; font-weight: 600; }
+
+.arch .edge { stroke: var(--arch-muted); stroke-width: 1.4; fill: none; }
+.arch .edge-hot { stroke: var(--arch-accent); stroke-width: 2; fill: none; }
+.arch .edge-pcm { stroke: var(--arch-pcm); stroke-width: 1.6; fill: none; }
+.arch .edge-bad { stroke: var(--arch-bad); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+.arch .head { fill: var(--arch-muted); }
+.arch .head-hot { fill: var(--arch-accent); }
+.arch .head-pcm { fill: var(--arch-pcm); }
+.arch .head-bad { fill: var(--arch-bad); }
+.arch .lane-rule { stroke: var(--arch-line); stroke-width: 1; stroke-dasharray: 2 4; }
+
+/* Tables */
+.arch .table-wrap { overflow-x: auto; }
+
+.arch table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+
+.arch th,
+.arch td {
+  text-align: left;
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--arch-line);
+  vertical-align: top;
+}
+
+.arch th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--arch-muted);
+  font-weight: 500;
+}
+
+.arch td.v {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.arch td.m { color: var(--arch-muted); }
+
+/* ffmpeg command cards */
+.arch .cmds {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.arch .cmd {
+  min-width: 0;
+  background: var(--arch-surface);
+  border: 1px solid var(--arch-line);
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.arch .cmd.hot { border-color: var(--arch-accent); }
+.arch .cmd.pcm { border-color: var(--arch-pcm); }
+
+.arch .cmd p {
+  color: var(--arch-muted);
+  font-size: 13.5px;
+}
+
+.arch pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--arch-fg);
+}
+
+.arch pre .c { color: var(--arch-muted); }
+
+/* Telemetry formulas */
+.arch .formula {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.arch .formula > div {
+  min-width: 0;
+  border-top: 2px solid var(--arch-fg);
+  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.arch .formula pre { font-size: 12.5px; }
+
+.arch .formula p {
+  color: var(--arch-muted);
+  font-size: 14px;
+}
+
+/* Source file list */
+.arch .files {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px 24px;
+  margin-top: 0.5rem;
+}
+
+.arch .files li { min-width: 0; }
+
+.arch .files span {
+  color: var(--arch-muted);
+  font-size: 13.5px;
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .arch {
+    padding: 2.5rem 1rem 3.5rem;
+  }
+
+  .arch .cmds,
+  .arch .formula {
+    grid-template-columns: 1fr;
+  }
+}

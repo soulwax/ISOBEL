@@ -28,6 +28,7 @@ import HealthIndicator from "./components/HealthIndicator";
 import DiscordLogin from "./components/DiscordLogin";
 import DiscordGuildsSidebar from "./components/DiscordGuildsSidebar";
 import GuildSettings from "./components/GuildSettings";
+import PipelineArchitecture from "./components/PipelineArchitecture";
 import { useAuth } from "./hooks/useAuth";
 import type { DiscordGuild } from "./types/discord";
 import { DISCORD_INVITE_URL } from "./lib/discord-invite";
@@ -38,6 +39,20 @@ const DEFAULT_META_DESCRIPTION =
 const DEFAULT_ROBOTS_CONTENT =
   "index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1";
 const ISOBEL_AVATAR_URL = "/avatar.png";
+const SITE_ORIGIN = "https://isobelnet.de";
+const ARCHITECTURE_PATH = "/architecture";
+const ARCHITECTURE_META_TITLE = "Audio Pipeline Architecture | ISOBEL";
+const ARCHITECTURE_META_DESCRIPTION =
+  "How ISOBEL turns a /play query into Opus in a Discord voice channel: path selection, the five playback paths, ffmpeg commands, player states, volume, caching, retries and telemetry.";
+
+// There is no client router: every unknown path falls back to index.html
+// (Vite dev, Express serveStatic, Vercel rewrites), so the page is picked here.
+// "/architecture.html" was the page's first, static URL; keep old links working.
+const isArchitecturePage = [ARCHITECTURE_PATH, `${ARCHITECTURE_PATH}.html`].includes(
+  window.location.pathname.replace(/\/+$/, "")
+);
+// Landing-page section anchors only exist on "/", so link back to them from elsewhere.
+const sectionHref = (id: string) => (isArchitecturePage ? `/#${id}` : `#${id}`);
 
 interface NowPlayingTrack {
   title: string;
@@ -63,6 +78,17 @@ function setMetaContent(name: string, content: string) {
   created.setAttribute("name", name);
   created.setAttribute("content", content);
   document.head.appendChild(created);
+}
+
+function setCanonicalUrl(href: string) {
+  let link = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement("link");
+    link.setAttribute("rel", "canonical");
+    document.head.appendChild(link);
+  }
+
+  link.setAttribute("href", href);
 }
 
 function formatPlaybackTime(seconds: number) {
@@ -288,6 +314,14 @@ function App() {
       return;
     }
 
+    if (isArchitecturePage) {
+      document.title = ARCHITECTURE_META_TITLE;
+      setMetaContent("robots", DEFAULT_ROBOTS_CONTENT);
+      setMetaContent("description", ARCHITECTURE_META_DESCRIPTION);
+      setCanonicalUrl(`${SITE_ORIGIN}${ARCHITECTURE_PATH}`);
+      return;
+    }
+
     if (isAuthenticated) {
       document.title = "ISOBEL Dashboard | Discord Guild Settings";
       setMetaContent("robots", "noindex, nofollow, noarchive");
@@ -301,6 +335,7 @@ function App() {
     document.title = DEFAULT_META_TITLE;
     setMetaContent("robots", DEFAULT_ROBOTS_CONTENT);
     setMetaContent("description", DEFAULT_META_DESCRIPTION);
+    setCanonicalUrl(`${SITE_ORIGIN}/`);
   }, [activeSelectedGuild, adminOpen, isAuthenticated]);
 
   useEffect(() => {
@@ -386,18 +421,24 @@ function App() {
         <>
       <nav className="nav">
         <div className="nav-container">
-          <div className="logo">
+          <a className="logo" href="/" aria-label="ISOBEL home">
             <HiOutlineSpeakerphone className="logo-icon" />
             <span className="logo-text">ISOBEL</span>
-          </div>
+          </a>
           <div className="nav-links">
             <HealthIndicator />
-            <a href="#features">Features</a>
-            <a href="#pipeline">Pipeline</a>
-            <a href="#about">About</a>
-            <a href="#help">Help</a>
-            <a href="#setup">Setup</a>
-            <a href="#faq">FAQ</a>
+            <a href={sectionHref("features")}>Features</a>
+            <a href={sectionHref("pipeline")}>Pipeline</a>
+            <a
+              href={ARCHITECTURE_PATH}
+              aria-current={isArchitecturePage ? "page" : undefined}
+            >
+              Architecture
+            </a>
+            <a href={sectionHref("about")}>About</a>
+            <a href={sectionHref("help")}>Help</a>
+            <a href={sectionHref("setup")}>Setup</a>
+            <a href={sectionHref("faq")}>FAQ</a>
             <a
               href="https://songbirdapi.com"
               target="_blank"
@@ -425,6 +466,9 @@ function App() {
         </div>
       </nav>
 
+      {isArchitecturePage ? (
+        <PipelineArchitecture />
+      ) : (
       <main>
         <section className="hero">
           <div className="hero-bottom">
@@ -743,7 +787,7 @@ function App() {
               ))}
             </div>
             <div className="pipeline-more">
-              <a href="/architecture.html" className="btn btn-secondary">
+              <a href={ARCHITECTURE_PATH} className="btn btn-secondary">
                 Explore the full pipeline architecture
               </a>
             </div>
@@ -905,6 +949,7 @@ pnpm start:all:prod`}</code>
           </div>
         </section>
       </main>
+      )}
 
       <footer className="footer">
         <div className="container">

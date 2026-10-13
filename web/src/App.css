@@ -209,9 +209,13 @@ body {
 }
 
 .nav-container > .nav-links {
-  flex: 0 0 auto;
+  /* Shrink and wrap instead of overflowing past the viewport on mid-size screens. */
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem 1.25rem;
   align-items: center;
 }
 
@@ -224,6 +228,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text-primary);
+  text-decoration: none;
   transition: transform 0.2s ease;
 }
 
