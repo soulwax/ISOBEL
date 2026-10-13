@@ -24,8 +24,10 @@ const EMBED_COLOR = {
   idle: 0x4E5058,
 } as const;
 
-// Keep the timeline short enough to fit beside Discord's right-side thumbnail.
-const PLAYING_PROGRESS_BAR_SEGMENTS = 14;
+// The now-playing card gives the timeline the embed's full width: the album art
+// rides in the author icon rather than the right-hand thumbnail column, which
+// would otherwise eat ~96px and force the bar down to ~14 segments to avoid wrapping.
+export const PLAYING_PROGRESS_BAR_SEGMENTS = 24;
 
 const encodeDarkfloorPart = (value: string): string => encodeURIComponent(value.trim().replace(/\s+/g, ' ')).replace(/%20/g, '+');
 const buildSongLinkFromTemplate = (template: string, encodedArtist: string, encodedTitle: string, encodedQuery: string): string => template
@@ -194,16 +196,24 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
     ? `by **${artist}**`
     : `by **${artist}**  •  *${album}*`;
 
+  // Wide layout, top to bottom: status header with the cover as its icon, title,
+  // artist/album, the full-width timeline, then requester/volume/repeat as one
+  // row of inline fields (the same three-column rhythm as the finished card).
+  // No setThumbnail: it would reclaim the right-hand column from the timeline.
   const message = new EmbedBuilder();
   message
     .setColor(status.color)
-    .setAuthor({name: `${status.emoji}  ISOBEL  •  ${status.label.toUpperCase()}`})
+    .setAuthor({
+      name: `${status.emoji}  ISOBEL  •  ${status.label.toUpperCase()}`,
+      iconURL: thumbnailUrl ?? undefined,
+    })
     .setTitle(truncate(title, 256))
-    .setDescription([
-      subtitle,
-      timeline,
-      `👤 <@${requestedBy}>  •  ${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}  •  ${loop.emoji} ${loop.label}`,
-    ].join('\n'));
+    .setDescription([subtitle, '', timeline].join('\n'))
+    .addFields(
+      {name: 'REQUESTED BY', value: `<@${requestedBy}>`, inline: true},
+      {name: 'VOLUME', value: `${getVolumeEmoji(volume)} ${Number.isFinite(volume) ? `${volume}%` : '-'}`, inline: true},
+      {name: 'REPEAT', value: `${loop.emoji} ${loop.label}`, inline: true},
+    );
 
   if (songUrl) {
     message.setURL(songUrl);
@@ -213,10 +223,6 @@ export const buildPlayingMessageEmbed = (player: Player): EmbedBuilder => {
     .setFooter({
       text: [getSourceLabel(currentlyPlaying), `${getQueueInfo(player)} queued`, playlist?.title].filter(Boolean).join('  •  '),
     });
-
-  if (thumbnailUrl) {
-    message.setThumbnail(thumbnailUrl);
-  }
 
   return message;
 };
